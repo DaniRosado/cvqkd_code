@@ -1,0 +1,1 @@
+/home/drg/TFG/cvqkd_matlab/expected_syndrome.txt

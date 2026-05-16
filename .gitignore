@@ -1,0 +1,17 @@
+# Build artifacts
+cvqkd_mdr/build/
+*.vvp
+a.out
+
+# Vivado
+*.log
+*.jou
+*.str
+xsim.dir/
+.Xil/
+xsim_work/
+obj_dir/
+
+# OS
+.DS_Store
+Thumbs.db

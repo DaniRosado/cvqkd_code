@@ -1,0 +1,29 @@
+CONTEXTO DEL PROYECTO: Recuperador de Fase CV-QKD (Lado de Bob)
+
+1. Resumen General:
+Implementación de un módulo DSP en FPGA para la recuperación y corrección de fase en un sistema de Distribución de Claves Cuánticas de Variables Continuas (CV-QKD). El sistema utiliza pulsos piloto intercalados para estimar la deriva de fase del canal óptico y corregir las muestras de datos cuánticos.
+
+2. Especificaciones Técnicas del Hardware:
+- Entrada: ADCs de 16 bits.
+- Formato de Datos de Entrada (Bob): Q1.15 (1 bit de signo, 15 fraccionarios). Rango aproximado [-1.0, 1.0).
+- Formato Interno (Datapath): Q3.15 (18 bits). Se añaden 2 bits de parte entera para absorber la ganancia intrínseca del algoritmo CORDIC (~1.647) sin saturación.
+- Reloj de Sistema: 100 MHz.
+- Protocolo de Interconexión: AXI4-Stream (formato {Q, P} en un bus de 32 bits).
+
+3. Arquitectura de la Trama (Frame):
+- Longitud: 16 muestras totales por trama.
+- Estructura: 1 Piloto (Índice 0) seguido de 15 muestras de datos (Índices 1-15).
+- Pilotos: Alice envía los pilotos con fase 0 (p=0.8, q=0) para facilitar la estimación de fase directa en Bob.
+
+4. Módulos DSP Principales:
+- Framer/Demux (demux_framer): Sincronizado mediante reset. Enruta el Piloto al CORDIC de Vectorización y los Datos a la FIFO de retraso.
+- CORDIC 1 (Vectorización): Calcula el ángulo (theta) de los pilotos recibidos. Latencia estimada: 18 ciclos.
+- Interpolador de Fase: Calcula la pendiente entre dos pilotos consecutivos: Delta_theta = (theta_B - theta_A) / 16. La división se implementa mediante desplazamiento aritmético a la derecha (>>> 4).
+- Acumulador de Fase: Genera la rampa de fase ciclo a ciclo para los datos: theta_n = theta_n-1 + Delta_theta.
+- CORDIC 2 (Rotación): Aplica la rotación -theta_n a los datos que salen de la FIFO para corregirlos.
+- Compensación de Ganancia: Multiplicador por constante (1/1.6467 = 0.607) para normalizar la salida y volver al formato Q1.15.
+- FIFO de Retraso: Capacidad mínima de 64 posiciones para compensar la latencia del cálculo del ángulo del piloto B.
+
+5. Flujo de Validación:
+- Golden Model (MATLAB): Simula el comportamiento de punto fijo, el ruido de cuantización, la ganancia del CORDIC y exporta vectores de test (input_vectors.txt y expected_outputs.txt).
+- SystemVerilog (Vivado): Implementación modular con testbench que lee los vectores de MATLAB para comparación bit-a-bit.
