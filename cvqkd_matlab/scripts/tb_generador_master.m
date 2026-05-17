@@ -385,7 +385,18 @@ if ENABLE_EXPORT_VIVADO
         end
     end
     fclose(fid_llr);
-    disp('   [OK] Archivos MDR exportados: alice_full_data.txt, bob_random_bits.txt, expected_m_messages.txt, expected_llr_results.txt');
+    % Expected key bits for LDPC decoder verification (bob_key_ref.txt)
+    % 68 lines of 384 binary digits each; line 0 is the reference key block
+    fid_key = fopen(fullfile(DATA_DIR, 'bob_key_ref.txt'), 'w');
+    ref_block = key_bits_tx(1:Z);  % First Z=384 bits of the original key
+    for blk = 1:68
+        for bit = 1:Z
+            fprintf(fid_key, '%d', ref_block(bit));
+        end
+        fprintf(fid_key, '\n');
+    end
+    fclose(fid_key);
+    disp('   [OK] bob_key_ref.txt exportado (68 x 384 bits)');
     
     disp('   [OK] Archivos de simulación generados con éxito.');
 end
