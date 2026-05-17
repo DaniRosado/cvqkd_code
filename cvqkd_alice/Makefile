@@ -112,8 +112,8 @@ lint:
 tb_system_v:
 	@echo "===== Compilando con Verilator ====="
 	$(VERILATOR) --timing --binary -Wno-TIMESCALEMOD --top tb_ldpc_top_system $(SOURCES) $(TB_SYSTEM) 2>&1
-	@echo "===== Ejecutando simulación ====="
-	./$(OBJ_DIR)/Vtb_ldpc_top_system
+	@echo "===== Ejecutando simulación (desde sim/) ====="
+	cd $(SIM_DIR) && ../$(OBJ_DIR)/Vtb_ldpc_top_system
 	@echo "===== Simulation done ====="
 
 clean:
