@@ -3,6 +3,11 @@
 % ========================================================================
 clear; clc; close all;
 
+%% 0. RUTAS DEL PROYECTO (ajusta si mueves el script)
+SCRIPT_DIR = fileparts(mfilename('fullpath'));
+DATA_DIR   = fullfile(SCRIPT_DIR, '..', 'data');
+BOB_DIR    = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_bob');
+
 %% 1. PARÁMETROS DEL SISTEMA
 ENABLE_EXPORT_VIVADO = true;
 
@@ -254,7 +259,7 @@ fprintf('   -> Mapeo finalizado. Errores antes del LDPC (QBER): %.2f%%\n', QBER)
 
 
 %% 10. Carga y expansión de la matriz LDPC
-bg_matrix = load('C:/Users/usser/Vivado_Sources/cvqkd_bob/NR_1_1_384.txt');
+bg_matrix = load(fullfile(BOB_DIR, 'NR_1_1_384.txt'));
 [mb, nb] = size(bg_matrix);
 Z = 384;
 
@@ -296,7 +301,7 @@ if ENABLE_EXPORT_VIVADO
     fase_estimada_datos = fase_estimada(idx_datos);
     fase_est_q15 = int32(round(fase_estimada_datos * 32768));
 
-    fid_est = fopen('fase_estimada_datos.txt', 'w');
+    fid_est = fopen(fullfile(DATA_DIR, 'fase_estimada_datos.txt'), 'w');
     for i=1:length(fase_est_q15)
         fprintf(fid_est, '%08X\n', typecast(fase_est_q15(i), 'uint32'));
     end
@@ -304,27 +309,27 @@ if ENABLE_EXPORT_VIVADO
 
     fases_q15 = int32(round(fase_pilotos_raw * 32768));
     
-    fid_pil = fopen('fase_pilotos_raw.txt', 'w');
+    fid_pil = fopen(fullfile(DATA_DIR, 'fase_pilotos_raw.txt'), 'w');
     for i=1:length(fases_q15)
         % Guardamos en Hexadecimal de 32 bits (aunque la FPGA usará los 18 bajos)
         fprintf(fid_pil, '%08X\n', typecast(fases_q15(i), 'uint32'));
     end
     fclose(fid_pil);
     
-    fid_ptr = fopen('ptr_ram.txt', 'w');
+    fid_ptr = fopen(fullfile(DATA_DIR, 'ptr_ram.txt'), 'w');
     for i=1:N_SAMPLES, fprintf(fid_ptr, '%04X\n', punteros(i)); end; fclose(fid_ptr);
     
-    fid_mask = fopen('mask_bit.txt', 'w');
+    fid_mask = fopen(fullfile(DATA_DIR, 'mask_bit.txt'), 'w');
     for i=1:N_BOB_DATA, fprintf(fid_mask, '%d\n', mascara_sacrificio(i)); end; fclose(fid_mask);
     
-    fid_bob = fopen('bob_ram.txt', 'w');
+    fid_bob = fopen(fullfile(DATA_DIR, 'bob_ram.txt'), 'w');
     for i=1:N_BOB_DATA, fprintf(fid_bob, '%04X%04X\n', typecast(Q_B_int(i), 'uint16'), typecast(P_B_int(i), 'uint16')); end; fclose(fid_bob);
     
-    fid_alice = fopen('alice_ram.txt', 'w');
+    fid_alice = fopen(fullfile(DATA_DIR, 'alice_ram.txt'), 'w');
     % CUIDADO: La BRAM de Alice solo almacena las 26112 de sacrificio
     for i=1:N_SAMPLES, fprintf(fid_alice, '%04X%04X\n', typecast(Q_A_sac(i), 'uint16'), typecast(P_A_sac(i), 'uint16')); end; fclose(fid_alice);
 
-    fid_exp = fopen('expected_llr_math.txt', 'w');
+    fid_exp = fopen(fullfile(DATA_DIR, 'expected_llr_math.txt'), 'w');
     fprintf(fid_exp, '%08X\n', typecast(int32(T_eta_fp),      'uint32'));
     fprintf(fid_exp, '%08X\n', typecast(int32(Sqrt_T_eta_fp), 'uint32'));
     fprintf(fid_exp, '%08X\n', typecast(int32(Sigma_Sq_fp),   'uint32'));
@@ -337,7 +342,7 @@ if ENABLE_EXPORT_VIVADO
     P_ADC = int16(round(P_B_rx));
     Q_ADC = int16(round(Q_B_rx));
 
-    fid_adc = fopen('bob_raw_adc.txt', 'w');
+    fid_adc = fopen(fullfile(DATA_DIR, 'bob_raw_adc.txt'), 'w');
     % Guardamos los 52.224 + pilotos (N_FIBER)
     for i=1:N_FIBER
         fprintf(fid_adc, '%04X%04X\n', typecast(Q_ADC(i), 'uint16'), typecast(P_ADC(i), 'uint16'));
@@ -346,20 +351,20 @@ if ENABLE_EXPORT_VIVADO
     fclose(fid_exp);
 
     % Alice full 26112 symbols (for MDR RX verification)
-    fid_alice_full = fopen('alice_full_data.txt', 'w');
+    fid_alice_full = fopen(fullfile(DATA_DIR, 'alice_full_data.txt'), 'w');
     for i=1:N_BOB_DATA
         fprintf(fid_alice_full, '%04X%04X\n', typecast(Q_A_int(i), 'uint16'), typecast(P_A_int(i), 'uint16'));
     end
     fclose(fid_alice_full);
     % Bob random bits (for MDR TX verification)
-    fid_rand = fopen('bob_random_bits.txt', 'w');
+    fid_rand = fopen(fullfile(DATA_DIR, 'bob_random_bits.txt'), 'w');
     bits_flat = bits_bob_all(:);
     for i=1:length(bits_flat)
         fprintf(fid_rand, '%d\n', bits_flat(i));
     end
     fclose(fid_rand);
     % Expected public messages m_i (for MDR TX verification)
-    fid_m = fopen('expected_m_messages.txt', 'w');
+    fid_m = fopen(fullfile(DATA_DIR, 'expected_m_messages.txt'), 'w');
     for blk = 1:N_bloques
         Y_i = Y(:, blk);
         Y_norm = Y_i / norm(Y_i);
@@ -372,7 +377,7 @@ if ENABLE_EXPORT_VIVADO
     end
     fclose(fid_m);
     % Expected LLR results (for MDR RX verification)
-    fid_llr = fopen('expected_llr_results.txt', 'w');
+    fid_llr = fopen(fullfile(DATA_DIR, 'expected_llr_results.txt'), 'w');
     for blk = 1:N_bloques
         for dim = 1:N_dimensiones
             llr_fp = int32(round(LLR_all(dim, blk) * 2^31));
