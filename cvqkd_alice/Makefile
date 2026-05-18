@@ -9,7 +9,13 @@
 #   make help      - Muestra esta ayuda
 
 # === Herramientas ===
-XILINX_VIVADO ?= /tools/Xilinx/Vivado/2025.2
+# En Windows (Git Bash), establecer antes: export XILINX_VIVADO=/c/AMDDesignTools/2025.2/Vivado
+# O usar: make XILINX_VIVADO="C:/AMDDesignTools/2025.2/Vivado"
+ifeq ($(OS),Windows_NT)
+    XILINX_VIVADO ?= C:/AMDDesignTools/2025.2/Vivado
+else
+    XILINX_VIVADO ?= /tools/Xilinx/Vivado/2025.2
+endif
 XVLOG   ?= $(XILINX_VIVADO)/bin/xvlog
 XELAB   ?= $(XILINX_VIVADO)/bin/xelab
 XSIM    ?= $(XILINX_VIVADO)/bin/xsim
@@ -25,6 +31,8 @@ SOURCES = \
 	$(SOURCES_DIR)/bg_rom_pkg.sv \
 	$(SOURCES_DIR)/barrel_shifter_word.sv \
 	$(SOURCES_DIR)/cnu_serial_minsum.sv \
+	$(SOURCES_DIR)/cnu_cell.sv \
+	$(SOURCES_DIR)/cnu_min_sum_array.sv \
 	$(SOURCES_DIR)/vnu_processor.sv \
 	$(SOURCES_DIR)/ldpc_bram_block.sv \
 	$(SOURCES_DIR)/ldpc_rom_controller.sv \
@@ -111,7 +119,7 @@ lint:
 
 tb_system_v:
 	@echo "===== Compilando con Verilator ====="
-	$(VERILATOR) --timing --binary -Wno-TIMESCALEMOD --top tb_ldpc_top_system $(SOURCES) $(TB_SYSTEM) 2>&1
+	$(VERILATOR) --timing --trace --binary -Wno-TIMESCALEMOD --top tb_ldpc_top_system $(SOURCES) $(TB_SYSTEM) 2>&1
 	@echo "===== Ejecutando simulación (desde sim/) ====="
 	cd $(SIM_DIR) && ../$(OBJ_DIR)/Vtb_ldpc_top_system
 	@echo "===== Simulation done ====="

@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 package bg_rom_pkg;
     localparam int MB = 46;
     localparam int NB = 68;

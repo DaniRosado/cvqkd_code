@@ -3,67 +3,86 @@
 import bg_rom_pkg::*;
 
 module ldpc_decoder_top #(
-    parameter int W = 8,
+    parameter int W = 16,
     parameter int Z = 384,
     parameter int MAX_ITER = 20
 )(
     input  logic         clk,
     input  logic         rst_n,
-    
-    // Control
     input  logic         start,
     output logic         done,
     output logic         success,
-    
-    // Datos (LLRs desde MDR y Síndrome de Bob)
-    input  logic [Z*W-1:0] llr_in_bus, 
+    input  logic [Z*W-1:0] llr_in_bus,
     input  logic [383:0]   bob_syndrome_in [0:45],
-    
-    // Salida
-    output logic [Z-1:0]   key_bits_out 
+    output logic [Z-1:0]   key_bits_out,
+    // Debug readback ports
+    input  logic [6:0]     debug_rd_addr,
+    output logic [Z-1:0]   debug_rd_data
 );
 
-    // =========================================================================
-    // 1. SEÑALES DE INTERCONEXIÓN (LOS CABLES)
-    // =========================================================================
-    // Control de la FSM
+    typedef enum logic [2:0] {
+        ST_IDLE,
+        ST_LOAD,
+        ST_READ_LAYER,
+        ST_READ_DRAIN,
+        ST_WRITE_LAYER,
+        ST_CHECK,
+        ST_DONE
+    } state_t;
+
+    state_t state;
+
     logic [5:0] row_ptr;
     logic [6:0] col_ptr;
-    logic [4:0] iter_count;
+    logic [6:0] iter_cnt;
     logic       en_write_p, en_write_r;
-    
-    // Salidas del ROM Controller
+    logic       start_row_pulse;
+    logic       we_p;
+
     logic [8:0]  rom_shift;
     logic [6:0]  p_addr;
     logic [11:0] r_addr;
     logic        rom_valid;
-    
-    // Datos desde/hacia BRAMs
+
     logic [Z*W-1:0] p_data_out, p_data_new;
     logic [Z*W-1:0] r_data_out, r_data_new;
-    
-    // Señales retardadas (Pipeline) para sincronizar con la latencia de la BRAM
+
     logic [8:0] rom_shift_q;
     logic       rom_valid_q;
-    
-    // Señal de carga inicial de LLRs y mux para el dato de entrada a la P-mem
+    logic [6:0] col_idx_q;
+    logic [6:0] col_idx_valid_q;
+    logic [67:0] tb_cols_seen_mask;
+    logic [6:0]  tb_cols_seen_count;
+    logic [7:0]  tb_col_counts [0:67];
+    logic [7:0]  tb_col_max;
+    logic [15:0] tb_col_dup_events;
+    logic [6:0]  tb_col_idx_seen;
+
     logic       en_llr_load;
-    logic [Z*W-1:0] p_data_new_dp;   // Salida del datapath (sin muxear)
-    
-    // Durante ST_LOAD escribimos los LLRs de entrada directamente; en otro caso usamos el datapath
+    logic [Z*W-1:0] p_data_new_dp;
+    logic [Z-1:0]   row_syndrome;
+    logic [Z-1:0]   row_syndrome_p;
+    logic [Z-1:0]   q_sign_dbg;
+
+    logic [6:0]  p_wr_addr;
+    logic [11:0] r_wr_addr;
+    logic [6:0]  p_addr_prev;
+    logic [11:0] r_addr_prev;
+
+    always_ff @(posedge clk) begin
+        p_addr_prev <= p_addr;
+        r_addr_prev <= r_addr;
+    end
+
     assign en_llr_load = (state == ST_LOAD);
     assign p_data_new  = en_llr_load ? llr_in_bus : p_data_new_dp;
-    
-    // Señal de write-enable para la P-mem: durante ST_LOAD escribimos siempre,
-    // en modo normal solo cuando la entrada ROM es válida
-    logic we_p;
-    assign we_p = en_llr_load ? en_write_p : (en_write_p && rom_valid_q);
+    // Use rom_valid (not rom_valid_q) so column n's write-enable is gated by column n's
+    // own validity, not column n-1's. The pipeline delay rom_valid_q would cause column 0
+    // to depend on column 67's valid, which is -1 for 45/46 rows → column 0 never updated.
+    assign we_p = en_llr_load ? en_write_p : (en_write_p && rom_valid);
+    assign p_wr_addr = p_addr;
+    assign r_wr_addr = r_addr;
 
-    // =========================================================================
-    // 2. INSTANCIACIÓN DE BLOQUES DE CONTROL
-    // =========================================================================
-    
-    // Controlador de la Matriz BG1
     ldpc_rom_controller rom_ctrl (
         .clk(clk),
         .current_row(row_ptr),
@@ -74,81 +93,105 @@ module ldpc_decoder_top #(
         .valid_entry(rom_valid)
     );
 
-    // Retardo de señales de control (1 ciclo) para esperar a la BRAM
     always_ff @(posedge clk) begin
         rom_shift_q <= rom_shift;
         rom_valid_q <= rom_valid;
+        col_idx_q   <= col_ptr;
+        col_idx_valid_q <= col_idx_q;
     end
 
-    // =========================================================================
-    // 3. INSTANCIACIÓN DE MEMORIAS (BRAM)
-    // =========================================================================
-    
-    // Memoria de LLRs Totales (P)
-    ldpc_bram_block #(.DEPTH(68)) p_mem (
-        .clk(clk),
-        .addr_a(p_addr),
-        .din_a(p_data_new),
-        .we_a(we_p), // Durante ST_LOAD escribe siempre; en modo normal solo si ROM válida
-        .dout_a(p_data_out),
-        .addr_b(col_ptr), // Puerto B para extracción de bits finales
-        .dout_b() 
-    );
-
-    // Memoria de Mensajes (R)
-    ldpc_bram_block #(.DEPTH(46*68)) r_mem (
-        .clk(clk),
-        .addr_a(r_addr),
-        .din_a(r_data_new),
-        .we_a(en_write_r && rom_valid_q),
-        .dout_a(r_data_out),
-        .addr_b(),
-        .dout_b()
-    );
-
-    // =========================================================================
-    // 4. INSTANCIACIÓN DEL DATAPATH (PROCESAMIENTO)
-    // =========================================================================
-    
-    ldpc_layer_datapath #(.Z(Z), .W(W)) layer_engine (
-        .clk(clk),
-        .rst_n(rst_n),
-        .shift_val(rom_shift_q), // Valor sincronizado con el dato de la BRAM
-        .cnu_vnu_ctrl(1'b1),     // Simplificado: modo actualización
-        .p_mem_data(p_data_out),
-        .r_mem_data(r_data_out),
-        .p_mem_new(p_data_new_dp),
-        .r_mem_new(r_data_new)
-    );
-
-    // =========================================================================
-    // 5. LÓGICA DE SALIDA Y HARD DECISION
-    // =========================================================================
-    // Extraemos el bit de signo de cada LLR de la memoria P para la clave final
-    always_comb begin
-        for (int j = 0; j < Z; j++) begin
-            // Si el LLR es negativo (MSB=1), el bit es 1.
-            key_bits_out[j] = p_data_out[j*W + (W-1)];
+    // Track which columns are accumulated for row 45 (debug)
+    always_ff @(posedge clk or negedge rst_n) begin
+        integer i;
+        if (!rst_n) begin
+            tb_cols_seen_mask <= '0;
+            tb_cols_seen_count <= '0;
+            tb_col_max <= '0;
+            tb_col_dup_events <= '0;
+            for (i = 0; i < 68; i = i + 1) begin
+                tb_col_counts[i] <= '0;
+            end
+        end else if (start_row_pulse && row_ptr == 45) begin
+            tb_cols_seen_mask <= '0;
+            tb_cols_seen_count <= '0;
+            tb_col_max <= '0;
+            tb_col_dup_events <= '0;
+            for (i = 0; i < 68; i = i + 1) begin
+                tb_col_counts[i] <= '0;
+            end
+        end else if ((state == ST_READ_LAYER || state == ST_READ_DRAIN) && row_ptr == 45 && rom_valid_q) begin
+            logic [7:0] next_count;
+            tb_col_idx_seen = col_idx_q;
+            next_count = tb_col_counts[tb_col_idx_seen] + 1'b1;
+            if (!tb_cols_seen_mask[tb_col_idx_seen]) begin
+                tb_cols_seen_mask[tb_col_idx_seen] <= 1'b1;
+                tb_cols_seen_count <= tb_cols_seen_count + 1'b1;
+            end else begin
+                tb_col_dup_events <= tb_col_dup_events + 1'b1;
+            end
+            tb_col_counts[tb_col_idx_seen] <= next_count;
+            if (next_count > tb_col_max) begin
+                tb_col_max <= next_count;
+            end
         end
     end
 
-    // Aquí iría tu FSM principal que gestiona row_ptr, col_ptr y las banderas
-    // (Utilizando el esqueleto que diseñamos anteriormente)
-    // --- Estados de la FSM ---
-    typedef enum logic [2:0] {
-        ST_IDLE,
-        ST_LOAD,      // Carga inicial de LLRs
-        ST_READ_LAYER, // Fase 1: Leer fila y calcular mínimos en CNUs
-        ST_WRITE_LAYER,// Fase 2: Escribir nuevos LLRs y mensajes R
-        ST_CHECK,     // Verificar síndrome (Early Termination)
-        ST_DONE
-    } state_t;
+    // Debug readback: mux BRAM read address when done
+    logic [6:0] p_rd_addr;
+    assign p_rd_addr = (state == ST_DONE) ? debug_rd_addr : p_addr;
 
-    state_t state;
-    logic [4:0] iter_cnt;
-    logic       start_row_pulse;
+    ldpc_bram_block #(.Z(Z), .W(W), .DEPTH(68)) p_mem (
+        .clk(clk),
+        .rd_addr(p_rd_addr),
+        .wr_addr(p_wr_addr),
+        .din(p_data_new),
+        .we(we_p),
+        .dout(p_data_out)
+    );
 
-    // --- Lógica de la FSM y Control de Punteros ---
+    ldpc_bram_block #(.Z(Z), .W(W), .DEPTH(46*68)) r_mem (
+        .clk(clk),
+        .rd_addr(r_addr),
+        .wr_addr(r_wr_addr),
+        .din(r_data_new),
+        .we(en_write_r && rom_valid),
+        .dout(r_data_out)
+    );
+
+    ldpc_layer_datapath #(.Z(Z), .W(W)) layer_engine (
+        .clk(clk),
+        .rst_n(rst_n),
+        .start_row(start_row_pulse),
+        .phase(state == ST_WRITE_LAYER),
+        .valid_in(rom_valid && (state == ST_READ_LAYER || state == ST_READ_DRAIN)),
+        .col_idx(col_idx_q),
+        .shift_val(rom_shift_q),
+        .syndrome_row({<<{bob_syndrome_in[row_ptr]}}),
+        .p_mem_data(p_data_out),
+        .r_mem_data(r_data_out),
+        .p_mem_new(p_data_new_dp),
+        .r_mem_new(r_data_new),
+        .row_syndrome(row_syndrome),
+        .row_syndrome_p(row_syndrome_p),
+        .q_sign_dbg(q_sign_dbg)
+    );
+
+    always_comb begin
+        for (int j = 0; j < Z; j++) begin
+            key_bits_out[j] = p_data_out[j*W + (W-1)];
+            debug_rd_data[j] = p_data_out[j*W + (W-1)];
+        end
+    end
+
+    logic       row_fail;
+    logic [5:0] row_fail_idx;
+    logic       row_fail_raw;
+    logic       row_fail_rev;
+    logic [Z-1:0] row_syndrome_rev;
+    assign row_syndrome_rev = {<<{row_syndrome}};
+    logic [67:0] valid_seen;
+    int         valid_count;
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state <= ST_IDLE;
@@ -156,61 +199,123 @@ module ldpc_decoder_top #(
             en_write_p <= 0; en_write_r <= 0;
             start_row_pulse <= 0;
             done <= 0; success <= 0;
+            row_fail <= 0;
+            row_fail_idx <= 0;
+            row_fail_raw <= 0;
+            row_fail_rev <= 0;
+            valid_seen <= '0;
+            valid_count <= 0;
         end else begin
+            start_row_pulse <= 0;
+            if (start_row_pulse) begin
+                valid_seen <= '0;
+                valid_count <= 0;
+            end else if (rom_valid_q && (state == ST_READ_LAYER || state == ST_READ_DRAIN)) begin
+                if (!valid_seen[col_idx_q]) begin
+                    valid_seen[col_idx_q] <= 1'b1;
+                    valid_count <= valid_count + 1;
+                end
+            end
             case (state)
                 ST_IDLE: begin
                     done <= 0; success <= 0;
-                    if (start) state <= ST_LOAD;
+                    row_ptr <= 0; col_ptr <= 0; iter_cnt <= 0;
+                    row_fail <= 0;
+                    row_fail_raw <= 0;
+                    row_fail_rev <= 0;
+                    row_fail_idx <= 0;
+                    valid_seen <= '0;
+                    valid_count <= 0;
+                    if (start) begin
+                        state <= ST_LOAD;
+                        en_write_p <= 1;
+                    end
                 end
 
                 ST_LOAD: begin
-                    // Cargamos las 68 columnas de LLRs desde el bus de entrada
-                    en_write_p <= 1;
                     if (col_ptr == 67) begin
                         col_ptr <= 0;
                         en_write_p <= 0;
+                        start_row_pulse <= 1;
                         state <= ST_READ_LAYER;
-                    end else col_ptr <= col_ptr + 1;
+                    end else begin
+                        col_ptr <= col_ptr + 1;
+                    end
                 end
 
                 ST_READ_LAYER: begin
-                    start_row_pulse <= (col_ptr == 0);
-                    // Recorremos columnas para alimentar las CNUs
                     if (col_ptr == 67) begin
-                        col_ptr <= 0;
-                        state <= ST_WRITE_LAYER;
-                    end else col_ptr <= col_ptr + 1;
+                        state <= ST_READ_DRAIN;
+                    end else begin
+                        col_ptr <= col_ptr + 1;
+                    end
+                end
+
+                ST_READ_DRAIN: begin
+                    col_ptr <= 0;
+                    state <= ST_WRITE_LAYER;
+                    en_write_p <= 1;
+                    en_write_r <= 1;
                 end
 
                 ST_WRITE_LAYER: begin
-                    en_write_p <= 1; en_write_r <= 1;
                     if (col_ptr == 67) begin
                         col_ptr <= 0;
+                        en_write_p <= 0;
+                        en_write_r <= 0;
+                        // Use combinatorial row_syndrome directly, NOT the registered row_fail_raw.
+                        // row_fail_raw was set at col=66 and only becomes visible next cycle,
+                        // which would give a spurious fail for EVERY row (partial syndrome ≠ full syndrome).
+                        if ((row_syndrome_rev != bob_syndrome_in[row_ptr]) || $isunknown(row_syndrome_rev)) begin
+                            row_fail <= 1;
+                            row_fail_idx <= row_ptr;
+                            if ($isunknown(row_syndrome_rev)) begin
+                                $display("[WARNING] row%0d syndrome has X bits (uninitialized RAM)", row_ptr);
+                            end
+                        end
+                        if (row_ptr == 45 && iter_cnt == 0) begin
+                            $display("[DEBUG] row45 valid_count=%0d seen67=%0d", valid_count, valid_seen[67]);
+                        end
                         if (row_ptr == 45) begin
                             row_ptr <= 0;
                             state <= ST_CHECK;
                         end else begin
                             row_ptr <= row_ptr + 1;
+                            start_row_pulse <= 1;
                             state <= ST_READ_LAYER;
                         end
-                    end else col_ptr <= col_ptr + 1;
+                    end else begin
+                        col_ptr <= col_ptr + 1;
+                    end
                 end
 
                 ST_CHECK: begin
-                    en_write_p <= 0; en_write_r <= 0;
-                    // Aquí iría la lógica de comparación con bob_syndrome_in
-                    if (iter_cnt == 5'(MAX_ITER - 1)) state <= ST_DONE;
-                    else begin
-                        iter_cnt <= iter_cnt + 1;
-                        state <= ST_READ_LAYER;
+                    if (row_fail) begin
+                        if (iter_cnt == $bits(iter_cnt)'(MAX_ITER - 1)) begin
+                            state <= ST_DONE;
+                            success <= 0;
+                        end else begin
+                            iter_cnt <= iter_cnt + 1;
+                            row_fail <= 0;
+                            start_row_pulse <= 1;
+                            state <= ST_READ_LAYER;
+                        end
+                    end else begin
+                        state <= ST_DONE;
+                        success <= 1;
                     end
                 end
 
                 ST_DONE: begin
                     done <= 1;
-                    success <= 1; // Convergió (o alcanzó MAX_ITER sin error)
-                    state <= ST_IDLE;
+                    // Hold in DONE until start is asserted (allows debug readback)
+                    if (start) begin
+                        state <= ST_IDLE;
+                        done <= 0;  // Clear done when leaving
+                        success <= 0;
+                    end
                 end
+
                 default: state <= ST_IDLE;
             endcase
         end

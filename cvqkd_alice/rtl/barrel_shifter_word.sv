@@ -11,6 +11,8 @@ module barrel_shifter_word #(
 
     always_comb begin
         for (int i = 0; i < Z; i++) begin
+            // LDPC shift convention: VNU i receives data from position (i + shift) mod Z.
+            // This is an UPWARD (right) rotation by shift_val.
             automatic int src_idx = (i + int'(shift_val)) % Z;
             data_out[i*W +: W] = data_in[src_idx*W +: W];
         end

@@ -10,6 +10,7 @@ module cnu_serial_minsum #(
     // Señales de Control desde la FSM principal
     input  logic             start_row, // Pulso: limpia registros al iniciar una nueva fila
     input  logic             valid_in,  // Alto cuando el elemento de la matriz H != -1
+    input  logic             target_syndrome_bit, // <--- 1. NUEVA ENTRADA
     
     // Datos de entrada
     input  logic [COL_W-1:0] col_idx,   // Índice de la VNU (columna) actual
@@ -64,7 +65,7 @@ module cnu_serial_minsum #(
                 reg_min1       <= MAX_MAG;
                 reg_min2       <= MAX_MAG;
                 reg_min1_idx   <= '0;
-                reg_total_sign <= 1'b0;
+                reg_total_sign <= target_syndrome_bit;
             end 
             else if (valid_in) begin
                 // 1. Acumulación del signo total (XOR)

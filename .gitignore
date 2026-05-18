@@ -12,6 +12,19 @@ xsim.dir/
 xsim_work/
 obj_dir/
 
+# Vivado simulation database (large binary)
+*.wdb
+*.pb
+
+# Syncthing conflict files
+*sync-conflict*
+
+# MATLAB autosave
+*.asv
+
+# Runtime state
+dfx_runtime.txt
+
 # OS
 .DS_Store
 Thumbs.db
