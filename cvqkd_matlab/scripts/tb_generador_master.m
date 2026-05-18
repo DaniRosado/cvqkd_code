@@ -32,8 +32,8 @@ N_FIBER     = N_FRAMES * L_trama + 1;
 % --- Parámetros Físicos del Canal ---
 Ts           = 1e-9;   % Tiempo de símbolo (1 Gbaud)
 T_real       = 0.8;    % Transmitancia real de la fibra
-xi_real      = 0.15;   % Ruido en exceso cuántico (SNU)
-V_A_snu      = 2.0;  % Varianza de Alice (SNU)
+xi_real      = 0.01;   % Ruido en exceso cuántico (SNU)
+V_A_snu      = 5.0;  % Varianza de Alice (SNU)
 env_va = getenv('VA_SNU');
 if ~isempty(env_va)
     V_A_snu = str2double(env_va);
