@@ -80,41 +80,19 @@ module tb_ldpc_top_system;
             $finish;
         end
         for (int col = 0; col < 68; col++) begin
-            string line;
-            int    code;
-            int    nchars;
-            code = $fgets(line, fd_u);
-            // line includes the newline; strip trailing whitespace
-            if (code > 0 && line.len() > 0) begin
-                while (line.len() > 0) begin
-                    byte c;
-                    int  ll;
-                    c = line[line.len()-1];
-                    if (c == 10 || c == 13 || c == 32) begin // \n, \r, space
-                        ll = line.len();
-                        if (ll >= 2)
-                            line = line.substr(0, ll-2);
-                        else
-                            line = "";
-                    end else begin
-                        break;
-                    end
-                end
-            end
-            nchars = line.len();
-            if (nchars != Z*8) begin
-                $display("[FATAL] Line %0d length %0d != expected %0d (Z*8)", col, nchars, Z*8);
+            logic [0:(Z*8)-1] line_bits; // MSB at index 0, matches string indexing
+            int code;
+            code = $fscanf(fd_u, "%b", line_bits);
+            if (code != 1) begin
+                $display("[FATAL] Error reading line %0d from u_bits.txt", col);
                 $finish;
             end
             for (int v = 0; v < Z; v++) begin
-                // Parse 8 binary chars, MSB-first: line[v*8] is bit 7 (sign)
-                // 8-bit SM format: sign at bit 7, 7-bit mag at bits [6:0]
-                // Convert to 16-bit SM: {sign, 8'b0, 7-bit-mag}
                 bit sm_sign;
                 bit [6:0] sm_mag;
-                sm_sign = (line[v*8 + 0] == "1") ? 1'b1 : 1'b0;
+                sm_sign = line_bits[v*8 + 0];
                 for (int b = 1; b < 8; b++) begin
-                    sm_mag[7-b] = (line[v*8 + b] == "1") ? 1'b1 : 1'b0;
+                    sm_mag[7-b] = line_bits[v*8 + b];
                 end
                 ram_llr_input[col][v*W +: W] = {
                     sm_sign,
@@ -387,8 +365,7 @@ module tb_ldpc_top_system;
             hard_bits = debug_rd_data;  // dout from addr set 2 cycles ago = ram[col]
             // Set NEXT address for next iteration
             debug_rd_addr = 7'((col + 1 < 68) ? col + 1 : 0);
-            @(posedge clk);  // T1: schedule dout <= ram[col+1]
-            @(posedge clk);  // T2: dout = ram[col+1] (NBA applied, ready for next iter)
+            
             col_match = 0;
             for (int b = 0; b < Z; b++) begin
                 if (hard_bits[b] == ram_key_ref[col][Z-1-b]) begin
@@ -400,6 +377,9 @@ module tb_ldpc_top_system;
                 $display("[DEBUG] Column %0d: %0d/%0d match (first32=%h)",
                          col, col_match, Z, hard_bits[31:0]);
             end
+            
+            @(posedge clk);  // T1: schedule dout <= ram[col+1]
+            @(posedge clk);  // T2: dout = ram[col+1] (NBA applied, ready for next iter)
         end
 
         if (success) begin
