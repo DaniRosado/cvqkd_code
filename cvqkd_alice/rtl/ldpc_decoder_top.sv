@@ -15,7 +15,7 @@ module ldpc_decoder_top #(
     input  logic [Z*W-1:0] llr_in_bus,
     input  logic [383:0]   bob_syndrome_in [0:45],
     output logic [Z-1:0]   key_bits_out,
-    // Debug readback ports
+    // Puertos de lectura para depuración (Debug readback)
     input  logic [6:0]     debug_rd_addr,
     output logic [Z-1:0]   debug_rd_data
 );
@@ -29,7 +29,6 @@ module ldpc_decoder_top #(
         ST_CHECK,
         ST_DONE
     } state_t;
-
     state_t state;
 
     logic [5:0] row_ptr;
@@ -69,6 +68,20 @@ module ldpc_decoder_top #(
     logic [6:0]  p_addr_prev;
     logic [11:0] r_addr_prev;
 
+    // --- Registros de tubería para señales de habilitación de escritura ---
+    logic       en_write_p_q;
+    logic       en_write_r_q;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            en_write_p_q <= 1'b0;
+            en_write_r_q <= 1'b0;
+        end else begin
+            en_write_p_q <= en_write_p;
+            en_write_r_q <= en_write_r;
+        end
+    end
+
     always_ff @(posedge clk) begin
         p_addr_prev <= p_addr;
         r_addr_prev <= r_addr;
@@ -76,12 +89,11 @@ module ldpc_decoder_top #(
 
     assign en_llr_load = (state == ST_LOAD);
     assign p_data_new  = en_llr_load ? llr_in_bus : p_data_new_dp;
-    // Use rom_valid (not rom_valid_q) so column n's write-enable is gated by column n's
-    // own validity, not column n-1's. The pipeline delay rom_valid_q would cause column 0
-    // to depend on column 67's valid, which is -1 for 45/46 rows → column 0 never updated.
-    assign we_p = en_llr_load ? en_write_p : (en_write_p && rom_valid);
-    assign p_wr_addr = p_addr;
-    assign r_wr_addr = r_addr;
+    
+    // Alineación temporal: we_p y direcciones usan las versiones retrasadas en procesamiento de capa
+    assign we_p = en_llr_load ? en_write_p : (en_write_p_q && rom_valid_q);
+    assign p_wr_addr = en_llr_load ? p_addr : p_addr_prev;
+    assign r_wr_addr = r_addr_prev;
 
     ldpc_rom_controller rom_ctrl (
         .clk(clk),
@@ -100,7 +112,7 @@ module ldpc_decoder_top #(
         col_idx_valid_q <= col_idx_q;
     end
 
-    // Track which columns are accumulated for row 45 (debug)
+    // Monitorización de columnas procesadas para la fila 45 (depuración)
     always_ff @(posedge clk or negedge rst_n) begin
         integer i;
         if (!rst_n) begin
@@ -136,7 +148,7 @@ module ldpc_decoder_top #(
         end
     end
 
-    // Debug readback: mux BRAM read address when done
+    // Interfaz de lectura de depuración para el puerto BRAM
     logic [6:0] p_rd_addr;
     assign p_rd_addr = (state == ST_DONE) ? debug_rd_addr : p_addr;
 
@@ -154,7 +166,7 @@ module ldpc_decoder_top #(
         .rd_addr(r_addr),
         .wr_addr(r_wr_addr),
         .din(r_data_new),
-        .we(en_write_r && rom_valid),
+        .we(en_llr_load ? 1'b0 : (en_write_r_q && rom_valid_q)),
         .dout(r_data_out)
     );
 
@@ -192,6 +204,7 @@ module ldpc_decoder_top #(
     logic [67:0] valid_seen;
     int         valid_count;
 
+    // --- Máquina de Estados Finita (FSM) ---
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state <= ST_IDLE;
@@ -218,7 +231,8 @@ module ldpc_decoder_top #(
             end
             case (state)
                 ST_IDLE: begin
-                    done <= 0; success <= 0;
+                    done <= 0;
+                    success <= 0;
                     row_ptr <= 0; col_ptr <= 0; iter_cnt <= 0;
                     row_fail <= 0;
                     row_fail_raw <= 0;
@@ -263,9 +277,6 @@ module ldpc_decoder_top #(
                         col_ptr <= 0;
                         en_write_p <= 0;
                         en_write_r <= 0;
-                        // Use combinatorial row_syndrome directly, NOT the registered row_fail_raw.
-                        // row_fail_raw was set at col=66 and only becomes visible next cycle,
-                        // which would give a spurious fail for EVERY row (partial syndrome ≠ full syndrome).
                         if ((row_syndrome_rev != bob_syndrome_in[row_ptr]) || $isunknown(row_syndrome_rev)) begin
                             row_fail <= 1;
                             row_fail_idx <= row_ptr;
@@ -308,10 +319,9 @@ module ldpc_decoder_top #(
 
                 ST_DONE: begin
                     done <= 1;
-                    // Hold in DONE until start is asserted (allows debug readback)
                     if (start) begin
                         state <= ST_IDLE;
-                        done <= 0;  // Clear done when leaving
+                        done <= 0;
                         success <= 0;
                     end
                 end
