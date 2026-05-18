@@ -68,7 +68,7 @@ module tb_ldpc_top_system;
         // Each 8-bit LLR is stored as 8 binary chars (MSB-first).
         // Use $fgets to read each line as a string, then parse into 8-bit chunks.
         // We need to load into ram_llr_input (16-bit sign-magnitude format).
-        fd_u = $fopen("../data/u_bits.txt", "r");
+        fd_u = $fopen("C:/Users/usser/TFG/cvqkd_code/cvqkd_alice/sim/u_bits.txt", "r");
         if (fd_u == 0) begin
             fd_u = $fopen("u_bits.txt", "r");
         end
@@ -130,7 +130,7 @@ module tb_ldpc_top_system;
         begin
             int fd_syn;
             string syn_path;
-            syn_path = "../data/expected_syndrome.txt";
+            syn_path = "C:/Users/usser/TFG/cvqkd_code/cvqkd_alice/sim/expected_syndrome.txt";
             fd_syn = $fopen(syn_path, "r");
             if (fd_syn == 0) begin
                 syn_path = "sim/expected_syndrome.txt";
