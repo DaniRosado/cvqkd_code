@@ -3,18 +3,28 @@ cvqkd_mdr/build/
 *.vvp
 a.out
 
-# Vivado
+# Vivado / XSIM
 *.log
 *.jou
 *.str
+*.wdb
+*.pb
 xsim.dir/
 .Xil/
 xsim_work/
+xsim.pb
 obj_dir/
+*.os
+*.dat
 
-# Vivado simulation database (large binary)
-*.wdb
-*.pb
+# Vivado project runs
+*.runs/
+*.gen/
+*.cache/
+*.hw/
+*.sim/
+*.ip_user_files/
+*.srcs/
 
 # Syncthing conflict files
 *sync-conflict*

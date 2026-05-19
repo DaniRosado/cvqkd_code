@@ -39,7 +39,6 @@ module cnu_min_sum_array #(
                 .p_sign(p_bus[i*W + (W-1)]),
                 .q_mag(q_bus[i*W +: (W-1)]),
                 .col_idx(col_idx),
-                .syndrome_bit(syndrome_row[i]),
                 .target_syndrome_bit(syndrome_row[i]),
                 .min1(min1_arr[i]),
                 .min2(min2_arr[i]),
@@ -53,15 +52,14 @@ module cnu_min_sum_array #(
 
             logic [W-2:0] raw_mag, norm_mag;
             assign raw_mag = (col_idx == min1_idx_arr[i]) ? min2_arr[i] : min1_arr[i];
-            // Unnormalized min-sum (matches MATLAB convergence behavior at high V_A).
-            // No alpha scaling — the syndrome-based decoding relies on raw min-sum
-            // magnitudes to drive convergence.
+            // Scaled Min-Sum with alpha=0.75: norm_mag = raw_mag - (raw_mag >> 2).
+            // This scaling matches MATLAB convergence behavior at high V_A.
             assign norm_mag = raw_mag - (raw_mag >> 2);
 
             // During WRITE (phase=1), use registered q_bus to break combinatorial loop
-            // between VNU→CNU→VNU. During READ, use q_bus_current for correct column timing.
+            // between VNU→CNU→VNU. During READ (phase=0), use q_bus_current for correct column timing.
             logic q_sign_for_r;
-            assign q_sign_for_r = q_bus_current[i*W + (W-1)];
+            assign q_sign_for_r = phase ? q_bus[i*W + (W-1)] : q_bus_current[i*W + (W-1)];
 
             assign r_new_bus[i*W +: W] = {
                 total_sign_arr[i] ^ q_sign_for_r,

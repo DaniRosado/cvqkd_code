@@ -30,7 +30,6 @@ OBJ_DIR     = obj_dir
 SOURCES = \
 	$(SOURCES_DIR)/bg_rom_pkg.sv \
 	$(SOURCES_DIR)/barrel_shifter_word.sv \
-	$(SOURCES_DIR)/cnu_serial_minsum.sv \
 	$(SOURCES_DIR)/cnu_cell.sv \
 	$(SOURCES_DIR)/cnu_min_sum_array.sv \
 	$(SOURCES_DIR)/vnu_processor.sv \
@@ -40,10 +39,12 @@ SOURCES = \
 	$(SOURCES_DIR)/ldpc_decoder_top.sv
 
 # Testbenches
-TB_VNU     = $(SIM_DIR)/tb_vnu_processor.sv
-TB_CNU     = $(SIM_DIR)/tb_cnu_serial_minsum.sv
-TB_SHIFTER = $(SIM_DIR)/tb_barrel_shifter_word.sv
-TB_SYSTEM  = $(SIM_DIR)/tb_ldpc_top_system.sv
+TB_VNU        = $(SIM_DIR)/tb_vnu_processor.sv
+TB_CNU_ARRAY  = $(SIM_DIR)/tb_cnu_array_isolated.sv
+TB_CNU_ISOL   = $(SIM_DIR)/tb_cnu_isolated.sv
+TB_CNU_VERIFY = $(SIM_DIR)/tb_cnu_array_verify.sv
+TB_SHIFTER    = $(SIM_DIR)/tb_barrel_shifter_word.sv
+TB_SYSTEM     = $(SIM_DIR)/tb_ldpc_top_system.sv
 
 # Opciones de compilación
 XVLOG_OPTS = --sv -d SIMULATION
@@ -51,14 +52,16 @@ XELAB_OPTS = -debug typical
 XSIM_OPTS  = -runall
 
 # Nombre de los work libraries
-WORK_VNU     = work.tb_vnu_processor
-WORK_CNU     = work.tb_cnu_serial_minsum
-WORK_SHIFTER = work.tb_barrel_shifter_word
-WORK_SYSTEM  = work.tb_ldpc_top_system
+WORK_VNU        = work.tb_vnu_processor
+WORK_CNU_ARRAY  = work.tb_cnu_array_isolated
+WORK_CNU_ISOL   = work.tb_cnu_isolated
+WORK_CNU_VERIFY = work.tb_cnu_array_verify
+WORK_SHIFTER    = work.tb_barrel_shifter_word
+WORK_SYSTEM     = work.tb_ldpc_top_system
 
-.PHONY: all tb_vnu tb_cnu tb_shifter tb_system clean help check_xvlog lint tb_system_v
+.PHONY: all tb_vnu tb_cnu_array tb_cnu_isol tb_cnu_verify tb_shifter tb_system clean help check_xvlog lint tb_system_v
 
-all: tb_vnu tb_cnu tb_shifter tb_system
+all: tb_vnu tb_cnu_array tb_shifter tb_system
 
 check_xvlog:
 	@if ! command -v $(XVLOG) &> /dev/null; then \
@@ -84,14 +87,32 @@ tb_vnu: $(WORK_DIR)/sources_compiled
 	$(XSIM) $(WORK_VNU) $(XSIM_OPTS) 2>&1 | tee $(WORK_DIR)/xsim_tb_vnu.log
 	@echo "===== VNU done ====="
 
-# --- CNU Serial Min-Sum Testbench ---
-tb_cnu: $(WORK_DIR)/sources_compiled
-	@echo "===== Compilando testbench CNU ====="
-	$(XVLOG) $(XVLOG_OPTS) --work work $(TB_CNU) 2>&1 | tee $(WORK_DIR)/xvlog_tb_cnu.log
-	$(XELAB) $(XELAB_OPTS) $(WORK_CNU) 2>&1 | tee $(WORK_DIR)/xelab_tb_cnu.log
-	@echo "===== Ejecutando simulación CNU ====="
-	$(XSIM) $(WORK_CNU) $(XSIM_OPTS) 2>&1 | tee $(WORK_DIR)/xsim_tb_cnu.log
-	@echo "===== CNU done ====="
+# --- CNU Array Testbench (384 parallel cells) ---
+tb_cnu_array: $(WORK_DIR)/sources_compiled
+	@echo "===== Compilando testbench CNU Array ====="
+	$(XVLOG) $(XVLOG_OPTS) --work work $(TB_CNU_ARRAY) 2>&1 | tee $(WORK_DIR)/xvlog_tb_cnu_array.log
+	$(XELAB) $(XELAB_OPTS) $(WORK_CNU_ARRAY) 2>&1 | tee $(WORK_DIR)/xelab_tb_cnu_array.log
+	@echo "===== Ejecutando simulación CNU Array ====="
+	$(XSIM) $(WORK_CNU_ARRAY) $(XSIM_OPTS) 2>&1 | tee $(WORK_DIR)/xsim_tb_cnu_array.log
+	@echo "===== CNU Array done ====="
+
+# --- CNU Isolated Testbench (per-column debug) ---
+tb_cnu_isol: $(WORK_DIR)/sources_compiled
+	@echo "===== Compilando testbench CNU Isolated ====="
+	$(XVLOG) $(XVLOG_OPTS) --work work $(TB_CNU_ISOL) 2>&1 | tee $(WORK_DIR)/xvlog_tb_cnu_isol.log
+	$(XELAB) $(XELAB_OPTS) $(WORK_CNU_ISOL) 2>&1 | tee $(WORK_DIR)/xelab_tb_cnu_isol.log
+	@echo "===== Ejecutando simulación CNU Isolated ====="
+	$(XSIM) $(WORK_CNU_ISOL) $(XSIM_OPTS) 2>&1 | tee $(WORK_DIR)/xsim_tb_cnu_isol.log
+	@echo "===== CNU Isolated done ====="
+
+# --- CNU Array Verify (golden reference comparison) ---
+tb_cnu_verify: $(WORK_DIR)/sources_compiled
+	@echo "===== Compilando testbench CNU Verify ====="
+	$(XVLOG) $(XVLOG_OPTS) --work work $(TB_CNU_VERIFY) 2>&1 | tee $(WORK_DIR)/xvlog_tb_cnu_verify.log
+	$(XELAB) $(XELAB_OPTS) $(WORK_CNU_VERIFY) 2>&1 | tee $(WORK_DIR)/xelab_tb_cnu_verify.log
+	@echo "===== Ejecutando simulación CNU Verify ====="
+	$(XSIM) $(WORK_CNU_VERIFY) $(XSIM_OPTS) 2>&1 | tee $(WORK_DIR)/xsim_tb_cnu_verify.log
+	@echo "===== CNU Verify done ====="
 
 # --- Barrel Shifter Testbench ---
 tb_shifter: $(WORK_DIR)/sources_compiled
@@ -135,15 +156,17 @@ help:
 	@echo "Uso: make <target>"
 	@echo ""
 	@echo "Targets disponibles:"
-	@echo "  all          Compila y ejecuta todos los testbenches"
-	@echo "  tb_vnu       Testbench del VNU Processor"
-	@echo "  tb_cnu       Testbench del CNU Serial Min-Sum"
-	@echo "  tb_shifter   Testbench del Barrel Shifter Word"
-	@echo "  tb_system    Testbench del sistema LDPC completo"
-	@echo "  lint         Verilator lint (rápido, sin simulación)"
-	@echo "  tb_system_v  Simulación con Verilator (open-source)"
-	@echo "  clean        Limpia archivos generados"
-	@echo "  help         Muestra esta ayuda"
+	@echo "  all           Compila y ejecuta todos los testbenches"
+	@echo "  tb_vnu        Testbench del VNU Processor"
+	@echo "  tb_cnu_array  Testbench del CNU Array (384 celdas en paralelo)"
+	@echo "  tb_cnu_isol   Testbench del CNU Isolated (debug por columna)"
+	@echo "  tb_cnu_verify Testbench del CNU con golden reference interno"
+	@echo "  tb_shifter    Testbench del Barrel Shifter Word"
+	@echo "  tb_system     Testbench del sistema LDPC completo"
+	@echo "  lint          Verilator lint (rápido, sin simulación)"
+	@echo "  tb_system_v   Simulación con Verilator (open-source)"
+	@echo "  clean         Limpia archivos generados"
+	@echo "  help          Muestra esta ayuda"
 	@echo ""
 	@echo "Variables:"
 	@echo "  XILINX_VIVADO  Ruta a Vivado (def: /tools/Xilinx/Vivado/2025.2)"
