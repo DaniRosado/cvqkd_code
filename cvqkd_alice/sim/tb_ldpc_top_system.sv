@@ -13,6 +13,8 @@ module tb_ldpc_top_system;
     logic [383:0]   bob_syndrome_in [0:45];
     logic [Z*W-1:0] ram_llr_input [0:67];
     logic [Z-1:0]   ram_key_ref   [0:67];
+    // NUEVO: Array para almacenar la salida esperada de los CNUs (46 filas * 68 columnas)
+    logic [Z*W-1:0] expected_r_mem [0:46*68-1];
     int fd_key_ref;
     int fd_u;
     int sim_cycles;
@@ -129,6 +131,30 @@ module tb_ldpc_top_system;
             $fclose(fd_syn);
             $readmemb(syn_path, bob_syndrome_in);
             $display("[INFO] expected_syndrome.txt loaded from %s", syn_path);
+        end
+
+        // Cargar salidas esperadas de los CNUs (R_mem)
+        begin
+            int fd_rmem;
+            string rmem_path;
+            rmem_path = "C:/Users/usser/TFG/cvqkd_code/cvqkd_matlab/data/expected_r_mem.txt";
+            fd_rmem = $fopen(rmem_path, "r");
+            if (fd_rmem == 0) begin
+                rmem_path = "sim/expected_r_mem.txt";
+                fd_rmem = $fopen(rmem_path, "r");
+            end
+            if (fd_rmem == 0) begin
+                rmem_path = "expected_r_mem.txt";
+                fd_rmem = $fopen(rmem_path, "r");
+            end
+            if (fd_rmem != 0) begin
+                $fclose(fd_rmem);
+                $readmemb(rmem_path, expected_r_mem);
+                $display("[INFO] expected_r_mem.txt cargado desde %s", rmem_path);
+            end else begin
+                $display("[WARNING] expected_r_mem.txt no encontrado. Usando todo ceros para R_mem.");
+                expected_r_mem = '{default: '0};
+            end
         end
 
         // Try multiple paths for bob_key_ref.txt and remember which one worked
@@ -475,6 +501,10 @@ module tb_ldpc_top_system;
     always @(posedge clk) begin
         if (uut.state == 3'd5) begin // 3'd5 is ST_CHECK
             int coincidences = 0;
+            int r_mismatches = 0;
+            int valid_edges = 0;
+            
+            // 1. Comprobación de decisiones duras (P_mem)
             for (int i = 0; i < 68; i++) begin
                 for (int j = 0; j < Z; j++) begin
                     if (uut.p_mem.ram[i][j*W + (W-1)] == ram_key_ref[i][Z-1-j]) begin
@@ -482,7 +512,29 @@ module tb_ldpc_top_system;
                     end
                 end
             end
-            $display("[ITER %0d] Coincidencias con la clave original: %0d / %0d", uut.iter_cnt, coincidences, 68*Z);
+            
+            // 2. NUEVO: Comprobación de los mensajes de los CNUs (R_mem)
+            for (int r = 0; r < 46; r++) begin
+                for (int c = 0; c < 68; c++) begin
+                    if (BG_ROM[r][c] != -1) begin // Solo comparamos las conexiones que existen
+                        int addr = r * 68 + c;
+                        valid_edges++;
+                        
+                        if (uut.r_mem.ram[addr] !== expected_r_mem[addr]) begin
+                            r_mismatches++;
+                            // Imprimimos solo los primeros 5 fallos para no saturar la consola
+                            if (r_mismatches <= 5) begin 
+                                $display("[ERROR ITER %0d] CNU Mismatch en Fila %0d, Columna %0d", uut.iter_cnt, r, c);
+                            end
+                        end
+                    end
+                end
+            end
+            
+            $display("-------------------------------------------------");
+            $display("[ITER %0d] Coincidencias clave original: %0d / %0d", uut.iter_cnt, coincidences, 68*Z);
+            $display("[ITER %0d] Fallos en salidas de CNUs: %0d / %0d aristas válidas", uut.iter_cnt, r_mismatches, valid_edges);
+            $display("-------------------------------------------------");
         end
     end
 
