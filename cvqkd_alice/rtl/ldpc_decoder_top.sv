@@ -54,9 +54,6 @@ module ldpc_decoder_top #(
     logic [6:0]  p_addr_prev;
     logic [11:0] r_addr_prev;
 
-    // Tubería para sincronizar el Valid con el delay de lectura de la BRAM (1 ciclo)
-    // NOTA: ST_READ_DRAIN solo para que la CNU acumule col 67 (se lee una vez).
-    //       No se propaga a WRITE_LAYER para evitar doble acumulación.
     logic       valid_in_pipe;
     logic [67:0] tb_cols_seen_mask;
     logic [6:0]  tb_cols_seen_count;
@@ -74,10 +71,6 @@ module ldpc_decoder_top #(
     logic [6:0]  p_wr_addr;
     logic [11:0] r_wr_addr;
 
-    // valid_in_pipe solo durante READ_LAYER para que:
-    // 1. Col 67 se acumule en el ciclo READ_DRAIN (valid_in_pipe = 1 desde
-    //    último posedge de READ_LAYER)
-    // 2. NO se acumule en WRITE_LAYER (evita corrupción de min1/min2/total_sign)
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             valid_in_pipe <= 1'b0;
@@ -100,7 +93,6 @@ module ldpc_decoder_top #(
     assign en_llr_load = (state == ST_LOAD);
     assign p_data_new  = en_llr_load ? llr_in_bus : p_data_new_dp;
     
-    // DEBUG: track writes to P_mem[0], [1], [67]
     int p_wr_cnt0;
     int p_wr_cnt1;
     int p_wr_cnt67;
@@ -115,12 +107,8 @@ module ldpc_decoder_top #(
             if (p_wr_addr == 67) p_wr_cnt67 <= p_wr_cnt67 + 1;
         end
     end
-    // WRITE_LAYER: usamos en_write_p (sin retardo) y rom_valid_q (retardado)
-    // para que el primer ciclo de escritura use la validez de col 67 (desde READ_DRAIN)
-    // y escriba el dato de col 67 en p_addr_prev (addr de col 67).
+    
     assign we_p = en_llr_load ? en_write_p : (en_write_p && rom_valid_q);
-    // WRITE_LAYER: dirección del ciclo anterior (pipeline BRAM: leer→procesar→escribir)
-    // LOAD: dirección del ciclo actual (escritura directa sin pipeline)
     assign p_wr_addr = en_llr_load ? p_addr : p_addr_prev;
     assign r_wr_addr = en_llr_load ? r_addr : r_addr_prev;
 
@@ -133,6 +121,7 @@ module ldpc_decoder_top #(
         .r_ram_addr(r_addr),
         .valid_entry(rom_valid)
     );
+
     always_ff @(posedge clk or negedge rst_n) begin
         integer i;
         if (!rst_n) begin
@@ -186,8 +175,7 @@ module ldpc_decoder_top #(
         .we((state == ST_WRITE_LAYER) ? (en_write_r && rom_valid_q) : 1'b0),
         .dout(r_data_out)
     );
-    // Shift y col retrasados 1 ciclo para alinear con la salida registrada de la BRAM
-    // (tanto en READ como en WRITE: la BRAM necesita 1 ciclo para presentar dout)
+
     ldpc_layer_datapath #(.Z(Z), .W(W)) layer_engine (
         .clk(clk),
         .rst_n(rst_n),
@@ -196,7 +184,6 @@ module ldpc_decoder_top #(
         .valid_in(valid_in_pipe), 
         .col_idx(col_idx_q),
         .shift_val(rom_shift_q),
-        // CORRECCIÓN: RESTAURADA LA INVERSIÓN DE BITS PARA EMPAREJAR CON MATLAB
         .syndrome_row({<<{bob_syndrome_in[row_ptr]}}), 
         .p_mem_data(p_data_out),
         .r_mem_data(r_data_out),
@@ -219,13 +206,10 @@ module ldpc_decoder_top #(
     logic       row_fail_rev;
     logic [Z-1:0] row_syndrome_rev;
     
-    // CORRECCIÓN: El síndrome correcto usa total_sign_q (XOR de q_sign extrínseco),
-    // no total_sign_p (XOR de p_sign intrínseco que está desactualizado).
-    // row_syndrome = total_sign_q, row_syndrome_p = total_sign_p
     assign row_syndrome_rev = row_syndrome;
     logic [67:0] valid_seen;
     int         valid_count;
-    // --- Máquina de Estados Finita (FSM) ---
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state <= ST_IDLE;
