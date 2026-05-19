@@ -675,3 +675,68 @@ if ENABLE_EXPORT_VIVADO
     
     disp('   [OK] Archivos de simulación generados con éxito.');
 end
+
+%% 13. DUMP DE DEPURACIÓN PARA TESTBENCH AISLADO DE CNU
+% =========================================================================
+% Extrae las entradas (Q, P) y salidas (R) exactas para los 384 CNUs 
+% correspondientes a la FILA 1 en la ITERACIÓN 1, alineando los datos 
+% como si pasaran por el Barrel Shifter del hardware.
+% =========================================================================
+disp('10. Generando archivos de depuración aislada para CNU...');
+
+f_q = fopen(fullfile(DATA_DIR, 'cnu_tb_q_in.txt'), 'w');
+f_p = fopen(fullfile(DATA_DIR, 'cnu_tb_p_in.txt'), 'w');
+f_r = fopen(fullfile(DATA_DIR, 'cnu_tb_r_out.txt'), 'w');
+
+% Función lambda para convertir a Binario de 16-bits (Signo-Magnitud)
+% Usa exactamente el mismo escalado (scale_8bit) que el resto de tu hardware
+to_sm16_bin = @(val_fp) dec2bin( ...
+    bitshift(uint16(max(-127, min(127, round(val_fp * scale_8bit))) < 0), 15) + ...
+    uint16(abs(max(-127, min(127, round(val_fp * scale_8bit))))), 16 );
+
+% Construir Q, P y R para la Fila 1 (CNs 1 a 384)
+for c_idx = 1:nb
+    shift = bg_matrix(1, c_idx);
+    
+    Q_aligned = zeros(Z, 1);
+    P_aligned = zeros(Z, 1);
+    R_aligned = zeros(Z, 1);
+    
+    if shift ~= -1
+        % 1. Entradas Q y P (En Iter 1, Q y P son iguales a los LLRs del canal)
+        vn_vals = llr_ch((c_idx-1)*Z + 1 : c_idx*Z);
+        
+        % Emulamos el Barrel Shifter HW para alinear VNs a las puertas del CNU
+        Q_aligned = circshift(vn_vals, -shift);
+        P_aligned = Q_aligned;
+        
+        % 2. Salida R_mem calculada en la iteración 1 para esta fila y columna
+        % r_mem_history está indexado como (iter, block_row, block_col, z_col)
+        r_vals = squeeze(r_mem_history(1, 1, c_idx, :)); 
+        R_aligned = circshift(r_vals, -shift);
+    end
+    
+    % Escribimos en el archivo (Orden Z-1 bajando a 0 para que Vivado y $readmemb 
+    % mapeen correctamente el MSB al cable Z-1 y el LSB al cable 0).
+    for z_idx = Z:-1:1
+        fprintf(f_q, '%s', to_sm16_bin(Q_aligned(z_idx))); 
+        fprintf(f_p, '%s', to_sm16_bin(P_aligned(z_idx)));
+        fprintf(f_r, '%s', to_sm16_bin(R_aligned(z_idx)));
+    end
+    
+    % Salto de línea: significa que pasamos a la siguiente columna (ciclo de reloj)
+    fprintf(f_q, '\n'); 
+    fprintf(f_p, '\n'); 
+    fprintf(f_r, '\n');
+end
+
+fclose(f_q); 
+fclose(f_p); 
+fclose(f_r);
+
+% Copiamos los archivos directamente a la carpeta de simulación de Alice
+copyfile(fullfile(DATA_DIR, 'cnu_tb_q_in.txt'), fullfile(ALICE_SIM_DIR, 'cnu_tb_q_in.txt'));
+copyfile(fullfile(DATA_DIR, 'cnu_tb_p_in.txt'), fullfile(ALICE_SIM_DIR, 'cnu_tb_p_in.txt'));
+copyfile(fullfile(DATA_DIR, 'cnu_tb_r_out.txt'), fullfile(ALICE_SIM_DIR, 'cnu_tb_r_out.txt'));
+
+disp('    [OK] Archivos cnu_tb_q_in.txt, cnu_tb_p_in.txt y cnu_tb_r_out.txt exportados con éxito.');
