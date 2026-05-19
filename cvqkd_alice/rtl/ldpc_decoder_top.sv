@@ -277,7 +277,7 @@ module ldpc_decoder_top #(
                         col_ptr <= 0;
                         en_write_p <= 0;
                         en_write_r <= 0;
-                        if ((row_syndrome_rev != bob_syndrome_in[row_ptr]) || $isunknown(row_syndrome_rev)) begin
+                        if ((row_syndrome_rev != '0) || $isunknown(row_syndrome_rev)) begin
                             row_fail <= 1;
                             row_fail_idx <= row_ptr;
                             if ($isunknown(row_syndrome_rev)) begin
