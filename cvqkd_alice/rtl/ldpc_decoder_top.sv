@@ -49,8 +49,14 @@ module ldpc_decoder_top #(
     logic       rom_valid_q;
     logic [6:0] col_idx_q;
     logic [6:0] col_idx_valid_q;
-    
+    logic       en_write_p_q;
+    logic       en_write_r_q;
+    logic [6:0]  p_addr_prev;
+    logic [11:0] r_addr_prev;
+
     // Tubería para sincronizar el Valid con el delay de lectura de la BRAM (1 ciclo)
+    // NOTA: ST_READ_DRAIN solo para que la CNU acumule col 67 (se lee una vez).
+    //       No se propaga a WRITE_LAYER para evitar doble acumulación.
     logic       valid_in_pipe;
     logic [67:0] tb_cols_seen_mask;
     logic [6:0]  tb_cols_seen_count;
@@ -67,38 +73,56 @@ module ldpc_decoder_top #(
 
     logic [6:0]  p_wr_addr;
     logic [11:0] r_wr_addr;
-    logic [6:0]  p_addr_prev;
-    logic [11:0] r_addr_prev;
 
-    logic       en_write_p_q;
-    logic       en_write_r_q;
-
+    // valid_in_pipe solo durante READ_LAYER para que:
+    // 1. Col 67 se acumule en el ciclo READ_DRAIN (valid_in_pipe = 1 desde
+    //    último posedge de READ_LAYER)
+    // 2. NO se acumule en WRITE_LAYER (evita corrupción de min1/min2/total_sign)
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            en_write_p_q  <= 1'b0;
-            en_write_r_q  <= 1'b0;
             valid_in_pipe <= 1'b0;
         end else begin
-            en_write_p_q  <= en_write_p;
-            en_write_r_q  <= en_write_r;
-            valid_in_pipe <= rom_valid && (state == ST_READ_LAYER || state == ST_READ_DRAIN);
+            valid_in_pipe <= (state == ST_READ_LAYER) && rom_valid;
         end
     end
 
     always_ff @(posedge clk) begin
-        p_addr_prev <= p_addr;
-        r_addr_prev <= r_addr;
-        rom_shift_q <= rom_shift;
-        rom_valid_q <= rom_valid;
-        col_idx_q   <= col_ptr;
+        en_write_p_q  <= en_write_p;
+        en_write_r_q  <= en_write_r;
+        p_addr_prev   <= p_addr;
+        r_addr_prev   <= r_addr;
+        rom_shift_q   <= rom_shift;
+        rom_valid_q   <= rom_valid;
+        col_idx_q     <= col_ptr;
         col_idx_valid_q <= col_idx_q;
     end
 
     assign en_llr_load = (state == ST_LOAD);
     assign p_data_new  = en_llr_load ? llr_in_bus : p_data_new_dp;
-    assign we_p = en_llr_load ? en_write_p : (en_write_p_q && rom_valid_q);
+    
+    // DEBUG: track writes to P_mem[0], [1], [67]
+    int p_wr_cnt0;
+    int p_wr_cnt1;
+    int p_wr_cnt67;
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            p_wr_cnt0 <= 0;
+            p_wr_cnt1 <= 0;
+            p_wr_cnt67 <= 0;
+        end else if (we_p) begin
+            if (p_wr_addr == 0) p_wr_cnt0 <= p_wr_cnt0 + 1;
+            if (p_wr_addr == 1) p_wr_cnt1 <= p_wr_cnt1 + 1;
+            if (p_wr_addr == 67) p_wr_cnt67 <= p_wr_cnt67 + 1;
+        end
+    end
+    // WRITE_LAYER: usamos en_write_p (sin retardo) y rom_valid_q (retardado)
+    // para que el primer ciclo de escritura use la validez de col 67 (desde READ_DRAIN)
+    // y escriba el dato de col 67 en p_addr_prev (addr de col 67).
+    assign we_p = en_llr_load ? en_write_p : (en_write_p && rom_valid_q);
+    // WRITE_LAYER: dirección del ciclo anterior (pipeline BRAM: leer→procesar→escribir)
+    // LOAD: dirección del ciclo actual (escritura directa sin pipeline)
     assign p_wr_addr = en_llr_load ? p_addr : p_addr_prev;
-    assign r_wr_addr = r_addr_prev;
+    assign r_wr_addr = en_llr_load ? r_addr : r_addr_prev;
 
     ldpc_rom_controller rom_ctrl (
         .clk(clk),
@@ -159,9 +183,11 @@ module ldpc_decoder_top #(
         .rd_addr(r_addr),
         .wr_addr(r_wr_addr),
         .din(r_data_new),
-        .we(en_llr_load ? 1'b0 : (en_write_r_q && rom_valid_q)),
+        .we((state == ST_WRITE_LAYER) ? (en_write_r && rom_valid_q) : 1'b0),
         .dout(r_data_out)
     );
+    // Shift y col retrasados 1 ciclo para alinear con la salida registrada de la BRAM
+    // (tanto en READ como en WRITE: la BRAM necesita 1 ciclo para presentar dout)
     ldpc_layer_datapath #(.Z(Z), .W(W)) layer_engine (
         .clk(clk),
         .rst_n(rst_n),
@@ -193,7 +219,10 @@ module ldpc_decoder_top #(
     logic       row_fail_rev;
     logic [Z-1:0] row_syndrome_rev;
     
-    assign row_syndrome_rev = row_syndrome_p;
+    // CORRECCIÓN: El síndrome correcto usa total_sign_q (XOR de q_sign extrínseco),
+    // no total_sign_p (XOR de p_sign intrínseco que está desactualizado).
+    // row_syndrome = total_sign_q, row_syndrome_p = total_sign_p
+    assign row_syndrome_rev = row_syndrome;
     logic [67:0] valid_seen;
     int         valid_count;
     // --- Máquina de Estados Finita (FSM) ---
@@ -312,6 +341,8 @@ module ldpc_decoder_top #(
 
                 ST_DONE: begin
                     done <= 1;
+                    $display("[DEBUG] P_mem writes: addr0=%0d addr1=%0d addr67=%0d",
+                             p_wr_cnt0, p_wr_cnt1, p_wr_cnt67);
                     if (start) begin
                         state <= ST_IDLE;
                         done <= 0;

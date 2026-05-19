@@ -344,6 +344,9 @@ metrics_flips = zeros(max_iter, 1);
 bits_prev = zeros(nb*Z, 1);
 iter_converged = 0;
 
+p_mem_history = zeros(max_iter, nb, Z);
+r_mem_history = zeros(max_iter, mb, nb, Z);
+
 for iter = 1:max_iter
     % --- CN update (scaled min-sum) ---
     for c = 1:mb*Z
@@ -410,6 +413,21 @@ for iter = 1:max_iter
     metrics_ber(iter) = sum(bits_est ~= block_1) / length(block_1);
     metrics_flips(iter) = sum(bits_est ~= bits_prev);
     bits_prev = bits_est;
+
+    % --- Capturar P_mem y R_mem para exportar al Testbench SV ---
+    for c_idx = 1:nb
+        for z_idx = 1:Z
+            p_mem_history(iter, c_idx, z_idx) = llr_post((c_idx-1)*Z + z_idx);
+        end
+    end
+    for e = 1:num_edges
+        c_idx = cols_h(e);
+        r_idx = rows_h(e);
+        block_col = ceil(c_idx / Z);
+        block_row = ceil(r_idx / Z);
+        z_col = mod(c_idx - 1, Z) + 1;
+        r_mem_history(iter, block_row, block_col, z_col) = msg_c2v(e);
+    end
 
     if unsat == 0
         iter_converged = iter;
@@ -577,6 +595,42 @@ if ENABLE_EXPORT_VIVADO
     copyfile(fullfile(DATA_DIR, 'u_bits.txt'), fullfile(ALICE_DATA_DIR, 'u_bits.txt'));
     copyfile(fullfile(DATA_DIR, 'u_bits.txt'), fullfile(ALICE_SIM_DIR, 'u_bits.txt'));
     fprintf('   [OK] u_bits.txt exportado (68 x %d bits, scale=%.2f)\n', Z*8, scale_8bit);
+
+    % --- Exportar P_mem y R_mem iteracion a iteracion ---
+    disp('   Exportando P_mem y R_mem intermedios para debugging SV...');
+    fid_p = fopen(fullfile(DATA_DIR, 'expected_p_mem.txt'), 'w');
+    fid_r = fopen(fullfile(DATA_DIR, 'expected_r_mem.txt'), 'w');
+    for it = 1:iter_converged
+        for c = 1:nb
+            for vnu = Z:-1:1
+                val_fp = p_mem_history(it, c, vnu);
+                val_s8 = max(-127, min(127, round(val_fp * scale_8bit)));
+                sm_mag = abs(val_s8);
+                sm_sign = uint16(val_s8 < 0);
+                val_16 = bitshift(sm_sign, 15) + uint16(sm_mag);
+                fprintf(fid_p, '%04X', val_16);
+            end
+            fprintf(fid_p, '\n');
+        end
+        for r = 1:mb
+            for c = 1:nb
+                for vnu = Z:-1:1
+                    val_fp = r_mem_history(it, r, c, vnu);
+                    val_s8 = max(-127, min(127, round(val_fp * scale_8bit)));
+                    sm_mag = abs(val_s8);
+                    sm_sign = uint16(val_s8 < 0);
+                    val_16 = bitshift(sm_sign, 15) + uint16(sm_mag);
+                    fprintf(fid_r, '%04X', val_16);
+                end
+                fprintf(fid_r, '\n');
+            end
+        end
+    end
+    fclose(fid_p);
+    fclose(fid_r);
+    copyfile(fullfile(DATA_DIR, 'expected_p_mem.txt'), fullfile(ALICE_SIM_DIR, 'expected_p_mem.txt'));
+    copyfile(fullfile(DATA_DIR, 'expected_r_mem.txt'), fullfile(ALICE_SIM_DIR, 'expected_r_mem.txt'));
+    disp('   [OK] expected_p_mem.txt y expected_r_mem.txt exportados');
 
     % Expected key bits for LDPC decoder verification (bob_key_ref.txt)
     % 68 lines of 384 binary digits each; one line per column

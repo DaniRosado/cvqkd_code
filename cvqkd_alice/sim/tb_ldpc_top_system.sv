@@ -68,7 +68,7 @@ module tb_ldpc_top_system;
         // Each 8-bit LLR is stored as 8 binary chars (MSB-first).
         // Use $fgets to read each line as a string, then parse into 8-bit chunks.
         // We need to load into ram_llr_input (16-bit sign-magnitude format).
-        fd_u = $fopen("C:/Users/usser/TFG/cvqkd_code/cvqkd_alice/sim/u_bits.txt", "r");
+        fd_u = $fopen("C:/Users/usser/TFG/cvqkd_code/cvqkd_matlab/data/u_bits.txt", "r");
         if (fd_u == 0) begin
             fd_u = $fopen("u_bits.txt", "r");
         end
@@ -108,10 +108,14 @@ module tb_ldpc_top_system;
         begin
             int fd_syn;
             string syn_path;
-            syn_path = "C:/Users/usser/TFG/cvqkd_code/cvqkd_alice/sim/expected_syndrome.txt";
+            syn_path = "C:/Users/usser/TFG/cvqkd_code/cvqkd_matlab/data/expected_syndrome.txt";
             fd_syn = $fopen(syn_path, "r");
             if (fd_syn == 0) begin
                 syn_path = "sim/expected_syndrome.txt";
+                fd_syn = $fopen(syn_path, "r");
+            end
+            if (fd_syn == 0) begin
+                syn_path = "expected_syndrome.txt";
                 fd_syn = $fopen(syn_path, "r");
             end
             if (fd_syn == 0) begin
@@ -465,6 +469,21 @@ module tb_ldpc_top_system;
 
     always @(posedge clk) begin
         sim_cycles = sim_cycles + 1;
+    end
+
+    // Monitorizacion de las iteraciones:
+    always @(posedge clk) begin
+        if (uut.state == 3'd5) begin // 3'd5 is ST_CHECK
+            int coincidences = 0;
+            for (int i = 0; i < 68; i++) begin
+                for (int j = 0; j < Z; j++) begin
+                    if (uut.p_mem.ram[i][j*W + (W-1)] == ram_key_ref[i][Z-1-j]) begin
+                        coincidences++;
+                    end
+                end
+            end
+            $display("[ITER %0d] Coincidencias con la clave original: %0d / %0d", uut.iter_cnt, coincidences, 68*Z);
+        end
     end
 
 endmodule
