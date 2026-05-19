@@ -21,7 +21,6 @@ module cnu_cell #(
     output logic         total_sign_q,
     output logic         total_sign_p
 );
-
     localparam logic [W-2:0] MAX_MAG = '1;
 
     logic [W-2:0]     reg_min1;
@@ -51,7 +50,8 @@ module cnu_cell #(
                 reg_min1_idx   <= '0;
                 reg_total_sign_q <= target_syndrome_bit;
                 reg_total_sign_p <= target_syndrome_bit;
-            end else if (valid_in && !phase) begin
+            // CORRECCIÓN: Quitamos el "!phase" para que no pierda la columna 67
+            end else if (valid_in) begin
                 reg_total_sign_q <= reg_total_sign_q ^ q_sign;
                 reg_total_sign_p <= reg_total_sign_p ^ p_sign;
                 if (q_mag < reg_min1) begin

@@ -19,7 +19,6 @@ module ldpc_decoder_top #(
     input  logic [6:0]     debug_rd_addr,
     output logic [Z-1:0]   debug_rd_data
 );
-
     typedef enum logic [2:0] {
         ST_IDLE,
         ST_LOAD,
@@ -52,8 +51,7 @@ module ldpc_decoder_top #(
     logic [6:0] col_idx_valid_q;
     
     // Tubería para sincronizar el Valid con el delay de lectura de la BRAM (1 ciclo)
-    logic       valid_in_pipe; 
-
+    logic       valid_in_pipe;
     logic [67:0] tb_cols_seen_mask;
     logic [6:0]  tb_cols_seen_count;
     logic [7:0]  tb_col_counts [0:67];
@@ -83,7 +81,6 @@ module ldpc_decoder_top #(
         end else begin
             en_write_p_q  <= en_write_p;
             en_write_r_q  <= en_write_r;
-            // Sincronizamos el enable de la CNU con el ciclo real de los datos
             valid_in_pipe <= rom_valid && (state == ST_READ_LAYER || state == ST_READ_DRAIN);
         end
     end
@@ -99,7 +96,6 @@ module ldpc_decoder_top #(
 
     assign en_llr_load = (state == ST_LOAD);
     assign p_data_new  = en_llr_load ? llr_in_bus : p_data_new_dp;
-    
     assign we_p = en_llr_load ? en_write_p : (en_write_p_q && rom_valid_q);
     assign p_wr_addr = en_llr_load ? p_addr : p_addr_prev;
     assign r_wr_addr = r_addr_prev;
@@ -113,8 +109,6 @@ module ldpc_decoder_top #(
         .r_ram_addr(r_addr),
         .valid_entry(rom_valid)
     );
-
-    // Monitorización de depuración
     always_ff @(posedge clk or negedge rst_n) begin
         integer i;
         if (!rst_n) begin
@@ -152,7 +146,6 @@ module ldpc_decoder_top #(
 
     logic [6:0] p_rd_addr;
     assign p_rd_addr = (state == ST_DONE) ? debug_rd_addr : p_addr;
-
     ldpc_bram_block #(.Z(Z), .W(W), .DEPTH(68)) p_mem (
         .clk(clk),
         .rd_addr(p_rd_addr),
@@ -161,7 +154,6 @@ module ldpc_decoder_top #(
         .we(we_p),
         .dout(p_data_out)
     );
-
     ldpc_bram_block #(.Z(Z), .W(W), .DEPTH(46*68)) r_mem (
         .clk(clk),
         .rd_addr(r_addr),
@@ -170,16 +162,16 @@ module ldpc_decoder_top #(
         .we(en_llr_load ? 1'b0 : (en_write_r_q && rom_valid_q)),
         .dout(r_data_out)
     );
-
     ldpc_layer_datapath #(.Z(Z), .W(W)) layer_engine (
         .clk(clk),
         .rst_n(rst_n),
         .start_row(start_row_pulse),
         .phase(state == ST_WRITE_LAYER),
-        .valid_in(valid_in_pipe), // Corrección: Valid retrasado 1 ciclo
+        .valid_in(valid_in_pipe), 
         .col_idx(col_idx_q),
         .shift_val(rom_shift_q),
-        .syndrome_row(bob_syndrome_in[row_ptr]), // Corrección: Sin invertir bits
+        // CORRECCIÓN: RESTAURADA LA INVERSIÓN DE BITS PARA EMPAREJAR CON MATLAB
+        .syndrome_row({<<{bob_syndrome_in[row_ptr]}}), 
         .p_mem_data(p_data_out),
         .r_mem_data(r_data_out),
         .p_mem_new(p_data_new_dp),
@@ -188,7 +180,6 @@ module ldpc_decoder_top #(
         .row_syndrome_p(row_syndrome_p),
         .q_sign_dbg(q_sign_dbg)
     );
-
     always_comb begin
         for (int j = 0; j < Z; j++) begin
             key_bits_out[j] = p_data_out[j*W + (W-1)];
@@ -202,12 +193,9 @@ module ldpc_decoder_top #(
     logic       row_fail_rev;
     logic [Z-1:0] row_syndrome_rev;
     
-    // Corrección: Comprobamos el síndrome de las decisiones duras (P) y sin invertir
-    assign row_syndrome_rev = row_syndrome_p; 
-    
+    assign row_syndrome_rev = row_syndrome_p;
     logic [67:0] valid_seen;
     int         valid_count;
-
     // --- Máquina de Estados Finita (FSM) ---
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -308,7 +296,7 @@ module ldpc_decoder_top #(
                 ST_CHECK: begin
                     if (row_fail) begin
                         if (iter_cnt == $bits(iter_cnt)'(MAX_ITER - 1)) begin
-                            state <= ST_DONE;
+                             state <= ST_DONE;
                             success <= 0;
                         end else begin
                             iter_cnt <= iter_cnt + 1;
