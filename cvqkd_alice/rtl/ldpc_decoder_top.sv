@@ -15,7 +15,7 @@ module ldpc_decoder_top #(
     input  logic [Z*W-1:0] llr_in_bus,
     input  logic [383:0]   bob_syndrome_in [0:45],
     output logic [Z-1:0]   key_bits_out,
-    // Puertos de lectura para depuración (Debug readback)
+    // Puertos de lectura para depuración
     input  logic [6:0]     debug_rd_addr,
     output logic [Z-1:0]   debug_rd_data
 );
@@ -50,6 +50,10 @@ module ldpc_decoder_top #(
     logic       rom_valid_q;
     logic [6:0] col_idx_q;
     logic [6:0] col_idx_valid_q;
+    
+    // Tubería para sincronizar el Valid con el delay de lectura de la BRAM (1 ciclo)
+    logic       valid_in_pipe; 
+
     logic [67:0] tb_cols_seen_mask;
     logic [6:0]  tb_cols_seen_count;
     logic [7:0]  tb_col_counts [0:67];
@@ -68,29 +72,34 @@ module ldpc_decoder_top #(
     logic [6:0]  p_addr_prev;
     logic [11:0] r_addr_prev;
 
-    // --- Registros de tubería para señales de habilitación de escritura ---
     logic       en_write_p_q;
     logic       en_write_r_q;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            en_write_p_q <= 1'b0;
-            en_write_r_q <= 1'b0;
+            en_write_p_q  <= 1'b0;
+            en_write_r_q  <= 1'b0;
+            valid_in_pipe <= 1'b0;
         end else begin
-            en_write_p_q <= en_write_p;
-            en_write_r_q <= en_write_r;
+            en_write_p_q  <= en_write_p;
+            en_write_r_q  <= en_write_r;
+            // Sincronizamos el enable de la CNU con el ciclo real de los datos
+            valid_in_pipe <= rom_valid && (state == ST_READ_LAYER || state == ST_READ_DRAIN);
         end
     end
 
     always_ff @(posedge clk) begin
         p_addr_prev <= p_addr;
         r_addr_prev <= r_addr;
+        rom_shift_q <= rom_shift;
+        rom_valid_q <= rom_valid;
+        col_idx_q   <= col_ptr;
+        col_idx_valid_q <= col_idx_q;
     end
 
     assign en_llr_load = (state == ST_LOAD);
     assign p_data_new  = en_llr_load ? llr_in_bus : p_data_new_dp;
     
-    // Alineación temporal: we_p y direcciones usan las versiones retrasadas en procesamiento de capa
     assign we_p = en_llr_load ? en_write_p : (en_write_p_q && rom_valid_q);
     assign p_wr_addr = en_llr_load ? p_addr : p_addr_prev;
     assign r_wr_addr = r_addr_prev;
@@ -105,14 +114,7 @@ module ldpc_decoder_top #(
         .valid_entry(rom_valid)
     );
 
-    always_ff @(posedge clk) begin
-        rom_shift_q <= rom_shift;
-        rom_valid_q <= rom_valid;
-        col_idx_q   <= col_ptr;
-        col_idx_valid_q <= col_idx_q;
-    end
-
-    // Monitorización de columnas procesadas para la fila 45 (depuración)
+    // Monitorización de depuración
     always_ff @(posedge clk or negedge rst_n) begin
         integer i;
         if (!rst_n) begin
@@ -148,7 +150,6 @@ module ldpc_decoder_top #(
         end
     end
 
-    // Interfaz de lectura de depuración para el puerto BRAM
     logic [6:0] p_rd_addr;
     assign p_rd_addr = (state == ST_DONE) ? debug_rd_addr : p_addr;
 
@@ -175,10 +176,10 @@ module ldpc_decoder_top #(
         .rst_n(rst_n),
         .start_row(start_row_pulse),
         .phase(state == ST_WRITE_LAYER),
-        .valid_in(rom_valid && (state == ST_READ_LAYER || state == ST_READ_DRAIN)),
+        .valid_in(valid_in_pipe), // Corrección: Valid retrasado 1 ciclo
         .col_idx(col_idx_q),
         .shift_val(rom_shift_q),
-        .syndrome_row({<<{bob_syndrome_in[row_ptr]}}),
+        .syndrome_row(bob_syndrome_in[row_ptr]), // Corrección: Sin invertir bits
         .p_mem_data(p_data_out),
         .r_mem_data(r_data_out),
         .p_mem_new(p_data_new_dp),
@@ -200,7 +201,10 @@ module ldpc_decoder_top #(
     logic       row_fail_raw;
     logic       row_fail_rev;
     logic [Z-1:0] row_syndrome_rev;
-    assign row_syndrome_rev = {<<{row_syndrome}};
+    
+    // Corrección: Comprobamos el síndrome de las decisiones duras (P) y sin invertir
+    assign row_syndrome_rev = row_syndrome_p; 
+    
     logic [67:0] valid_seen;
     int         valid_count;
 
@@ -277,6 +281,7 @@ module ldpc_decoder_top #(
                         col_ptr <= 0;
                         en_write_p <= 0;
                         en_write_r <= 0;
+                        
                         if ((row_syndrome_rev != '0) || $isunknown(row_syndrome_rev)) begin
                             row_fail <= 1;
                             row_fail_idx <= row_ptr;
