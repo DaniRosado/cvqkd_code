@@ -20,7 +20,6 @@ module ldpc_layer_datapath #(
     output logic [Z-1:0]      row_syndrome_p,
     output logic [Z-1:0]      q_sign_dbg
 );
-
     logic [Z*W-1:0] p_shifted;
     logic [Z*W-1:0] r_old_shifted;
 
@@ -29,13 +28,11 @@ module ldpc_layer_datapath #(
         .shift_val(shift_val),
         .data_out(p_shifted)
     );
-
     barrel_shifter_word #(.Z(Z), .W(W)) fwd_shifter_r (
         .data_in(r_mem_data),
         .shift_val(shift_val),
         .data_out(r_old_shifted)
     );
-
     logic [Z*W-1:0] vnu_to_cnu_bus;
     logic [Z*W-1:0] vnu_to_cnu_bus_q;
     logic [Z*W-1:0] cnu_to_vnu_bus;
@@ -77,8 +74,9 @@ module ldpc_layer_datapath #(
         .start_row(start_row),
         .phase(phase),
         .valid_in(valid_in),
-        .q_bus(vnu_to_cnu_bus_q),
-        .q_bus_current(vnu_to_cnu_bus),   // combinatorial VNU output for r_new sign
+        // CORRECCIÓN 1: Se usa el bus combinacional para alinear los tiempos
+        .q_bus(vnu_to_cnu_bus),         
+        .q_bus_current(vnu_to_cnu_bus),
         .p_bus(p_shifted),
         .col_idx(col_idx),
         .syndrome_row(syndrome_row),
@@ -90,18 +88,18 @@ module ldpc_layer_datapath #(
     // Reverse shift: forward uses (i + shift) % Z (upward rotation),
     // so reverse uses (i - shift) mod Z = (i + Z - shift) % Z (downward).
     logic [8:0] inv_shift_val;
-    assign inv_shift_val = 9'(Z) - shift_val;
+    
+    // CORRECCIÓN 2: Si el shift original era 0, el inverso debe ser 0 obligatoriamente
+    assign inv_shift_val = (shift_val == 0) ? 9'd0 : 9'(Z) - shift_val;
 
     barrel_shifter_word #(.Z(Z), .W(W)) rev_shifter_p (
         .data_in(p_new_parallel),
         .shift_val(inv_shift_val),
         .data_out(p_mem_new)
     );
-
     barrel_shifter_word #(.Z(Z), .W(W)) rev_shifter_r (
         .data_in(cnu_to_vnu_bus),
         .shift_val(inv_shift_val),
         .data_out(r_mem_new)
     );
-
 endmodule
