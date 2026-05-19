@@ -68,4 +68,29 @@ module cnu_min_sum_array #(
         end
     endgenerate
 
+    `ifdef SIMULATION
+    logic [W-2:0] debug_min1_q;
+    logic [W-2:0] debug_min2_q;
+    logic [COL_W-1:0] debug_min1_idx_q;
+    logic debug_valid_q;
+
+    always_ff @(posedge clk) begin
+        debug_min1_q <= min1_arr[0];
+        debug_min2_q <= min2_arr[0];
+        debug_min1_idx_q <= min1_idx_arr[0];
+        debug_valid_q <= valid_in;
+    end
+
+    always_ff @(posedge clk) begin
+        if (start_row)
+            $display("[CNU_DBG] start_row: resetting node 0");
+        else if (valid_in)
+            $display("[CNU_DBG] col=%0d: min1=%d min2=%d min1_idx=%0d",
+                     col_idx, min1_arr[0], min2_arr[0], min1_idx_arr[0]);
+        else if (phase)
+            $display("[CNU_DBG] WRITE: min1=%d min2=%d min1_idx=%0d",
+                     min1_arr[0], min2_arr[0], min1_idx_arr[0]);
+    end
+    `endif
+
 endmodule

@@ -5,6 +5,7 @@ module tb_cnu_array_isolated;
     parameter int Z = 384;
     parameter int W = 16;
     parameter int COL_W = 7;
+    parameter int N_COLS = 68;
 
     logic clk, rst_n;
     logic start_row, phase, valid_in;
@@ -30,10 +31,23 @@ module tb_cnu_array_isolated;
     end
 
     // Memoria para cargar datos de MATLAB
-    logic [Z*W-1:0] ram_q_in [0:67];
-    logic [Z*W-1:0] ram_p_in [0:67];
-    logic [Z*W-1:0] ram_r_expected [0:67];
+    logic [Z*W-1:0] ram_q_in [0:N_COLS-1];
+    logic [Z*W-1:0] ram_p_in [0:N_COLS-1];
+    logic [Z*W-1:0] ram_r_expected [0:N_COLS-1];
     logic [383:0]   ram_syndrome_bob [0:45];
+
+    // BG matrix row 0 validity mask (columns with shift != -1)
+    // Row 0: cols 0-23 are valid, cols 24-67 are -1 (no edge)
+    logic col_valid [0:N_COLS-1];
+
+    function automatic void init_col_valid();
+        // BG_ROM row 0 shift values from bg_rom_pkg
+        // Valid columns (shift != -1): 0-23
+        // Invalid columns (shift == -1): 24-67
+        for (int c = 0; c < N_COLS; c++) begin
+            col_valid[c] = (c < 24);  // Row 0 has 24 valid columns
+        end
+    endfunction
 
     // Instancia del Array completo
     cnu_min_sum_array #(
@@ -58,6 +72,7 @@ module tb_cnu_array_isolated;
     always #5 clk = ~clk;
 
     int total_mismatches = 0;
+    int valid_count;
     
     initial begin
         $display("[TB] Cargando vectores de MATLAB...");
@@ -70,39 +85,67 @@ module tb_cnu_array_isolated;
         #50 rst_n = 1;
         @(posedge clk);
 
+        // Initialize column validity mask
+        init_col_valid();
+
         // --- 1. Iniciar Fila 0 ---
         syndrome_row = {<<{ram_syndrome_bob[0]}};
         start_row = 1;
         @(posedge clk);
         start_row = 0;
 
-        // --- 2. Fase de lectura ---
-        for (int c = 0; c < 68; c++) begin
-            valid_in = 1; phase = 0; col_idx = c;
-            q_bus = ram_q_in[c];
-            p_bus = ram_p_in[c];
+        // --- 2. Fase de lectura (solo columnas válidas) ---
+        valid_count = 0;
+        for (int c = 0; c < N_COLS; c++) begin
+            if (col_valid[c]) begin
+                valid_in = 1; phase = 0; col_idx = c;
+                q_bus = ram_q_in[c];
+                p_bus = ram_p_in[c];
+                valid_count++;
+            end else begin
+                valid_in = 0;
+                q_bus = '0;
+                p_bus = '0;
+            end
             @(posedge clk);
         end
         valid_in = 0;
         @(posedge clk);
 
+        $display("[INFO] Procesadas %0d columnas válidas de %0d totales", valid_count, N_COLS);
+
         // --- 3. Fase de escritura ---
         phase = 1;
-        // Esperamos unos ciclos para que la lógica combinacional de los 384 nodos se estabilice
-        // y aplique el escalado alpha tras ver la fila completa.
         #50; 
         
         $display("[INFO] Comparando resultados finales tras procesar toda la fila...");
 
-        for (int c = 0; c < 68; c++) begin
+        // Debug: check Q inputs for column 0
+        $display("[DBG] Q inputs Col 0: q_bus[0]=%b (sign=%b mag=%d)",
+                 ram_q_in[0][0*W +: W], ram_q_in[0][0*W + W-1], ram_q_in[0][0*W +: W-1]);
+        $display("[DBG] Q inputs Col 0: q_bus[1]=%b (sign=%b mag=%d)",
+                 ram_q_in[0][1*W +: W], ram_q_in[0][1*W + W-1], ram_q_in[0][1*W +: W-1]);
+        $display("[DBG] Q inputs Col 0: q_bus[383]=%b (sign=%b mag=%d)",
+                 ram_q_in[0][383*W +: W], ram_q_in[0][383*W + W-1], ram_q_in[0][383*W +: W-1]);
+
+        // Debug: check first few nodes for column 0
+        $display("[DBG] Col 0: RTL r_new[0]=%b (sign=%b mag=%d), exp=%b (sign=%b mag=%d)",
+                 r_new_bus[0*W +: W], r_new_bus[0*W + W-1], r_new_bus[0*W +: W-1],
+                 ram_r_expected[0][0*W +: W], ram_r_expected[0][0*W + W-1], ram_r_expected[0][0*W +: W-1]);
+        $display("[DBG] Col 0: RTL r_new[1]=%b, exp=%b",
+                 r_new_bus[1*W +: W], ram_r_expected[0][1*W +: W]);
+
+        for (int c = 0; c < N_COLS; c++) begin
             col_idx = c;
             @(posedge clk);
 
-            // Comparamos el bus completo contra la columna c del golden reference
-            if (r_new_bus !== ram_r_expected[c]) begin
-                total_mismatches++;
-                if (total_mismatches < 5) begin
-                    $display("[FAIL] Mismatch final en Columna %0d", c);
+            if (col_valid[c]) begin
+                // Comparamos solo columnas válidas
+                if (r_new_bus !== ram_r_expected[c]) begin
+                    total_mismatches++;
+                    if (total_mismatches < 5) begin
+                        $display("[FAIL] Mismatch en Columna válida %0d", c);
+                    end
                 end
             end
         end

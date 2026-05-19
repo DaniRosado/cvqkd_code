@@ -18,7 +18,7 @@ DATA_DIR   = fullfile(SCRIPT_DIR, '..', 'data');
 BOB_DIR    = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_bob');
 
 %% 1. PARÁMETROS DEL SISTEMA
-ENABLE_EXPORT_VIVADO = true;
+ENABLE_EXPORT_VIVADO = trueGenial;
 
 % --- Parámetros de Trama y Memoria ---
 L_trama     = 16;      % 1 Piloto + 15 Datos
@@ -674,69 +674,138 @@ if ENABLE_EXPORT_VIVADO
     disp('   [OK] bob_key_ref.txt exportado (68 x 384 bits)');
     
     disp('   [OK] Archivos de simulación generados con éxito.');
-end
-
-%% 13. DUMP DE DEPURACIÓN PARA TESTBENCH AISLADO DE CNU
-% =========================================================================
-% Extrae las entradas (Q, P) y salidas (R) exactas para los 384 CNUs 
-% correspondientes a la FILA 1 en la ITERACIÓN 1, alineando los datos 
-% como si pasaran por el Barrel Shifter del hardware.
-% =========================================================================
-disp('10. Generando archivos de depuración aislada para CNU...');
-
-f_q = fopen(fullfile(DATA_DIR, 'cnu_tb_q_in.txt'), 'w');
-f_p = fopen(fullfile(DATA_DIR, 'cnu_tb_p_in.txt'), 'w');
-f_r = fopen(fullfile(DATA_DIR, 'cnu_tb_r_out.txt'), 'w');
-
-% Función lambda para convertir a Binario de 16-bits (Signo-Magnitud)
-% Usa exactamente el mismo escalado (scale_8bit) que el resto de tu hardware
-to_sm16_bin = @(val_fp) dec2bin( ...
-    bitshift(uint16(max(-127, min(127, round(val_fp * scale_8bit))) < 0), 15) + ...
-    uint16(abs(max(-127, min(127, round(val_fp * scale_8bit))))), 16 );
-
-% Construir Q, P y R para la Fila 1 (CNs 1 a 384)
-for c_idx = 1:nb
-    shift = bg_matrix(1, c_idx);
     
-    Q_aligned = zeros(Z, 1);
-    P_aligned = zeros(Z, 1);
-    R_aligned = zeros(Z, 1);
-    
-    if shift ~= -1
-        % 1. Entradas Q y P (En Iter 1, Q y P son iguales a los LLRs del canal)
-        vn_vals = llr_ch((c_idx-1)*Z + 1 : c_idx*Z);
-        
-        % Emulamos el Barrel Shifter HW para alinear VNs a las puertas del CNU
-        Q_aligned = circshift(vn_vals, -shift);
-        P_aligned = Q_aligned;
-        
-        % 2. Salida R_mem calculada en la iteración 1 para esta fila y columna
-        % r_mem_history está indexado como (iter, block_row, block_col, z_col)
-        r_vals = squeeze(r_mem_history(1, 1, c_idx, :)); 
-        R_aligned = circshift(r_vals, -shift);
+    %% 13. DUMP DE DEPURACIÓN PARA TESTBENCH AISLADO DE CNU
+    % =========================================================================
+    % Extrae las entradas (Q, P) y salidas (R) exactas para los 384 CNUs 
+    % correspondientes a la FILA 1 en la ITERACIÓN 1, alineando los datos 
+    % como si pasaran por el Barrel Shifter del hardware.
+    % IMPORTANTE: Cuantizamos PRIMERO a 8-bit y luego ejecutamos Min-Sum
+    % con los valores cuantizados para que coincida con el RTL.
+    % =========================================================================
+    disp('10. Generando archivos de depuración aislada para CNU...');
+
+    f_q = fopen(fullfile(DATA_DIR, 'cnu_tb_q_in.txt'), 'w');
+    f_p = fopen(fullfile(DATA_DIR, 'cnu_tb_p_in.txt'), 'w');
+    f_r = fopen(fullfile(DATA_DIR, 'cnu_tb_r_out.txt'), 'w');
+
+    % Función lambda para convertir a Binario de 16-bits (Signo-Magnitud)
+    to_sm16_bin = @(val_fp) dec2bin( ...
+        bitshift(uint16(max(-127, min(127, round(val_fp * scale_8bit))) < 0), 15) + ...
+        uint16(abs(max(-127, min(127, round(val_fp * scale_8bit))))), 16 );
+
+    % --- 1. Cuantizar LLRs de entrada a 8-bit (igual que el RTL) ---
+    q_quantized = zeros(nb * Z, 1);
+    for v = 1:nb*Z
+        llr_fp = llr_ch(v) * scale_8bit;
+        llr_s8 = max(-127, min(127, round(llr_fp)));
+        q_quantized(v) = double(llr_s8);
     end
-    
-    % Escribimos en el archivo (Orden Z-1 bajando a 0 para que Vivado y $readmemb 
-    % mapeen correctamente el MSB al cable Z-1 y el LSB al cable 0).
-    for z_idx = Z:-1:1
-        fprintf(f_q, '%s', to_sm16_bin(Q_aligned(z_idx))); 
-        fprintf(f_p, '%s', to_sm16_bin(P_aligned(z_idx)));
-        fprintf(f_r, '%s', to_sm16_bin(R_aligned(z_idx)));
+
+    % --- 2. Ejecutar Min-Sum con valores cuantizados (fila 0, iteración 1) ---
+    alpha = 0.75;
+
+    min1_arr = inf(Z, 1);
+    min2_arr = inf(Z, 1);
+    min1_idx_arr = zeros(Z, 1);
+    total_sign = zeros(Z, 1);
+
+    syndrome_row = syndrome_1(1:Z);
+    total_sign = double(syndrome_row);
+
+    % Fase READ: recorrer todas las columnas válidas
+    for c_idx = 1:nb
+        shift = bg_matrix(1, c_idx);
+        if shift == -1
+            continue;
+        end
+        
+        vn_vals = q_quantized((c_idx-1)*Z + 1 : c_idx*Z);
+        vn_aligned = circshift(vn_vals, -shift);
+        
+        q_sign = double(vn_aligned < 0);
+        q_mag = abs(vn_aligned);
+        
+        total_sign = mod(total_sign + q_sign, 2);
+        
+        for z = 1:Z
+            if q_mag(z) < min1_arr(z)
+                min2_arr(z) = min1_arr(z);
+                min1_arr(z) = q_mag(z);
+                min1_idx_arr(z) = c_idx - 1;
+            elseif q_mag(z) < min2_arr(z)
+                min2_arr(z) = q_mag(z);
+            end
+        end
     end
-    
-    % Salto de línea: significa que pasamos a la siguiente columna (ciclo de reloj)
-    fprintf(f_q, '\n'); 
-    fprintf(f_p, '\n'); 
-    fprintf(f_r, '\n');
+
+    % Fase WRITE: calcular r_new para cada columna
+    r_quantized = zeros(nb, Z);
+
+    for c_idx = 1:nb
+        shift = bg_matrix(1, c_idx);
+        if shift == -1
+            continue;
+        end
+        
+        vn_vals = q_quantized((c_idx-1)*Z + 1 : c_idx*Z);
+        vn_aligned = circshift(vn_vals, -shift);
+        q_sign = double(vn_aligned < 0);
+        
+        for z = 1:Z
+            if (c_idx - 1) == min1_idx_arr(z)
+                raw_mag = min2_arr(z);
+            else
+                raw_mag = min1_arr(z);
+            end
+            
+            norm_mag = raw_mag - floor(raw_mag / 4);
+            
+            r_sign = total_sign(z);
+            
+            if r_sign
+                r_val = -double(norm_mag);
+            else
+                r_val = double(norm_mag);
+            end
+            r_quantized(c_idx, z) = r_val;
+        end
+    end
+
+    % --- 3. Exportar archivos ---
+    for c_idx = 1:nb
+        shift = bg_matrix(1, c_idx);
+        
+        Q_aligned = zeros(Z, 1);
+        P_aligned = zeros(Z, 1);
+        R_aligned = zeros(Z, 1);
+        
+        if shift ~= -1
+            vn_vals = q_quantized((c_idx-1)*Z + 1 : c_idx*Z);
+            Q_aligned = circshift(vn_vals, -shift);
+            P_aligned = Q_aligned;
+            R_aligned = r_quantized(c_idx, :)';
+        end
+        
+        for z_idx = Z:-1:1
+            fprintf(f_q, '%s', to_sm16_bin(Q_aligned(z_idx))); 
+            fprintf(f_p, '%s', to_sm16_bin(P_aligned(z_idx)));
+            fprintf(f_r, '%s', to_sm16_bin(R_aligned(z_idx)));
+        end
+        
+        fprintf(f_q, '\n'); 
+        fprintf(f_p, '\n'); 
+        fprintf(f_r, '\n');
+    end
+
+    fclose(f_q); 
+    fclose(f_p); 
+    fclose(f_r);
+
+    copyfile(fullfile(DATA_DIR, 'cnu_tb_q_in.txt'), fullfile(ALICE_SIM_DIR, 'cnu_tb_q_in.txt'));
+    copyfile(fullfile(DATA_DIR, 'cnu_tb_p_in.txt'), fullfile(ALICE_SIM_DIR, 'cnu_tb_p_in.txt'));
+    copyfile(fullfile(DATA_DIR, 'cnu_tb_r_out.txt'), fullfile(ALICE_SIM_DIR, 'cnu_tb_r_out.txt'));
+
+    disp('    [OK] Archivos cnu_tb_q_in.txt, cnu_tb_p_in.txt y cnu_tb_r_out.txt exportados con éxito.');
+    disp('    [OK] Referencia R generada con Min-Sum cuantizado (alpha=0.75).');
 end
-
-fclose(f_q); 
-fclose(f_p); 
-fclose(f_r);
-
-% Copiamos los archivos directamente a la carpeta de simulación de Alice
-copyfile(fullfile(DATA_DIR, 'cnu_tb_q_in.txt'), fullfile(ALICE_SIM_DIR, 'cnu_tb_q_in.txt'));
-copyfile(fullfile(DATA_DIR, 'cnu_tb_p_in.txt'), fullfile(ALICE_SIM_DIR, 'cnu_tb_p_in.txt'));
-copyfile(fullfile(DATA_DIR, 'cnu_tb_r_out.txt'), fullfile(ALICE_SIM_DIR, 'cnu_tb_r_out.txt'));
-
-disp('    [OK] Archivos cnu_tb_q_in.txt, cnu_tb_p_in.txt y cnu_tb_r_out.txt exportados con éxito.');
