@@ -26,10 +26,26 @@ module tb_syndrome_calc;
     // Memoria para almacenar el resultado correcto esperado (46 bloques)
     logic [383:0] ram_expected_s [0:MB-1];
 
-    // Carga de los ficheros de texto generados por MATLAB
+    // Variables auxiliares
+    integer file_handle;
+
+    // Carga de los ficheros de texto generados por MATLAB (Compatible Windows/Linux)
     initial begin
-        $readmemb("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/u_bits.txt", ram_u_bits);
-        $readmemb("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/expected_syndrome.txt", ram_expected_s);
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/u_bits.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemb("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/u_bits.txt", ram_u_bits);
+        end else begin
+            $readmemb("/home/drg/tmp/cvqkd_bob/Matlab/u_bits.txt", ram_u_bits);
+        end
+
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/expected_syndrome.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemb("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/expected_syndrome.txt", ram_expected_s);
+        end else begin
+            $readmemb("/home/drg/tmp/cvqkd_bob/Matlab/expected_syndrome.txt", ram_expected_s);
+        end
     end
 
     // Emulación de una Block RAM síncrona real (Latencia de 1 ciclo)

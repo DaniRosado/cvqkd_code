@@ -38,15 +38,13 @@ module tb_generador_direcciones_bob();
     // Memoria para leer los archivos de estímulo
     logic mask_mem [0:N_TOTAL_DATOS-1];
     logic [15:0] ptr_mem [0:N_SAMPLES-1];
-    
-    string mask_file = "C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/mask_bit.txt";
-    string ptr_file  = "C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/ptr_ram.txt";
 
     // Variables de control y verificación
     int i_mask;
     int i_ptr;
     int errores;
     logic [15:0] current_ptr;
+    integer file_handle;
 
     // Proceso principal de estímulos
     initial begin
@@ -58,9 +56,22 @@ module tb_generador_direcciones_bob();
         i_ptr = 0;
         errores = 0;
 
-        // Cargar archivos
-        $readmemb(mask_file, mask_mem);
-        $readmemh(ptr_file, ptr_mem);
+        // Cargar archivos (Compatible Windows/Linux)
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/mask_bit.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemb("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/mask_bit.txt", mask_mem);
+        end else begin
+            $readmemb("/home/drg/tmp/cvqkd_bob/Matlab/mask_bit.txt", mask_mem);
+        end
+
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/ptr_ram.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/ptr_ram.txt", ptr_mem);
+        end else begin
+            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/ptr_ram.txt", ptr_mem);
+        end
 
         #50;
         rst = 0;

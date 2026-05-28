@@ -50,6 +50,7 @@ module tb_cordic_rot_auto();
 
     // Fichero de registro de errores
     integer file_err;
+    integer file_handle;
 
     // =========================================================================
     // Instancia del IP CORDIC de Rotación
@@ -129,10 +130,30 @@ module tb_cordic_rot_auto();
     // Estímulos (Inyección de Datos)
     // =========================================================================
     initial begin
-        // 1. Cargar Archivos
-        $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_raw_adc.txt", memoria_in);
-        $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_ram.txt", memoria_expected);
-        $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_estimada_datos.txt", mem_fase_estimada);
+        // 1. Cargar Archivos (Compatible Windows/Linux)
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_raw_adc.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_raw_adc.txt", memoria_in);
+        end else begin
+            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/bob_raw_adc.txt", memoria_in);
+        end
+
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_ram.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_ram.txt", memoria_expected);
+        end else begin
+            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/bob_ram.txt", memoria_expected);
+        end
+
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_estimada_datos.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_estimada_datos.txt", mem_fase_estimada);
+        end else begin
+            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/fase_estimada_datos.txt", mem_fase_estimada);
+        end
 
         // Inicialización
         rst = 1;
@@ -140,8 +161,15 @@ module tb_cordic_rot_auto();
         s_axis_cartesian_tvalid = 0;
         s_axis_phase_tdata = '0;
         s_axis_cartesian_tdata = '0;
-        
-        file_err = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/cordic_rot_errors.txt", "w");
+
+        // Archivo de salida (Compatible Windows/Linux)
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/cordic_rot_errors.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            file_err = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/cordic_rot_errors.txt", "w");
+        end else begin
+            file_err = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_bob/sim/cordic_rot_errors.txt", "w");
+        end
 
         #20;
         rst = 0;

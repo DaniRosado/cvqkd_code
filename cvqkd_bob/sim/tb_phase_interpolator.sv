@@ -32,6 +32,7 @@ module tb_phase_interpolator();
     logic signed [17:0] fase_esperada;
     integer current_error;
     integer file_out;
+    integer file_handle;
 
     // =========================================================================
     // 2. Instanciación del DUT (Design Under Test)
@@ -60,7 +61,13 @@ module tb_phase_interpolator();
     // 4. Proceso Monitor (Comprobador de Resultados)
     // =========================================================================
     initial begin
-        file_out = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_interpolator_alone.txt", "w");
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_interpolator_alone.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            file_out = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_interpolator_alone.txt", "w");
+        end else begin
+            file_out = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_bob/sim/sim_interpolator_alone.txt", "w");
+        end
         if (file_out == 0) begin
             $display("ERROR: No se pudo abrir el archivo para escribir.");
         end
@@ -107,9 +114,22 @@ module tb_phase_interpolator();
     // 5. Proceso Estímulos (Inyección de Pilotos)
     // =========================================================================
     initial begin
-        // Cargamos los archivos (Asegúrate de que la ruta sea la correcta para tu PC)
-        $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_pilotos_raw.txt", mem_pilotos);
-        $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_estimada_datos.txt", mem_fase_estimada);
+        // Cargamos los archivos (Compatible Windows/Linux)
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_pilotos_raw.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_pilotos_raw.txt", mem_pilotos);
+        end else begin
+            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/fase_pilotos_raw.txt", mem_pilotos);
+        end
+
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_estimada_datos.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_estimada_datos.txt", mem_fase_estimada);
+        end else begin
+            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/fase_estimada_datos.txt", mem_fase_estimada);
+        end
 
         // A) Reset del sistema
         rst = 1'b1;
