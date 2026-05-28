@@ -1,7 +1,8 @@
 `timescale 1ns / 1ps
 
 module param_estimator_top #(
-    parameter NUM_SAMPLES = 26112/2
+    parameter NUM_SAMPLES = 26112,
+    parameter signed [63:0] INV_2N2 = 64'sd206409  // 2^45 / ((NUM_SAMPLES/2)^2)
 )(
     input  logic        clk,
     input  logic        rst,
@@ -93,8 +94,11 @@ module param_estimator_top #(
     // =================================================================
     // 4. BLOQUE MATEMÁTICO DE RECONCILIACIÓN (LLR Math Unit)
     // =================================================================
-    LLR_math_unit math_unit_inst (
-        .clk(clk), 
+    LLR_math_unit #(
+        .N_SAMPLES(NUM_SAMPLES),
+        .INV_2N2(INV_2N2)
+    ) math_unit_inst (
+        .clk(clk),
         .rst(rst),
         .start_calc(start_math), 
         

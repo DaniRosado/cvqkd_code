@@ -25,6 +25,8 @@ module tb_param_estimator_top();
     logic [15:0] alice_items_avail;
     logic [15:0] bob_items_avail;
 
+    integer file_handle;
+
     // =========================================================================
     // ARRAYS DE MEMORIA (Emulación de BRAMs)
     // =========================================================================
@@ -36,7 +38,10 @@ module tb_param_estimator_top();
     // =========================================================================
     // INSTANCIA DEL TOP-LEVEL
     // =========================================================================
-    param_estimator_top #(.NUM_SAMPLES(TEST_SAMPLES)) dut (
+    param_estimator_top #(
+        .NUM_SAMPLES(TEST_SAMPLES),
+        .INV_2N2(64'sd206409)
+    ) dut (
         .clk(clk), .rst(rst),
         .start(start), .ping_pong_bit(ping_pong_bit), .done(done),
         
@@ -99,11 +104,38 @@ module tb_param_estimator_top();
     // PROCEDIMIENTO DE TEST
     // =========================================================================
     initial begin
-        // 1. Carga de datos generados por MATLAB
-        $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/ptr_ram.txt", mem_ptr);
-        $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_ram.txt", mem_bob);
-        $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/alice_ram.txt", mem_alice);
-        $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/expected_llr_math.txt", mem_expected);
+        // 1. Carga de datos generados por MATLAB (Compatible Windows/Linux)
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/ptr_ram.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/ptr_ram.txt", mem_ptr);
+        end else begin
+            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/ptr_ram.txt", mem_ptr);
+        end
+
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_ram.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_ram.txt", mem_bob);
+        end else begin
+            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_ram.txt", mem_bob);
+        end
+
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/alice_ram.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/alice_ram.txt", mem_alice);
+        end else begin
+            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/alice_ram.txt", mem_alice);
+        end
+
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/expected_llr_math.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/expected_llr_math.txt", mem_expected);
+        end else begin
+            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_llr_math.txt", mem_expected);
+        end
 
         // 2. Configuración Inicial
         rst = 1; start = 0; ping_pong_bit = 0;

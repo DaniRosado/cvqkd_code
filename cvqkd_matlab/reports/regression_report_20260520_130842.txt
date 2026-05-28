@@ -1,0 +1,27 @@
+========================================================================
+CV-QKD RTL REGRESSION TEST REPORT
+========================================================================
+Generated: Wed May 20 13:08:43     2026
+Host: HP-DRG-3
+User: usser
+
+
+========================================================================
+TEST RESULTS SUMMARY
+========================================================================
+
+CNU Array Test                           : FAIL
+VNU Processor Test                       : FAIL
+Barrel Shifter Test                      : FAIL
+Full System Test                         : FAIL
+
+------------------------------------------------------------------------
+OVERALL RESULT: FAIL
+------------------------------------------------------------------------
+
+Detailed logs available in: /c/Users/usser/TFG/cvqkd_code/cvqkd_matlab/reports
+Full log: /c/Users/usser/TFG/cvqkd_code/cvqkd_matlab/reports/regression_log_20260520_130842.log
+
+========================================================================
+END OF REPORT
+========================================================================

@@ -12,32 +12,24 @@ BOB_DIR    = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_bob');
 ALICE_DATA_DIR = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_alice', 'data');
 ALICE_SIM_DIR  = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_alice', 'sim');
 
-%% 0. RUTAS DEL PROYECTO (ajusta si mueves el script)
-SCRIPT_DIR = fileparts(mfilename('fullpath'));
-DATA_DIR   = fullfile(SCRIPT_DIR, '..', 'data');
-BOB_DIR    = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_bob');
-
-%% 1. PARÁMETROS DEL SISTEMA
-ENABLE_EXPORT_VIVADO = trueGenial;
+%% 0.1. PARÁMETROS DEL SISTEMA
+ENABLE_EXPORT_VIVADO = true;
+ENABLE_GRAFICAS = false;
 
 % --- Parámetros de Trama y Memoria ---
 L_trama     = 16;      % 1 Piloto + 15 Datos
-N_BOB_DATA  = 26112;   % Datos útiles que caben en la RAM de Bob -> genero el doble para poder sacrificar
-N_FRAMES    = ceil(N_BOB_DATA / 15); % ~1741 tramas
-N_SAMPLES   = N_BOB_DATA/2;   % Datos sacrificados para la estimación
+N_BOB_DATA  = 52224/2;   % Datos útiles que caben en la RAM de Bob
+N_FRAMES    = ceil(N_BOB_DATA / 15); % ~3482 tramas
+N_SAMPLES   = 26112/2;   % Datos sacrificados para la estimación
 
 % En la fibra viajan los datos + los pilotos. Sumamos 1 piloto final para interpolar
 N_FIBER     = N_FRAMES * L_trama + 1; 
 
 % --- Parámetros Físicos del Canal ---
 Ts           = 1e-9;   % Tiempo de símbolo (1 Gbaud)
-T_real       = 0.8;    % Transmitancia real de la fibra
-xi_real      = 0.01;   % Ruido en exceso cuántico (SNU)
-V_A_snu      = 8.0;  % Varianza de Alice (SNU)
-env_va = getenv('VA_SNU');
-if ~isempty(env_va)
-    V_A_snu = str2double(env_va);
-end
+T_real       = 0.5;    % Transmitancia real de la fibra
+xi_real      = 0.02;   % Ruido en exceso cuántico (SNU)
+V_A_snu      = 4.0;    % Varianza de Alice (SNU)
 V_elec_snu   = 0.1;    % Ruido electrónico (SNU)
 eta_detector = 0.6;    % Eficiencia del fotodiodo
 
@@ -45,7 +37,7 @@ eta_detector = 0.6;    % Eficiencia del fotodiodo
 N0_adc_var   = 10000;  % Varianza para 1 SNU
 Amp_Piloto   = 20000;  % Amplitud fuerte para el pulso piloto (para no perder fase)
 
-%% 2. MODELO DE RUIDO DE FASE DEL CANAL (Tu código integrado)
+%% 1. MODELO DE RUIDO DE FASE DEL CANAL (Tu código integrado)
 disp('1. Generando Perfil de Ruido de Fase (Wiener + Acústico)...');
 t = (0:N_FIBER-1)' * Ts;
 
@@ -62,7 +54,7 @@ fase_acustica = A_acustica * sin(2 * pi * f_acustica * t);
 % C) Deriva Total
 fase_total_canal = fase_wiener + fase_acustica;
 
-%% 3. ALICE: GENERACIÓN CUÁNTICA CON PILOTOS INTERCALADOS
+%% 2. ALICE: GENERACIÓN CUÁNTICA CON PILOTOS INTERCALADOS
 disp('2. Alice transmitiendo (Datos + Pilotos)...');
 VarA_adc = V_A_snu * N0_adc_var;
 
@@ -80,7 +72,7 @@ Q_A_tx(idx_datos) = sqrt(VarA_adc) * randn(length(idx_datos), 1);
 P_A_tx(idx_pilotos) = Amp_Piloto;
 Q_A_tx(idx_pilotos) = 0;
 
-%% 4. EL CANAL: ATENUACIÓN Y AWGN
+%% 3. EL CANAL: ATENUACIÓN Y AWGN
 disp('3. La fibra atenúa e inyecta AWGN...');
 Ruido_Total_snu = 1.0 + V_elec_snu + (T_real * eta_detector * xi_real);
 Ruido_Total_adc = Ruido_Total_snu * N0_adc_var;
@@ -95,7 +87,7 @@ Q_rx_ideal = sqrt(T_real * eta_detector) * Q_A_tx;
 P_B_rx = P_rx_ideal .* cos(fase_total_canal) - Q_rx_ideal .* sin(fase_total_canal) + Z_noise_P;
 Q_B_rx = P_rx_ideal .* sin(fase_total_canal) + Q_rx_ideal .* cos(fase_total_canal) + Z_noise_Q;
 
-%% 5. RECEPCIÓN Y DSP DE BOB (Recuperación de Fase Vectorizada)
+%% 4. RECEPCIÓN Y DSP DE BOB (Recuperación de Fase Vectorizada)
 disp('4. DSP de Bob: Siguiendo y deshaciendo la fase (Unwrap)...');
 
 % 1. Extracción de los pilotos recibidos y cálculo de su fase cruda
@@ -108,11 +100,8 @@ fase_pilotos_raw = atan2(Q_pilotos_rx, P_pilotos_rx);
 fase_pilotos_limpia = unwrap(fase_pilotos_raw);
 
 % 3. Interpolación lineal para estimar la fase de todos los símbolos
-% (interp1 interpola los huecos de los datos basándose en los pilotos YA desenrollados)
+% (interp1 interpola los huecos de los datos basándose en los pilotos)
 fase_estimada = interp1(idx_pilotos, fase_pilotos_limpia, (1:N_FIBER)', 'linear');
-% wrapToPi is not available in Octave; inline the wrapping
-fase_estimada = mod(fase_estimada + pi, 2*pi) - pi;
-%fase_estimada_datos = fase_estimada(idx_datos);
 
 % (Pequeño arreglo por si el último símbolo queda fuera de la interpolación)
 fase_estimada(isnan(fase_estimada)) = fase_estimada(find(~isnan(fase_estimada), 1, 'last'));
@@ -137,9 +126,9 @@ Q_B_rec  = Q_B_rec(1:N_BOB_DATA);
 P_A_int = int16(round(P_A_data)); Q_A_int = int16(round(Q_A_data));
 P_B_int = int16(round(P_B_rec));  Q_B_int = int16(round(Q_B_rec));
 
-%% 6. SELECCIÓN DE PUNTEROS Y ESTIMACIÓN FLOTANTE (MATLAB IDEAL)
+%% 5. SELECCIÓN DE PUNTEROS Y ESTIMACIÓN FLOTANTE (MATLAB IDEAL)
 disp('5. Seleccionando muestras de sacrificio y calculando métricas...');
-punteros = sort(randperm(N_BOB_DATA, N_SAMPLES)') - 1;
+punteros = randperm(N_BOB_DATA, N_SAMPLES)' - 1;
 
 % Máscara de sacrificio (1 = sacrificar, 0 = mantener)
 mascara_sacrificio = zeros(N_BOB_DATA, 1);
@@ -160,7 +149,7 @@ Sigma_ideal      = sqrt(Sigma_Sq_ideal);
 Sqrt_T_eta_ideal = cov_AB_float / VarA_adc;
 T_eta_ideal = Sqrt_T_eta_ideal^2; % T * eta = (Cov / VarA)^2
 
-%% 7. EMULACIÓN PUNTO FIJO (LLR_Math_Unit FPGA)
+%% 6. EMULACIÓN PUNTO FIJO (LLR_Math_Unit FPGA)
 disp('6. Emulando el Hardware de Punto Fijo (FPGA)...');
 
 sum_P_B = sum(int64(P_B_sac)); sum_sq_P_B = sum(int64(P_B_sac).^2);
@@ -194,28 +183,30 @@ T_eta_fp = bitshift(int64(Sqrt_T_eta_fp)^2, -16);
 Sigma_raw_cordic = floor(sqrt(max(double(Sigma_Sq_fp), 0)));
 Sigma_fp         = int64(double(Sigma_raw_cordic) * 65536.0);
 
-%% 8. GRÁFICAS DEL GEMELO DIGITAL
-figure('Name', 'End-to-End QKD Tracker', 'Position', [100, 100, 1200, 600]);
+%% 7. GRÁFICAS DEL GEMELO DIGITAL
+if ENABLE_GRAFICAS
+    figure('Name', 'End-to-End QKD Tracker', 'Position', [100, 100, 1200, 600]);
+    
+    % Gráfica de Ruido de Fase (DSP vs Canal)
+    subplot(1, 2, 1);
+    plot(t * 1e6, fase_total_canal, 'r', 'LineWidth', 1.5); hold on;
+    plot(t * 1e6, fase_estimada, 'b--', 'LineWidth', 1.5);
+    title('Tracking de Fase del DSP de Bob');
+    xlabel('Tiempo (\mu s)'); ylabel('Fase (Radianes)');
+    legend('Ruido del Canal (Láser + Acústico)', 'Estimación DSP (Pilotos)');
+    grid on;
+    
+    % Constelación de los datos recuperados (Primeros 1000)
+    subplot(1, 2, 2);
+    plot(P_A_data(1:1000), Q_A_data(1:1000), 'go', 'MarkerSize', 3); hold on;
+    plot(P_B_rec(1:1000), Q_B_rec(1:1000), 'bx', 'MarkerSize', 3);
+    title('Constelación (1000 Símbolos)');
+    xlabel('P (ADC)'); ylabel('Q (ADC)');
+    legend('TX Ideal (Alice)', 'RX Recuperado y Derrotado (Bob)');
+    grid on; axis equal;
+end
 
-% Gráfica de Ruido de Fase (DSP vs Canal)
-subplot(1, 2, 1);
-plot(t * 1e6, fase_total_canal, 'r', 'LineWidth', 1.5); hold on;
-plot(t * 1e6, fase_estimada, 'b--', 'LineWidth', 1.5);
-title('Tracking de Fase del DSP de Bob');
-xlabel('Tiempo (\mu s)'); ylabel('Fase (Radianes)');
-legend('Ruido del Canal (Láser + Acústico)', 'Estimación DSP (Pilotos)');
-grid on;
-
-% Constelación de los datos recuperados (Primeros 1000)
-subplot(1, 2, 2);
-plot(P_A_data(1:1000), Q_A_data(1:1000), 'go', 'MarkerSize', 3); hold on;
-plot(P_B_rec(1:1000), Q_B_rec(1:1000), 'bx', 'MarkerSize', 3);
-title('Constelación (1000 Símbolos)');
-xlabel('P (ADC)'); ylabel('Q (ADC)');
-legend('TX Ideal (Alice)', 'RX Recuperado y Derrotado (Bob)');
-grid on; axis equal;
-
-%% 9. RECONCILIACIÓN MULTIDIMENSIONAL (8D) Y EXTRACCIÓN DE LLRs
+%% 8. RECONCILIACIÓN MULTIDIMENSIONAL (8D) Y EXTRACCIÓN DE LLRs
 disp('8. Simulando Mapeo Multidimensional (MDR 8D)...');
 
 N_dimensiones = 8;
@@ -278,13 +269,14 @@ end
 llrs_rx = LLR_all(:);
 key_bits_tx = bits_bob_all(:);
 
-%% 10. Carga y expansión de la matriz LDPC
-bg_matrix = load(fullfile(BOB_DIR, 'NR_1_1_384.txt'));
+%% 9. Carga y expansión de la matriz LDPC
+disp('9. Carga matriz LDPC y Sindrome...');
+
 bg_matrix = load(fullfile(BOB_DIR, 'NR_1_1_384.txt'));
 [mb, nb] = size(bg_matrix);
 Z = 384;
 
-disp('   Construyendo matriz H dispersa (Lifting)...');
+disp('   9.1. Construyendo matriz H dispersa (Lifting)...');
 H = sparse(mb*Z, nb*Z);
 for i = 1:mb
     for j = 1:nb
@@ -299,15 +291,15 @@ end
 
 % 4. Cálculo de Síndrome (para verificación del decodificador LDPC de Alice)
 % El syndrome se computa como H * key_bits_tx para las 68 columnas reales.
-disp('   Calculando Sindrome LDPC (Bloque 1)...');
+disp('   9.2. Calculando Sindrome LDPC (Bloque 1)...');
 block_1 = key_bits_tx(1:nb*Z);
 syndrome_1 = mod(H * double(block_1), 2);
 num_errores_syndrome = sum(syndrome_1);
 
-fprintf('   [!] Bits de Síndrome activos (Ecuaciones fallidas): %d / %d\n', num_errores_syndrome, mb*Z);
+fprintf('   9.3. [!] Bits de Síndrome activos (Ecuaciones fallidas): %d / %d\n', num_errores_syndrome, mb*Z);
 
-%% 10B. RECONCILIACION INVERSA LDPC (Scaled Min-Sum)
-disp('   Iniciando decodificacion LDPC (scaled min-sum)...');
+%% 10. RECONCILIACION INVERSA LDPC (Scaled Min-Sum)
+disp('10. Iniciando decodificacion LDPC (scaled min-sum)...');
 
 alpha = 0.75;
 max_iter = 200;
@@ -445,7 +437,66 @@ fprintf('   -> BER residual (bloque 1): %.6f\n', metrics_ber(iter_converged));
 fprintf('   -> Checks no satisfechos (ultima iter): %d\n', metrics_unsat(iter_converged));
 fprintf('   -> Flips en ultima iteracion: %d\n', metrics_flips(iter_converged));
 
-%% 11. TABLA DE RESULTADOS Y EXPORTACIÓN
+%% 11. GENERADOR DE ROM SYSTEMVERILOG ---
+disp('11. Generando ROM System Verilog');
+fileID = fopen('bg1_rom_pkg.sv', 'w');
+
+fprintf(fileID, 'package bg1_rom_pkg;\n\n');
+
+% Estructuras
+fprintf(fileID, '    typedef struct packed {\n');
+fprintf(fileID, '        logic [8:0] start_ptr;\n');
+fprintf(fileID, '        logic [5:0] num_edges;\n');
+fprintf(fileID, '    } row_info_t;\n\n');
+
+fprintf(fileID, '    typedef struct packed {\n');
+fprintf(fileID, '        logic [6:0] col_idx;\n');
+fprintf(fileID, '        logic [8:0] shift_val;\n');
+fprintf(fileID, '    } edge_info_t;\n\n');
+
+% 1. Generar EDGE_ROM
+fprintf(fileID, '    localparam edge_info_t EDGE_ROM [0:315] = ''{\n');
+ptr = 0;
+row_start = zeros(46, 1);
+row_edges = zeros(46, 1);
+
+for r = 1:46
+    row_start(r) = ptr;
+    edges_in_this_row = 0;
+    for c = 1:68
+        shift = bg_matrix(r, c);
+        if shift ~= -1
+            fprintf(fileID, '        %d: ''{col_idx: 7''d%d, shift_val: 9''d%d}', ptr, c-1, shift);
+            ptr = ptr + 1;
+            edges_in_this_row = edges_in_this_row + 1;
+            if ptr < 316
+                fprintf(fileID, ',\n');
+            else
+                fprintf(fileID, '\n');
+            end
+        end
+    end
+    row_edges(r) = edges_in_this_row;
+end
+fprintf(fileID, '    };\n\n');
+
+% 2. Generar ROW_INFO_ROM
+fprintf(fileID, '    localparam row_info_t ROW_INFO_ROM [0:45] = ''{\n');
+for r = 1:46
+    fprintf(fileID, '        %d: ''{start_ptr: 9''d%d, num_edges: 6''d%d}', r-1, row_start(r), row_edges(r));
+    if r < 46
+        fprintf(fileID, ',\n');
+    else
+        fprintf(fileID, '\n');
+    end
+end
+fprintf(fileID, '    };\n\n');
+
+fprintf(fileID, 'endpackage\n');
+fclose(fileID);
+disp('   ¡Archivo bg1_rom_pkg.sv generado con éxito!');
+
+%% 12. TABLA DE RESULTADOS Y EXPORTACIÓN
 disp('============================================================================');
 disp('   MÉTRICA            |   FLOTANTE (Ideal)  |   PUNTO FIJO (FPGA) |  ERROR  ');
 disp('----------------------+---------------------+---------------------+---------');
@@ -462,7 +513,6 @@ if ENABLE_EXPORT_VIVADO
     fase_est_q15 = int32(round(fase_estimada_datos * 32768));
 
     fid_est = fopen(fullfile(DATA_DIR, 'fase_estimada_datos.txt'), 'w');
-    fid_est = fopen(fullfile(DATA_DIR, 'fase_estimada_datos.txt'), 'w');
     for i=1:length(fase_est_q15)
         fprintf(fid_est, '%08X\n', typecast(fase_est_q15(i), 'uint32'));
     end
@@ -471,36 +521,43 @@ if ENABLE_EXPORT_VIVADO
     fases_q15 = int32(round(fase_pilotos_raw * 32768));
     
     fid_pil = fopen(fullfile(DATA_DIR, 'fase_pilotos_raw.txt'), 'w');
-    fid_pil = fopen(fullfile(DATA_DIR, 'fase_pilotos_raw.txt'), 'w');
     for i=1:length(fases_q15)
         % Guardamos en Hexadecimal de 32 bits (aunque la FPGA usará los 18 bajos)
         fprintf(fid_pil, '%08X\n', typecast(fases_q15(i), 'uint32'));
     end
     fclose(fid_pil);
-    
-    fid_ptr = fopen(fullfile(DATA_DIR, 'ptr_ram.txt'), 'w');
+
     fid_ptr = fopen(fullfile(DATA_DIR, 'ptr_ram.txt'), 'w');
     for i=1:N_SAMPLES, fprintf(fid_ptr, '%04X\n', punteros(i)); end; fclose(fid_ptr);
-    
-    fid_mask = fopen(fullfile(DATA_DIR, 'mask_bit.txt'), 'w');
+
     fid_mask = fopen(fullfile(DATA_DIR, 'mask_bit.txt'), 'w');
     for i=1:N_BOB_DATA, fprintf(fid_mask, '%d\n', mascara_sacrificio(i)); end; fclose(fid_mask);
-    
-    fid_bob = fopen(fullfile(DATA_DIR, 'bob_ram.txt'), 'w');
+
     fid_bob = fopen(fullfile(DATA_DIR, 'bob_ram.txt'), 'w');
     for i=1:N_BOB_DATA, fprintf(fid_bob, '%04X%04X\n', typecast(Q_B_int(i), 'uint16'), typecast(P_B_int(i), 'uint16')); end; fclose(fid_bob);
-    
-    fid_alice = fopen(fullfile(DATA_DIR, 'alice_ram.txt'), 'w');
+
     fid_alice = fopen(fullfile(DATA_DIR, 'alice_ram.txt'), 'w');
     % CUIDADO: La BRAM de Alice solo almacena las 26112 de sacrificio
     for i=1:N_SAMPLES, fprintf(fid_alice, '%04X%04X\n', typecast(Q_A_sac(i), 'uint16'), typecast(P_A_sac(i), 'uint16')); end; fclose(fid_alice);
 
     fid_exp = fopen(fullfile(DATA_DIR, 'expected_llr_math.txt'), 'w');
-    fid_exp = fopen(fullfile(DATA_DIR, 'expected_llr_math.txt'), 'w');
     fprintf(fid_exp, '%08X\n', typecast(int32(T_eta_fp),      'uint32'));
     fprintf(fid_exp, '%08X\n', typecast(int32(Sqrt_T_eta_fp), 'uint32'));
     fprintf(fid_exp, '%08X\n', typecast(int32(Sigma_Sq_fp),   'uint32'));
     fprintf(fid_exp, '%08X\n', typecast(int32(Sigma_fp),      'uint32'));
+    fclose(fid_exp);
+
+    % Exportar Acumuladores (para tb_LLR_Math_Unit)
+    fid_acc = fopen(fullfile(DATA_DIR, 'accumulators.txt'), 'w');
+    fprintf(fid_acc, '%016X\n', typecast(int64(sum_sq_P_B), 'uint64'));
+    fprintf(fid_acc, '%016X\n', typecast(int64(sum_P_B),    'uint64'));
+    fprintf(fid_acc, '%016X\n', typecast(int64(sum_cov_P),  'uint64'));
+    fprintf(fid_acc, '%016X\n', typecast(int64(sum_P_A),    'uint64'));
+    fprintf(fid_acc, '%016X\n', typecast(int64(sum_sq_Q_B), 'uint64'));
+    fprintf(fid_acc, '%016X\n', typecast(int64(sum_Q_B),    'uint64'));
+    fprintf(fid_acc, '%016X\n', typecast(int64(sum_cov_Q),  'uint64'));
+    fprintf(fid_acc, '%016X\n', typecast(int64(sum_Q_A),    'uint64'));
+    fclose(fid_acc);
 
     % =====================================================================
     % Exportar Datos Crudos (ADC) para el DSP en FPGA
@@ -510,16 +567,13 @@ if ENABLE_EXPORT_VIVADO
     Q_ADC = int16(round(Q_B_rx));
 
     fid_adc = fopen(fullfile(DATA_DIR, 'bob_raw_adc.txt'), 'w');
-    fid_adc = fopen(fullfile(DATA_DIR, 'bob_raw_adc.txt'), 'w');
     % Guardamos los 52.224 + pilotos (N_FIBER)
     for i=1:N_FIBER
         fprintf(fid_adc, '%04X%04X\n', typecast(Q_ADC(i), 'uint16'), typecast(P_ADC(i), 'uint16'));
     end
     fclose(fid_adc);
-    fclose(fid_exp);
 
     % Alice full 26112 symbols (for MDR RX verification)
-    fid_alice_full = fopen(fullfile(DATA_DIR, 'alice_full_data.txt'), 'w');
     fid_alice_full = fopen(fullfile(DATA_DIR, 'alice_full_data.txt'), 'w');
     for i=1:N_BOB_DATA
         fprintf(fid_alice_full, '%04X%04X\n', typecast(Q_A_int(i), 'uint16'), typecast(P_A_int(i), 'uint16'));
@@ -527,14 +581,12 @@ if ENABLE_EXPORT_VIVADO
     fclose(fid_alice_full);
     % Bob random bits (for MDR TX verification)
     fid_rand = fopen(fullfile(DATA_DIR, 'bob_random_bits.txt'), 'w');
-    fid_rand = fopen(fullfile(DATA_DIR, 'bob_random_bits.txt'), 'w');
     bits_flat = bits_bob_all(:);
     for i=1:length(bits_flat)
         fprintf(fid_rand, '%d\n', bits_flat(i));
     end
     fclose(fid_rand);
     % Expected public messages m_i (for MDR TX verification)
-    fid_m = fopen(fullfile(DATA_DIR, 'expected_m_messages.txt'), 'w');
     fid_m = fopen(fullfile(DATA_DIR, 'expected_m_messages.txt'), 'w');
     for blk = 1:N_bloques
         Y_i = Y(:, blk);
@@ -549,7 +601,6 @@ if ENABLE_EXPORT_VIVADO
     fclose(fid_m);
     % Expected LLR results (for MDR RX verification)
     fid_llr = fopen(fullfile(DATA_DIR, 'expected_llr_results.txt'), 'w');
-    fid_llr = fopen(fullfile(DATA_DIR, 'expected_llr_results.txt'), 'w');
     for blk = 1:N_bloques
         for dim = 1:N_dimensiones
             llr_fp = int32(round(LLR_all(dim, blk) * 2^31));
@@ -557,255 +608,4 @@ if ENABLE_EXPORT_VIVADO
         end
     end
     fclose(fid_llr);
-
-    %% 12. EXPORTAR u_bits.txt CON LLRs REALES (8-BIT SIGN-MAGNITUDE)
-    % Para verificacion exacta del decodificador LDPC de Alice
-    disp('9. Exportando LLRs reales cuantizados a 8-bit para LDPC...');
-    llrs_flat = LLR_all(:);  % 26112x1, column-major
-
-    % Escala optima para 8-bit signed: normalizar a varianza unitaria
-    % y escalar para usar ~40% del rango (±48 en 7-bit), preservando
-    % diferencias relativas de confianza entre LLRs.
-    std_llr = std(llrs_flat);
-    if std_llr > 0
-        scale_8bit = 48.0 / std_llr;  % ~3 sigma within 8-bit range
-    else
-        scale_8bit = 48.0 / max(abs(llrs_flat) + eps);
-    end
-
-    fid_u = fopen(fullfile(DATA_DIR, 'u_bits.txt'), 'w');
-    for col = 0:67
-        % $readmemb: primer caracter = MSB (bit 3071) = VNU[Z-1]
-        % Escribimos VNUs en orden inverso (Z-1..0) para que
-        % VNU[0] quede en los bits [7:0] del bus
-        for vnu = Z-1:-1:0
-            idx = col * Z + vnu + 1;
-            llr_fp = llrs_flat(idx) * scale_8bit;
-            llr_s8 = max(-127, min(127, round(llr_fp)));
-            sm_val = abs(llr_s8);
-            if llr_s8 < 0
-                sm_val = bitset(sm_val, 8);
-            end
-            fprintf(fid_u, '%s', dec2bin(sm_val, 8));
-        end
-        fprintf(fid_u, '\n');
-    end
-    fclose(fid_u);
-    % Copiar a cvqkd_alice/sim/ para el testbench Verilator
-    copyfile(fullfile(DATA_DIR, 'u_bits.txt'), fullfile(ALICE_DATA_DIR, 'u_bits.txt'));
-    copyfile(fullfile(DATA_DIR, 'u_bits.txt'), fullfile(ALICE_SIM_DIR, 'u_bits.txt'));
-    fprintf('   [OK] u_bits.txt exportado (68 x %d bits, scale=%.2f)\n', Z*8, scale_8bit);
-
-    % --- Exportar P_mem y R_mem iteracion a iteracion ---
-    disp('   Exportando P_mem y R_mem intermedios para debugging SV...');
-    fid_p = fopen(fullfile(DATA_DIR, 'expected_p_mem.txt'), 'w');
-    fid_r = fopen(fullfile(DATA_DIR, 'expected_r_mem.txt'), 'w');
-    for it = 1:iter_converged
-        for c = 1:nb
-            for vnu = Z:-1:1
-                val_fp = p_mem_history(it, c, vnu);
-                val_s8 = max(-127, min(127, round(val_fp * scale_8bit)));
-                sm_mag = abs(val_s8);
-                sm_sign = uint16(val_s8 < 0);
-                val_16 = bitshift(sm_sign, 15) + uint16(sm_mag);
-                fprintf(fid_p, '%04X', val_16);
-            end
-            fprintf(fid_p, '\n');
-        end
-        for r = 1:mb
-            for c = 1:nb
-                for vnu = Z:-1:1
-                    val_fp = r_mem_history(it, r, c, vnu);
-                    val_s8 = max(-127, min(127, round(val_fp * scale_8bit)));
-                    sm_mag = abs(val_s8);
-                    sm_sign = uint16(val_s8 < 0);
-                    val_16 = bitshift(sm_sign, 15) + uint16(sm_mag);
-                    fprintf(fid_r, '%04X', val_16);
-                end
-                fprintf(fid_r, '\n');
-            end
-        end
-    end
-    fclose(fid_p);
-    fclose(fid_r);
-    copyfile(fullfile(DATA_DIR, 'expected_p_mem.txt'), fullfile(ALICE_SIM_DIR, 'expected_p_mem.txt'));
-    copyfile(fullfile(DATA_DIR, 'expected_r_mem.txt'), fullfile(ALICE_SIM_DIR, 'expected_r_mem.txt'));
-    disp('   [OK] expected_p_mem.txt y expected_r_mem.txt exportados');
-
-    % Expected key bits for LDPC decoder verification (bob_key_ref.txt)
-    % 68 lines of 384 binary digits each; one line per column
-    fid_key = fopen(fullfile(DATA_DIR, 'bob_key_ref.txt'), 'w');
-    for blk = 0:67
-        for bit = 1:Z
-            fprintf(fid_key, '%d', key_bits_tx(blk*Z + bit));
-        end
-        fprintf(fid_key, '\n');
-    end
-    fclose(fid_key);
-    copyfile(fullfile(DATA_DIR, 'bob_key_ref.txt'), fullfile(ALICE_DATA_DIR, 'bob_key_ref.txt'));
-    copyfile(fullfile(DATA_DIR, 'bob_key_ref.txt'), fullfile(ALICE_SIM_DIR, 'bob_key_ref.txt'));
-    disp('   [OK] bob_key_ref.txt exportado (68 x 384 bits)');
-    
-    % Export expected syndrome: 46 rows x 384 bits
-    % $readmemb: first char -> MSB (bit[383])
-    fid_syn = fopen(fullfile(DATA_DIR, 'expected_syndrome.txt'), 'w');
-    for row = 0:mb-1
-        row_bits = syndrome_1(row*Z+1 : row*Z+Z);
-        for bit = 1:Z
-            fprintf(fid_syn, '%d', row_bits(bit));
-        end
-        fprintf(fid_syn, '\n');
-    end
-    fclose(fid_syn);
-    copyfile(fullfile(DATA_DIR, 'expected_syndrome.txt'), fullfile(ALICE_DATA_DIR, 'expected_syndrome.txt'));
-    copyfile(fullfile(DATA_DIR, 'expected_syndrome.txt'), fullfile(ALICE_SIM_DIR, 'expected_syndrome.txt'));
-    disp('   [OK] expected_syndrome.txt exportado (46 x 384 bits)');
-    % Expected key bits for LDPC decoder verification (bob_key_ref.txt)
-    % 68 lines of 384 binary digits each; line 0 is the reference key block
-    fid_key = fopen(fullfile(DATA_DIR, 'bob_key_ref.txt'), 'w');
-    ref_block = key_bits_tx(1:Z);  % First Z=384 bits of the original key
-    for blk = 1:68
-        for bit = 1:Z
-            fprintf(fid_key, '%d', ref_block(bit));
-        end
-        fprintf(fid_key, '\n');
-    end
-    fclose(fid_key);
-    disp('   [OK] bob_key_ref.txt exportado (68 x 384 bits)');
-    
-    disp('   [OK] Archivos de simulación generados con éxito.');
-    
-    %% 13. DUMP DE DEPURACIÓN PARA TESTBENCH AISLADO DE CNU
-    % =========================================================================
-    % Extrae las entradas (Q, P) y salidas (R) exactas para los 384 CNUs 
-    % correspondientes a la FILA 1 en la ITERACIÓN 1, alineando los datos 
-    % como si pasaran por el Barrel Shifter del hardware.
-    % IMPORTANTE: Cuantizamos PRIMERO a 8-bit y luego ejecutamos Min-Sum
-    % con los valores cuantizados para que coincida con el RTL.
-    % =========================================================================
-    disp('10. Generando archivos de depuración aislada para CNU...');
-
-    f_q = fopen(fullfile(DATA_DIR, 'cnu_tb_q_in.txt'), 'w');
-    f_p = fopen(fullfile(DATA_DIR, 'cnu_tb_p_in.txt'), 'w');
-    f_r = fopen(fullfile(DATA_DIR, 'cnu_tb_r_out.txt'), 'w');
-
-    % Función lambda para convertir a Binario de 16-bits (Signo-Magnitud)
-    to_sm16_bin = @(val_fp) dec2bin( ...
-        bitshift(uint16(max(-127, min(127, round(val_fp * scale_8bit))) < 0), 15) + ...
-        uint16(abs(max(-127, min(127, round(val_fp * scale_8bit))))), 16 );
-
-    % --- 1. Cuantizar LLRs de entrada a 8-bit (igual que el RTL) ---
-    q_quantized = zeros(nb * Z, 1);
-    for v = 1:nb*Z
-        llr_fp = llr_ch(v) * scale_8bit;
-        llr_s8 = max(-127, min(127, round(llr_fp)));
-        q_quantized(v) = double(llr_s8);
-    end
-
-    % --- 2. Ejecutar Min-Sum con valores cuantizados (fila 0, iteración 1) ---
-    alpha = 0.75;
-
-    min1_arr = inf(Z, 1);
-    min2_arr = inf(Z, 1);
-    min1_idx_arr = zeros(Z, 1);
-    total_sign = zeros(Z, 1);
-
-    syndrome_row = syndrome_1(1:Z);
-    total_sign = double(syndrome_row);
-
-    % Fase READ: recorrer todas las columnas válidas
-    for c_idx = 1:nb
-        shift = bg_matrix(1, c_idx);
-        if shift == -1
-            continue;
-        end
-        
-        vn_vals = q_quantized((c_idx-1)*Z + 1 : c_idx*Z);
-        vn_aligned = circshift(vn_vals, -shift);
-        
-        q_sign = double(vn_aligned < 0);
-        q_mag = abs(vn_aligned);
-        
-        total_sign = mod(total_sign + q_sign, 2);
-        
-        for z = 1:Z
-            if q_mag(z) < min1_arr(z)
-                min2_arr(z) = min1_arr(z);
-                min1_arr(z) = q_mag(z);
-                min1_idx_arr(z) = c_idx - 1;
-            elseif q_mag(z) < min2_arr(z)
-                min2_arr(z) = q_mag(z);
-            end
-        end
-    end
-
-    % Fase WRITE: calcular r_new para cada columna
-    r_quantized = zeros(nb, Z);
-
-    for c_idx = 1:nb
-        shift = bg_matrix(1, c_idx);
-        if shift == -1
-            continue;
-        end
-        
-        vn_vals = q_quantized((c_idx-1)*Z + 1 : c_idx*Z);
-        vn_aligned = circshift(vn_vals, -shift);
-        q_sign = double(vn_aligned < 0);
-        
-        for z = 1:Z
-            if (c_idx - 1) == min1_idx_arr(z)
-                raw_mag = min2_arr(z);
-            else
-                raw_mag = min1_arr(z);
-            end
-            
-            norm_mag = raw_mag - floor(raw_mag / 4);
-            
-            r_sign = total_sign(z);
-            
-            if r_sign
-                r_val = -double(norm_mag);
-            else
-                r_val = double(norm_mag);
-            end
-            r_quantized(c_idx, z) = r_val;
-        end
-    end
-
-    % --- 3. Exportar archivos ---
-    for c_idx = 1:nb
-        shift = bg_matrix(1, c_idx);
-        
-        Q_aligned = zeros(Z, 1);
-        P_aligned = zeros(Z, 1);
-        R_aligned = zeros(Z, 1);
-        
-        if shift ~= -1
-            vn_vals = q_quantized((c_idx-1)*Z + 1 : c_idx*Z);
-            Q_aligned = circshift(vn_vals, -shift);
-            P_aligned = Q_aligned;
-            R_aligned = r_quantized(c_idx, :)';
-        end
-        
-        for z_idx = Z:-1:1
-            fprintf(f_q, '%s', to_sm16_bin(Q_aligned(z_idx))); 
-            fprintf(f_p, '%s', to_sm16_bin(P_aligned(z_idx)));
-            fprintf(f_r, '%s', to_sm16_bin(R_aligned(z_idx)));
-        end
-        
-        fprintf(f_q, '\n'); 
-        fprintf(f_p, '\n'); 
-        fprintf(f_r, '\n');
-    end
-
-    fclose(f_q); 
-    fclose(f_p); 
-    fclose(f_r);
-
-    copyfile(fullfile(DATA_DIR, 'cnu_tb_q_in.txt'), fullfile(ALICE_SIM_DIR, 'cnu_tb_q_in.txt'));
-    copyfile(fullfile(DATA_DIR, 'cnu_tb_p_in.txt'), fullfile(ALICE_SIM_DIR, 'cnu_tb_p_in.txt'));
-    copyfile(fullfile(DATA_DIR, 'cnu_tb_r_out.txt'), fullfile(ALICE_SIM_DIR, 'cnu_tb_r_out.txt'));
-
-    disp('    [OK] Archivos cnu_tb_q_in.txt, cnu_tb_p_in.txt y cnu_tb_r_out.txt exportados con éxito.');
-    disp('    [OK] Referencia R generada con Min-Sum cuantizado (alpha=0.75).');
 end

@@ -25,20 +25,26 @@ module tb_LLR_Math_Unit();
     // =========================================================================
     logic signed [63:0] mem_accumulators [0:7];
     logic signed [31:0] mem_expected     [0:3];
+    integer file_handle;
 
     // =========================================================================
     // INSTANCIA DEL DUT (Device Under Test)
     // =========================================================================
-    LLR_math_unit dut (
+    // Parámetros calculados: N_SAMPLES = 13056, INV_2N2 = 2^45 / ((N_SAMPLES/2)^2)
+    // INV_2N2 = 2^45 / (6528^2) = 35184372088832 / 42614784 ≈ 825635
+    LLR_math_unit #(
+        .N_SAMPLES(64'sd13056),
+        .INV_2N2(64'sd825635)
+    ) dut (
         .clk(clk),
         .rst(rst),
         .start_calc(start_calc),
-        
+
         .sum_sq_P_B(sum_sq_P_B), .sum_P_B(sum_P_B), .sum_cov_P(sum_cov_P), .sum_P_A(sum_P_A),
         .sum_sq_Q_B(sum_sq_Q_B), .sum_Q_B(sum_Q_B), .sum_cov_Q(sum_cov_Q), .sum_Q_A(sum_Q_A),
-        
+
         .calib_VarA(calib_VarA),
-        
+
         .T_final(T_final),
         .T_sqrt(T_sqrt),
         .sigma_sq(sigma_sq),
@@ -58,9 +64,22 @@ module tb_LLR_Math_Unit();
     // PROCESO DE TEST (STIMULUS)
     // =========================================================================
     initial begin
-        // 1. CARGA DE ARCHIVOS
-        $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/accumulators.txt", mem_accumulators);
-        $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/expected_llr_math.txt", mem_expected);
+        // 1. CARGA DE ARCHIVOS (Compatible Windows/Linux)
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/accumulators.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/accumulators.txt", mem_accumulators);
+        end else begin
+            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/accumulators.txt", mem_accumulators);
+        end
+
+        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/expected_llr_math.txt", "r");
+        if (file_handle != 0) begin
+            $fclose(file_handle);
+            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/expected_llr_math.txt", mem_expected);
+        end else begin
+            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_llr_math.txt", mem_expected);
+        end
         
         // 2. CONDICIONES INICIALES
         rst        = 1'b1;

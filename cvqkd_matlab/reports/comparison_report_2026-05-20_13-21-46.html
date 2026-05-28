@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>MATLAB vs RTL Comparison Report</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; }
+h1 { color: #333; }
+h2 { color: #666; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
+table { border-collapse: collapse; margin: 20px 0; }
+th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+th { background-color: #4CAF50; color: white; }
+.pass { color: green; font-weight: bold; }
+.fail { color: red; font-weight: bold; }
+.summary { font-size: 1.2em; margin: 20px 0; padding: 10px; border-left: 4px solid #4CAF50; }
+</style>
+</head>
+<body>
+<h1>MATLAB vs RTL Comparison Report</h1>
+<p>Generated: 2026-05-20_13-21-46</p>
+<div class="summary">
+<strong>Overall Result:</strong> <span class="fail">FAIL</span>
+</div>
+<h2>Convergence Comparison</h2>
+<table>
+<tr><th>Metric</th><th>MATLAB</th><th>RTL</th><th>Difference</th><th>Status</th></tr>
+<tr><td>Convergence Iterations</td><td>9</td><td>0</td><td>9</td><td class="fail">MISMATCH</td></tr>
+<tr><td>Final BER</td><td>0.000000</td><td>1.000000</td><td>1.000000</td><td class="fail">MISMATCH</td></tr>
+</table>
+</body>
+</html>
