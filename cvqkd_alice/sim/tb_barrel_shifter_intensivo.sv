@@ -39,9 +39,9 @@ module tb_barrel_shifter_intensivo();
         $display("==================================================");
         
         // 1. Cargar las memorias desde los archivos
-        $readmemb("shifter_in.txt", mem_in);
-        $readmemb("shifter_out.txt", mem_out);
-        $readmemb("shifter_shift.txt", mem_shift);
+        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/shifter_in.txt", mem_in);
+        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/shifter_out.txt", mem_out);
+        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/shifter_shift.txt", mem_shift);
         
         // Contar cuántos vectores reales se han cargado
         while (mem_shift[num_edges] !== 9'bx && num_edges < 4000) begin

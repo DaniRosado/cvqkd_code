@@ -148,7 +148,8 @@ module ldpc_controller_fsm #(
             end
 
             WAIT_PIPELINE: begin
-                if (wait_counter == PIPELINE_DEPTH) begin
+                // Añadimos el +1 para forzar ese ciclo de reloj extra
+                if (wait_counter == PIPELINE_DEPTH + 1) begin
                     if (pass_flag == 1'b0) begin
                         // Terminamos Pasada 0. Empezamos Pasada 1 (Escritura)
                         next_pass_flag = 1'b1;

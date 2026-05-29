@@ -303,10 +303,20 @@ disp('10. Iniciando decodificacion LDPC (scaled min-sum)...');
 
 alpha = 0.75;
 max_iter = 200;
-llr_scale = 0.125;
+llr_scale = 1;
 
-% LLRs de canal para el bloque 1 (soft input de Alice)
-llr_ch = llrs_rx(1:nb*Z) * llr_scale;
+% 1. Cálculo en flotante
+llr_ch_float = llrs_rx(1:nb*Z) * llr_scale;
+
+% 2. Cuantización (Redondeo al entero más cercano)
+llr_ch_int = round(llr_ch_float);
+
+% 3. Saturación al límite del hardware de 8-bits Signo-Magnitud (-127 a +127)
+llr_ch_int(llr_ch_int > 127) = 127;
+llr_ch_int(llr_ch_int < -127) = -127;
+
+% 4. Inyectamos la versión "hardware" al decodificador
+llr_ch = llr_ch_int;
 
 % Construir listas de vecinos a partir de H
 [rows_h, cols_h] = find(H);
