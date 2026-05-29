@@ -18,9 +18,9 @@ ENABLE_GRAFICAS = false;
 
 % --- Parámetros de Trama y Memoria ---
 L_trama     = 16;      % 1 Piloto + 15 Datos
-N_BOB_DATA  = 52224;   % Datos útiles que caben en la RAM de Bob
+N_BOB_DATA  = 52224/2;   % Datos útiles que caben en la RAM de Bob
 N_FRAMES    = ceil(N_BOB_DATA / 15); % ~3482 tramas
-N_SAMPLES   = 26112;   % Datos sacrificados para la estimación
+N_SAMPLES   = 26112/2;   % Datos sacrificados para la estimación
 
 % En la fibra viajan los datos + los pilotos. Sumamos 1 piloto final para interpolar
 N_FIBER     = N_FRAMES * L_trama + 1; 

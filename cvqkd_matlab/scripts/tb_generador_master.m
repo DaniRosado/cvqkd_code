@@ -283,7 +283,7 @@ for i = 1:mb
         shift = bg_matrix(i,j);
         if shift ~= -1
             I_z = speye(Z);
-            circulant = circshift(I_z, [0, shift]);
+            circulant = circshift(I_z, [0, -shift]);
             H((i-1)*Z+1 : i*Z, (j-1)*Z+1 : j*Z) = circulant;
         end
     end
@@ -303,7 +303,7 @@ disp('10. Iniciando decodificacion LDPC (scaled min-sum)...');
 
 alpha = 0.75;
 max_iter = 200;
-llr_scale = 1.0;
+llr_scale = 0.125;
 
 % LLRs de canal para el bloque 1 (soft input de Alice)
 llr_ch = llrs_rx(1:nb*Z) * llr_scale;
@@ -608,4 +608,61 @@ if ENABLE_EXPORT_VIVADO
         end
     end
     fclose(fid_llr);
+    % =====================================================================
+    % Exportar Síndrome esperado para el Testbench del LDPC Decoder
+    % =====================================================================
+    S_matrix = reshape(syndrome_1, Z, mb).';
+    
+    fid_syn = fopen(fullfile(DATA_DIR, 'expected_syndrome.txt'), 'w');
+    for i = 1:mb
+        % ¡AQUÍ ESTÁ LA MAGIA! Iteramos al revés para que SystemVerilog
+        % asigne el CNU 0 al bit 0 correctamente.
+        fprintf(fid_syn, '%d', S_matrix(i, Z:-1:1));
+        fprintf(fid_syn, '\n'); 
+    end
+    fclose(fid_syn);
+    disp('   -> expected_syndrome.txt generado con éxito (Endianness corregido).');
+    % =====================================================================
+    % Exportar LLRs (u_bits.txt) en formato Signo-Magnitud 8-bits
+    % para la L_BRAM del Testbench SystemVerilog
+    % =====================================================================
+    % llr_ch tiene tamaño (68 * 384) x 1. Lo pasamos a matriz 68 x 384.
+    llr_ch_matrix = reshape(llr_ch, Z, nb).'; 
+    
+    fid_ubits = fopen(fullfile(DATA_DIR, 'u_bits.txt'), 'w');
+    
+    for c = 1:nb
+        line_str = '';
+        % Iteramos al revés (Z bajando a 1) porque en SystemVerilog
+        % L_read[0] se conecta a los bits [7:0] (la extrema derecha del string)
+        for z = Z:-1:1
+            % 1. Redondear al entero más cercano
+            val = round(llr_ch_matrix(c, z));
+            
+            % 2. Saturación a los límites de 7 bits de magnitud (+/- 127)
+            if val > 127,  val = 127;  end
+            if val < -127, val = -127; end
+            
+            % 3. Conversión a Signo-Magnitud
+            if val < 0
+                sign_b = 1;
+                mag_b  = -val;
+            else
+                sign_b = 0;
+                mag_b  = val;
+            end
+            
+            % 4. Formatear como 8 bits binarios: [1 bit signo][7 bits magnitud]
+            % (sign_b * 128 coloca el bit de signo en el MSB)
+            bin_val = sign_b * 128 + mag_b;
+            bin_str = dec2bin(bin_val, 8);
+            
+            % 5. Concatenar a la línea
+            line_str = [line_str, bin_str];
+        end
+        % Escribir la línea de 3072 caracteres en el archivo
+        fprintf(fid_ubits, '%s\n', line_str);
+    end
+    fclose(fid_ubits);
+    disp('   -> u_bits.txt generado con éxito (68 líneas x 3072 bits).');
 end
