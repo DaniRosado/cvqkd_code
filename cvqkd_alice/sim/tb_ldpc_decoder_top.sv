@@ -29,7 +29,7 @@ module tb_ldpc_decoder_top();
     // 2. INSTANCIA DEL TOP-LEVEL (DUT)
     // ==========================================
     ldpc_decoder_top #(
-        .Z(Z), .W(W), .PIPELINE_DEPTH(2)
+        .Z(Z), .W(W), .PIPELINE_DEPTH(3)
     ) dut (
         .clk             (clk),
         .rst_n           (rst_n),
@@ -131,5 +131,57 @@ module tb_ldpc_decoder_top();
         $display("[TB] ERROR CRÍTICO: Timeout alcanzado. La FSM no responde.");
         $finish;
     end
+    // =====================================================================
+    // AUTO-CHECKER GLOBAL (Verificación de las 46 filas, 316 edges)
+    // =====================================================================
+    localparam int TOTAL_EDGES = 316;
 
+    logic [BUS_WIDTH-1:0] expected_l_write_mem [0:TOTAL_EDGES-1];
+    int current_write_idx = 0;
+    int errors_total = 0;
+
+    initial begin
+        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_L_write_all.txt", expected_l_write_mem);
+    end
+
+    // Espiamos DIRECTAMENTE los puertos de salida de la FSM y el Datapath
+    always_ff @(posedge clk) begin
+        if (dut.u_FSM.p_write_en) begin
+            $display("[CHECKER %0t] Edge %0d/316 | Fila %0d | Col %0d",
+                     $time, current_write_idx, dut.u_FSM.row_idx, dut.u_FSM.p_write_addr);
+
+            // Comparamos el bus gigante de 3072 bits del Datapath
+            if (dut.u_DATAPATH.p_write_data_flat !== expected_l_write_mem[current_write_idx]) begin
+                errors_total++;
+                $display("   [!!!] DISCREPANCIA en edge %0d (Fila %0d, Col %0d)",
+                         current_write_idx, dut.u_FSM.row_idx, dut.u_FSM.p_write_addr);
+
+                // Barrido cable a cable para localizar la posición Z exacta
+                for (int z = 0; z < 384; z++) begin
+                    logic [7:0] hw_val = dut.u_DATAPATH.p_write_data_flat[z*8 +: 8];
+                    logic [7:0] ex_val = expected_l_write_mem[current_write_idx][z*8 +: 8];
+
+                    if (hw_val !== ex_val) begin
+                        $display("      Z=%0d | HW=%h, EXP=%h", z, hw_val, ex_val);
+                    end
+                end
+            end else begin
+                $display("   [OK]");
+            end
+
+            current_write_idx++;
+
+            // Cuando hemos verificado los 316 edges (46 filas completas)
+            if (current_write_idx == TOTAL_EDGES) begin
+                $display("==================================================");
+                if (errors_total == 0) begin
+                    $display("[CHECKER] EXITO: Las 46 filas (316 edges) son perfectas.");
+                end else begin
+                    $display("[CHECKER] FALLO: %0d edges con discrepancias.", errors_total);
+                end
+                $display("==================================================");
+                $finish;
+            end
+        end
+    end
 endmodule

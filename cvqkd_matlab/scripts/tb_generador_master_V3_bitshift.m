@@ -347,129 +347,94 @@ metrics_flips = zeros(max_iter, 1);
 bits_prev = zeros(nb*Z, 1);
 iter_converged = 0;
 
+p_mem_history = zeros(max_iter, nb, Z);
+r_mem_history = zeros(max_iter, mb, nb, Z);
 
-% =========================================================================
-% DECODIFICACIÓN LAYERED (Idéntica al hardware)
-% Cada fila del base graph se procesa completamente (CN update + VN update
-% inmediato) antes de pasar a la siguiente. Así la fila N+1 lee los LLR
-% ya actualizados por la fila N, igual que el hardware escribe en L_BRAM.
-%
-% L_write_history: captura lo que el hardware escribiría en L_BRAM en cada
-% edge, en el mismo orden que EDGE_ROM (para el auto-checker de Vivado).
-% =========================================================================
-L_write_history = cell(0, 1); % Cada celda = vector de Z valores (un edge)
+% <--- CAMBIO: Bucle global limitado a 1 sola iteración
+for iter = 1:max_iter 
+    
+    % --- CN update (scaled min-sum) ---
+    % <--- CAMBIO: Bucle limitado a Z (384), que representa solo la 1º fila de la matriz
+    for c = 1:Z*mb
+        edges_c = cn_edges{c};  % nos guardamos los indices de las aristas
+        if isempty(edges_c)
+            continue;
+        end
+        msgs = msg_v2c(edges_c);    
+        abs_vals = abs(msgs);
+        sign_vals = sign(msgs);
+        sign_vals(sign_vals == 0) = 1;
 
-for iter = 1:max_iter
-
-    for row = 1:mb
-        % Rango de check-nodes de esta fila (layer)
-        cn_start = (row-1)*Z + 1;
-        cn_end   = row*Z;
-
-        % --- CN update para los Z check-nodes de esta fila ---
-        for c = cn_start:cn_end
-            edges_c = cn_edges{c};
-            if isempty(edges_c)
-                continue;
-            end
-            msgs = msg_v2c(edges_c);
-            abs_vals = abs(msgs);
-            sign_vals = sign(msgs);
-            sign_vals(sign_vals == 0) = 1;
-
-            min1 = inf;
-            min2 = inf;
-            count_min1 = 0;
-
-            for k = 1:length(abs_vals)
-                a = abs_vals(k);
-                if a < min1
-                    min2 = min1;
-                    min1 = a;
-                    count_min1 = 1;
-                elseif a == min1
-                    count_min1 = count_min1 + 1;
-                elseif a < min2
-                    min2 = a;
-                end
-            end
-
-            if isinf(min2)
+        min1 = inf;
+        min2 = inf;
+        count_min1 = 0;
+        
+        for k = 1:length(abs_vals)
+            a = abs_vals(k);
+            %valoresCNU0(k) = a;
+            if a < min1
                 min2 = min1;
-            end
-
-            syndrome_sign = 1 - 2 * syndrome_1(c);
-            sign_prod = prod(sign_vals) * syndrome_sign;
-
-            for k = 1:length(edges_c)
-                if abs_vals(k) == min1 && count_min1 == 1
-                    min_use = min2;
-                else
-                    min_use = min1;
-                end
-                sign_excl = sign_prod * sign_vals(k);
-
-                % Escalado hardware: val - (val >> 2) = 0.75 * val
-                min_scaled = min_use - bitshift(min_use, -2);
-                raw_msg = sign_excl * min_scaled;
-
-                msg_c2v(edges_c(k)) = raw_msg;
+                min1 = a;
+                count_min1 = 1;
+            elseif a == min1
+                count_min1 = count_min1 + 1;
+            elseif a < min2
+                min2 = a;
             end
         end
-
-        % --- VN update INMEDIATO (solo las columnas afectadas por esta fila) ---
-        % En hardware: Pasada 1 recorre los edges de esta fila y para cada
-        % columna escribe L_write = L_q + R_new en la L_BRAM.
-        % El orden de recorrido es el del EDGE_ROM: columnas activas de
-        % bg_matrix(row,:) de izquierda a derecha.
-        valid_cols_row = find(bg_matrix(row, :) ~= -1);
-
-        for ei = 1:length(valid_cols_row)
-            col_bg = valid_cols_row(ei); % Columna del base graph (1-based)
-
-            % Rango de VNs de este bloque Z
-            vn_start = (col_bg-1)*Z + 1;
-            vn_end   = col_bg*Z;
-
-            % Calcular L_write para cada posición z de esta columna
-            L_write_block = zeros(1, Z);
-            for z = 1:Z
-                v = vn_start + z - 1;
-                edges_v = vn_edges{v};
-                L_write_block(z) = llr_ch(v) + sum(msg_c2v(edges_v));
-                % Saturación idéntica al hardware (VNU satura a ±127 al escribir en L_BRAM)
-                if L_write_block(z) > 127, L_write_block(z) = 127; end
-                if L_write_block(z) < -127, L_write_block(z) = -127; end
-            end
-
-            % Capturar para el auto-checker (solo iteración 1)
-            if iter == 1
-                L_write_history{end+1, 1} = L_write_block;
-            end
-
-            % Actualizar msg_v2c para que la siguiente fila lea valores frescos
-            % Saturar a ±127 como hace el VNU en hardware (L_q = L_read - R_old)
-            for z = 1:Z
-                v = vn_start + z - 1;
-                edges_v = vn_edges{v};
-                llr_post_v = L_write_block(z);
-                lq = llr_post_v - msg_c2v(edges_v);
-                lq(lq > 127) = 127;
-                lq(lq < -127) = -127;
-                msg_v2c(edges_v) = lq;
-            end
+        
+        if isinf(min2)
+            min2 = min1;
         end
+
+        syndrome_sign = 1 - 2 * syndrome_1(c);
+        sign_prod = prod(sign_vals) * syndrome_sign;
+
+        for k = 1:length(edges_c)
+            if abs_vals(k) == min1 && count_min1 == 1
+                min_use = min2;
+                minimos(c, 3) = k;
+            else
+                min_use = min1;
+            end
+            sign_excl = sign_prod * sign_vals(k);
+            
+            % Cálculo original con el factor alpha
+            % raw_msg = alpha * sign_excl * min_use;
+            min_use = min_use - bitshift(min_use, -2);
+            raw_msg = sign_excl * min_use;
+            
+            % --- EMULACIÓN HARDWARE DE LA BRAM R ---
+            % rounded_msg = round(raw_msg);
+            % if rounded_msg > 127, rounded_msg = 127; end
+            % if rounded_msg < -127, rounded_msg = -127; end
+            
+            msg_c2v(edges_c(k)) = raw_msg;
+        end
+        minimos(c,1) = min1 - bitshift(min1, -2);
+        minimos(c,2) = min2 - bitshift(min2, -2);
     end
 
-    % --- VN update global (para tener llr_post completo) ---
+    % --- VN update ---
+    % Calcula la suma con los mensajes c2v (solo la Fila 1 tendrá datos, el resto es 0)
     llr_post = zeros(nb*Z, 1);
+    % num = 1;
+    % index = 1;
     for v = 1:nb*Z
+    % for v = 2:2
         edges_v = vn_edges{v};
         if isempty(edges_v)
             llr_post(v) = llr_ch(v);
         else
-            llr_post(v) = llr_ch(v) + sum(msg_c2v(edges_v));
+            sum_c2v = sum(msg_c2v(edges_v));
+            llr_post(v) = llr_ch(v) + sum_c2v;
+            msg_v2c(edges_v) = llr_post(v) - msg_c2v(edges_v);
         end
+        % if(bg_matrix(1,num) >= 0)
+        %     VNU1(index) = sum_c2v;
+        %     index = index + 1;
+        % end
+        % num = num + 1;
     end
 
     % --- Hard decision y verificacion de sindrome ---
@@ -480,6 +445,22 @@ for iter = 1:max_iter
     metrics_ber(iter) = sum(bits_est ~= block_1) / length(block_1);
     metrics_flips(iter) = sum(bits_est ~= bits_prev);
     bits_prev = bits_est;
+
+    % --- Capturar P_mem y R_mem para exportar al Testbench SV ---
+    for c_idx = 1:nb
+        for z_idx = 1:Z
+            p_mem_history(iter, c_idx, z_idx) = llr_post((c_idx-1)*Z + z_idx);
+        end
+    end
+    
+    for e = 1:num_edges
+        c_idx = cols_h(e);
+        r_idx = rows_h(e);
+        block_col = ceil(c_idx / Z);
+        block_row = ceil(r_idx / Z);
+        z_col = mod(c_idx - 1, Z) + 1;
+        r_mem_history(iter, block_row, block_col, z_col) = msg_c2v(e);
+    end
 
     if unsat == 0
         iter_converged = iter;
@@ -726,39 +707,51 @@ if ENABLE_EXPORT_VIVADO
     disp('   -> u_bits.txt generado con éxito (68 líneas x 3072 bits).');
     % =====================================================================
     % EXPORTAR VERDAD ABSOLUTA PARA EL AUTO-CHECKER (Todas las 46 filas)
-    % Usa L_write_history capturado durante la decodificación layered,
-    % que refleja exactamente lo que el hardware escribe en cada edge.
     % =====================================================================
     disp('   -> Exportando expected_L_write_all.txt para Vivado (316 edges)...');
 
     fid_l_write = fopen(fullfile(DATA_DIR, 'expected_L_write_all.txt'), 'w');
 
-    for edge_idx = 1:length(L_write_history)
-        L_write_block = L_write_history{edge_idx};
+    % Redimensionamos el vector gigante a una matriz para acceder por columnas
+    % llr_post tiene tamaño (nb*Z x 1). Al hacer reshape y trasponer,
+    % obtenemos nb filas, cada una con Z (384) elementos.
+    llr_post_matrix = reshape(llr_post, Z, nb).';
 
-        % Formateo a 8 bits Signo-Magnitud y ordenamiento Endianness (Z bajando a 1)
-        bin_str = '';
-        for z = Z:-1:1
-            val = L_write_block(z);
+    % Recorremos las 46 filas en el mismo orden que el hardware (EDGE_ROM)
+    for row = 1:mb
+        valid_cols = find(bg_matrix(row, :) ~= -1);
 
-            % Saturación hardware
-            if val > 127, val = 127; end
-            if val < -127, val = -127; end
+        for e = 1:length(valid_cols)
+            c = valid_cols(e); % Índice de la columna activa
 
-            % Conversión a Signo-Magnitud
-            if val < 0
-                sm_val = 128 + abs(val);
-            else
-                sm_val = val;
+            % Extraemos el bloque exacto de 384 LLRs que el hardware debería escribir
+            L_write_block = llr_post_matrix(c, :);
+
+            % Formateo a 8 bits Signo-Magnitud y ordenamiento Endianness (Z bajando a 1)
+            bin_str = '';
+            for z = Z:-1:1
+                val = L_write_block(z);
+
+                % Saturación hardware (por seguridad)
+                if val > 127, val = 127; end
+                if val < -127, val = -127; end
+
+                % Conversión a Signo-Magnitud
+                if val < 0
+                    sm_val = 128 + abs(val);
+                else
+                    sm_val = val;
+                end
+
+                % Concatenar en binario
+                bin_str = [bin_str, dec2bin(sm_val, 8)];
             end
 
-            % Concatenar en binario
-            bin_str = [bin_str, dec2bin(sm_val, 8)];
+            % Escribir la línea gigante de 3072 caracteres en el archivo
+            fprintf(fid_l_write, '%s\n', bin_str);
         end
-
-        fprintf(fid_l_write, '%s\n', bin_str);
     end
 
     fclose(fid_l_write);
-    fprintf('   -> expected_L_write_all.txt generado (%d edges).\n', length(L_write_history));
+    disp('   -> ¡expected_L_write_all.txt generado (316 líneas, 46 filas)!');
 end

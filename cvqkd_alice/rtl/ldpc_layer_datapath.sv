@@ -111,7 +111,7 @@ module ldpc_layer_datapath #(
     barrel_shifter #(.Z(Z), .W(W)) shifter_direct (
         .data_in    (L_q_reg),
         .shift_val  (shift_pipe[1]), // Sincronizado al Ciclo 2
-        .dir_inverse(1'b1),
+        .dir_inverse(1'b1), // desplazamos hacia la izquierda dir_inverse = 1
         .data_out   (L_q_shifted_comb)
     );
 
@@ -174,7 +174,7 @@ module ldpc_layer_datapath #(
     barrel_shifter #(.Z(Z), .W(W)) shifter_inverso (
         .data_in    (R_new_cnu_order),
         .shift_val  (shift_pipe[2]), // Sincronizado al Ciclo 3
-        .dir_inverse(1'b0),
+        .dir_inverse(1'b0), // desplazamos hacia la derecha dir_inverse = 0
         .data_out   (R_new)
     );
 

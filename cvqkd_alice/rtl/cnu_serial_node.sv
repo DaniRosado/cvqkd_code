@@ -62,6 +62,7 @@ module cnu_serial_node (
                 reg_min2     <= reg_min1;
                 reg_min1     <= in_mag;
                 reg_min1_col <= col_idx_in;
+            // end else if (in_mag < reg_min2 && in_mag > reg_min1) begin
             end else if (in_mag < reg_min2) begin
                 // El nuevo bate al segundo, pero no al primero.
                 reg_min2     <= in_mag;
@@ -79,7 +80,9 @@ module cnu_serial_node (
     
     always_comb begin
         scaled_min1 = reg_min1 - (reg_min1 >> 2);
+        //scaled_min1 = reg_min1;
         scaled_min2 = reg_min2 - (reg_min2 >> 2);
+        //scaled_min2 = reg_min2;
     end
 
     // Asignación a las salidas
