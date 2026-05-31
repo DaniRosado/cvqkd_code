@@ -83,11 +83,9 @@ module tb_estparam_completo();
     ping_pong_bram #(
         .DATA_WIDTH(32), .BLOCK_SIZE(N_BOB_DATA), .ADDR_WIDTH(17)
     ) bob_ram_inst (
-        .clk_wr(clk), .rst(rst),
+        .clk(clk), .rst(rst),
         .p_in(dsp_out_p), .q_in(dsp_out_q), .valid_in(dsp_data_valid),
-        
-        .clk_rd(clk), .rd_addr(bob_read_addr), .rd_data(bob_read_data),
-        
+        .rd_addr(bob_read_addr), .rd_data(bob_read_data),
         .buffer_ready_irq(irq_buffer_ready), .buffer_to_read(irq_buffer_side)
     );
 
@@ -95,12 +93,9 @@ module tb_estparam_completo();
     alice_bram_buffer #(
         .DATA_WIDTH(32), .ADDR_WIDTH(15)
     ) alice_ram_inst (
-        .clk_wr(clk), .rst_wr(rst),
+        .clk(clk), .rst(rst),
         .we(alice_we), .wr_addr(alice_wr_addr), .wr_data(alice_wr_data),
-        
-        .clk_rd(clk), .rst_rd(rst),
         .rd_addr(alice_rd_addr), .rd_data(alice_rd_data),
-        
         .items_avail(alice_items_avail)
     );
 
@@ -117,12 +112,9 @@ module tb_estparam_completo();
     ptr_ram_buffer #(
         .DATA_WIDTH(16), .ADDR_WIDTH(15)
     ) ptr_ram_inst (
-        .clk_wr(clk), .rst_wr(rst),
+        .clk(clk), .rst(rst),
         .we(gen_read_en), .wr_data(gen_ram_addr),
-        
-        .clk_rd(clk), .rst_rd(rst),
         .rd_addr(ptr_rd_addr), .rd_data(ptr_rd_data),
-        
         .items_avail(bob_items_avail)
     );
 
