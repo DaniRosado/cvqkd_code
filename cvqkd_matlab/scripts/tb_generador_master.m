@@ -302,7 +302,7 @@ fprintf('   9.3. [!] Bits de Síndrome activos (Ecuaciones fallidas): %d / %d\n'
 disp('10. Iniciando decodificacion LDPC (scaled min-sum)...');
 
 alpha = 0.75;
-max_iter = 100; % <--- CAMBIO: Forzamos a 1 iteración máxima
+max_iter = 2; % Limitado a 2 iteraciones para verificar el cambio de iteración
 llr_scale = 1;
 
 % 1. Cálculo en flotante
@@ -442,10 +442,8 @@ for iter = 1:max_iter
                 if L_write_block(z) < -127, L_write_block(z) = -127; end
             end
 
-            % Capturar para el auto-checker (solo iteración 1)
-            if iter == 1
-                L_write_history{end+1, 1} = L_write_block;
-            end
+            % Capturar para el auto-checker
+            L_write_history{end+1, 1} = L_write_block;
 
             % Actualizar msg_v2c para que la siguiente fila lea valores frescos
             % Saturar a ±127 como hace el VNU en hardware (L_q = L_read - R_old)

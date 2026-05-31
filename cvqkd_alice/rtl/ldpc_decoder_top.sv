@@ -131,34 +131,52 @@ module ldpc_decoder_top #(
     // ==========================================
     // 5. INSTANCIACIÓN DEL DATAPATH (Matemática)
     // ==========================================
-    
-    // Necesitamos extraer los signos totales calculados por la CNU 
+
+    // Necesitamos extraer los signos totales calculados por la CNU
     // para enviarlos al Syndrome Checker.
     logic [Z-1:0] cn_total_signs;
-    
+
+    // Señales de control para el acumulador de síndrome (Pasada 1)
+    // syn_valid: activa durante cada escritura válida de Pasada 1
+    // syn_start_row: pulso en la primera escritura de cada fila
+    logic syn_start_row;
+    logic p_write_en_prev;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            p_write_en_prev <= 1'b0;
+        else
+            p_write_en_prev <= fsm_p_write_en;
+    end
+
+    // Pulso cuando p_write_en sube (primera escritura de la fila)
+    assign syn_start_row = fsm_p_write_en & ~p_write_en_prev;
+
     ldpc_layer_datapath #(.Z(Z), .W(W)) u_DATAPATH (
         .clk               (clk),
         .rst_n             (rst_n),
-        
+
         // Control
         .valid_in          (fsm_dp_valid_in),
         .start_row         (fsm_dp_start_row),
         .col_idx_in        (fsm_dp_col_idx),
         .shift_val         (fsm_dp_shift),
-        
+
         // Datos de lectura
         .p_read_data_flat  (p_read_data),
         .r_read_data_flat  (r_read_data),
-        
+
         // Datos de escritura (al Multiplexor y a R_BRAM)
         .p_write_data_flat (dp_p_write_data),
         .r_write_data_flat (dp_r_write_data),
-        
-        // Extracción de signos para el Síndrome (Este puerto hay que añadirlo al Datapath)
-        .cn_signs_out      (cn_total_signs),
 
-        // Inyectamos la fila actual del síndrome en las matemáticas
-        .target_syn_row    (target_syndrome_mem[current_row_idx])
+        // Síndrome
+        .cn_signs_out      (cn_total_signs),
+        .target_syn_row    (target_syndrome_mem[current_row_idx]),
+
+        // Control del acumulador de síndrome (Pasada 1)
+        .syn_valid         (fsm_p_write_en),
+        .syn_start_row     (syn_start_row)
     );
 
     // ==========================================

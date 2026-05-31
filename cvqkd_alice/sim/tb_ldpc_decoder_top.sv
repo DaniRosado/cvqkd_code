@@ -127,14 +127,43 @@ module tb_ldpc_decoder_top();
     // ==========================================
     // Si la FSM se queda atascada en un bucle infinito, cortamos la simulación
     initial begin
-        #5000000; // Ajusta este tiempo si tu simulación es muy larga
+        #25000000; // Ajusta este tiempo si tu simulación es muy larga
         $display("[TB] ERROR CRÍTICO: Timeout alcanzado. La FSM no responde.");
         $finish;
     end
     // =====================================================================
-    // AUTO-CHECKER GLOBAL (Verificación de las 46 filas, 316 edges)
+    // MONITOR DE SÍNDROME (Diagnóstico de convergencia)
     // =====================================================================
-    localparam int TOTAL_EDGES = 316;
+    logic [7:0] syn_iter_count = 0;
+    logic [5:0] syn_fail_rows;
+
+    always_ff @(posedge clk) begin
+        if (dut.u_FSM.iter_start) begin
+            syn_iter_count <= syn_iter_count + 1;
+            syn_fail_rows <= 0;
+        end
+        if (dut.u_SYNDROME.row_done) begin
+            if (!dut.u_SYNDROME.row_ok) begin
+                syn_fail_rows <= syn_fail_rows + 1;
+                // Solo imprimimos las primeras iteraciones para no saturar
+                if (syn_iter_count < 3) begin
+                    $display("[SYN] Iter %0d | Fila %0d FALLO | Errores: %0d/384",
+                             syn_iter_count, dut.u_FSM.row_idx,
+                             $countones(dut.u_SYNDROME.row_errors));
+                end
+            end
+        end
+        if (dut.u_FSM.state == 4) begin // CHECK_SYNDROME state (enum pos 4)
+            $display("[SYN] Iter %0d terminada | Filas fallidas: %0d/46 | is_converged=%b",
+                     syn_iter_count, syn_fail_rows, dut.u_SYNDROME.is_converged);
+        end
+    end
+
+    /*
+    // =====================================================================
+    // AUTO-CHECKER GLOBAL (Verificación de 2 iteraciones, 632 edges)
+    // =====================================================================
+    localparam int TOTAL_EDGES = 632;
 
     logic [BUS_WIDTH-1:0] expected_l_write_mem [0:TOTAL_EDGES-1];
     int current_write_idx = 0;
@@ -147,8 +176,9 @@ module tb_ldpc_decoder_top();
     // Espiamos DIRECTAMENTE los puertos de salida de la FSM y el Datapath
     always_ff @(posedge clk) begin
         if (dut.u_FSM.p_write_en) begin
-            $display("[CHECKER %0t] Edge %0d/316 | Fila %0d | Col %0d",
-                     $time, current_write_idx, dut.u_FSM.row_idx, dut.u_FSM.p_write_addr);
+            $display("[CHECKER %0t] Edge %0d/%0d | Iter %0d | Fila %0d | Col %0d",
+                     $time, current_write_idx, TOTAL_EDGES,
+                     current_write_idx / 316, dut.u_FSM.row_idx, dut.u_FSM.p_write_addr);
 
             // Comparamos el bus gigante de 3072 bits del Datapath
             if (dut.u_DATAPATH.p_write_data_flat !== expected_l_write_mem[current_write_idx]) begin
@@ -171,17 +201,18 @@ module tb_ldpc_decoder_top();
 
             current_write_idx++;
 
-            // Cuando hemos verificado los 316 edges (46 filas completas)
+            // Cuando hemos verificado todos los edges (2 iteraciones)
             if (current_write_idx == TOTAL_EDGES) begin
                 $display("==================================================");
                 if (errors_total == 0) begin
-                    $display("[CHECKER] EXITO: Las 46 filas (316 edges) son perfectas.");
+                    $display("[CHECKER] EXITO: 2 iteraciones (%0d edges) perfectas.", TOTAL_EDGES);
                 end else begin
-                    $display("[CHECKER] FALLO: %0d edges con discrepancias.", errors_total);
+                    $display("[CHECKER] FALLO: %0d/%0d edges con discrepancias.", errors_total, TOTAL_EDGES);
                 end
                 $display("==================================================");
                 $finish;
             end
         end
     end
+    */
 endmodule

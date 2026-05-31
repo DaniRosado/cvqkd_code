@@ -22,7 +22,11 @@ module ldpc_layer_datapath #(
     
     // --- Síndrome ---
     output logic [Z-1:0]         cn_signs_out,
-    input  logic [Z-1:0]         target_syn_row
+    input  logic [Z-1:0]         target_syn_row,
+
+    // --- Control del acumulador de síndrome (Pasada 1) ---
+    input  logic                 syn_valid,
+    input  logic                 syn_start_row
 );
 
     // ==========================================
@@ -144,11 +148,41 @@ module ldpc_layer_datapath #(
         end
     endgenerate
 
-    always_comb begin
-        for (int i = 0; i < Z; i++) begin
-            cn_signs_out[i] = tot_sign[i];
+    // ==========================================
+    // ACUMULADOR DE SÍNDROME (Hard-decision sobre L_write)
+    // ==========================================
+    // Durante la Pasada 1, L_write[i][7] contiene el signo del LLR actualizado
+    // en el dominio VNU. Rotamos al dominio CNU y acumulamos XOR por posición z.
+    // El syndrome checker lee syn_accum al final de cada fila (row_done).
+    logic [Z-1:0] syn_accum;
+    logic [W-1:0] L_write_shifted [0:Z-1];
+
+    barrel_shifter #(.Z(Z), .W(W)) shifter_syndrome (
+        .data_in    (L_write),
+        .shift_val  (shift_pipe[2]),
+        .dir_inverse(1'b1),
+        .data_out   (L_write_shifted)
+    );
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            syn_accum <= '0;
+        end else if (syn_valid) begin
+            if (syn_start_row) begin
+                // Primer dato de la fila: cargamos directamente (reset + load)
+                for (int i = 0; i < Z; i++) begin
+                    syn_accum[i] <= L_write_shifted[i][7];
+                end
+            end else begin
+                // Datos siguientes: acumulamos XOR
+                for (int i = 0; i < Z; i++) begin
+                    syn_accum[i] <= syn_accum[i] ^ L_write_shifted[i][7];
+                end
+            end
         end
     end
+
+    assign cn_signs_out = syn_accum;
 
     // ==========================================
     // FASE 4: Reconstrucción (R_new)
