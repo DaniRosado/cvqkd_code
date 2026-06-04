@@ -13,7 +13,7 @@ ALICE_DATA_DIR = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_alice', 'data');
 ALICE_SIM_DIR  = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_alice', 'sim');
 
 %% 0.1. PARÁMETROS DEL SISTEMA
-ENABLE_EXPORT_VIVADO = true;
+ENABLE_EXPORT_VIVADO = false;
 ENABLE_GRAFICAS = false;
 
 % --- Parámetros de Trama y Memoria ---
@@ -27,7 +27,7 @@ N_FIBER     = N_FRAMES * L_trama + 1;
 
 % --- Parámetros Físicos del Canal ---
 Ts           = 1e-9;   % Tiempo de símbolo (1 Gbaud)
-T_real       = 0.5;    % Transmitancia real de la fibra
+T_real       = 0.45;    % Transmitancia real de la fibra
 xi_real      = 0.02;   % Ruido en exceso cuántico (SNU)
 V_A_snu      = 4.0;    % Varianza de Alice (SNU)
 V_elec_snu   = 0.1;    % Ruido electrónico (SNU)
@@ -253,6 +253,7 @@ for blk = 1:N_bloques
     
     % --- 3. ALICE: Reconstrucción y cálculo de LLR ---
     norm_x = norm(X_i);
+    norm_x = 1;
     if norm_x == 0, norm_x = 1.0; end
     X_norm = X_i / norm_x;
     
@@ -263,11 +264,56 @@ for blk = 1:N_bloques
     U = M_X * m_i; 
     
     % Cálculo final del LLR (incorporando la energía de ambos vectores)
-    LLR_all(:, blk) = inv_sigma2 * norm_x * norm_y * U;
+    LLR_all(:, blk) = inv_sigma2 * norm_x * norm_y * U ;
 end
 
 llrs_rx = LLR_all(:);
 key_bits_tx = bits_bob_all(:);
+
+if ENABLE_EXPORT_VIVADO
+    disp('   -> Exportando archivos para el Datapath de Alice...');
+
+    % 1. Entradas X crudas de Alice (128 bits por línea)
+    fid_alice_in = fopen(fullfile(DATA_DIR, 'alice_mdr_inputs.txt'), 'w');
+    for blk = 1:N_bloques
+        X_int16 = int16(X(:, blk));
+        bin_str = '';
+        for dim = 8:-1:1
+            bin_str = [bin_str, dec2hex(typecast(X_int16(dim), 'uint16'), 4)];
+        end
+        fprintf(fid_alice_in, '%s\n', bin_str);
+    end
+    fclose(fid_alice_in);
+
+    % 2. Factor K dinámico del ARM (Formato Q10 para balancear bits, 1 por línea)
+    % Usamos Q10 porque K_dyn suele ser un número grande (decenas de miles)
+    fid_k = fopen(fullfile(DATA_DIR, 'alice_k_dynamic.txt'), 'w');
+    for blk = 1:N_bloques
+        k_q10 = int32(round(K_dyn_all(blk) * 2^10));
+        fprintf(fid_k, '%08X\n', typecast(k_q10, 'uint32'));
+    end
+    fclose(fid_k);
+
+    % 3. LLRs Esperados en formato Signo-Magnitud 8-bits
+    fid_llr_hw = fopen(fullfile(DATA_DIR, 'expected_llrs_hardware.txt'), 'w');
+    for blk = 1:N_bloques
+        for dim = 1:8
+            val = round(LLR_all(dim, blk));
+            
+            % Saturador L_BRAM
+            if val > 127,  val = 127;  end
+            if val < -127, val = -127; end
+            
+            if val < 0
+                sm_val = 128 + abs(val); % Bit 7 a 1 (Negativo)
+            else
+                sm_val = val;            % Bit 7 a 0 (Positivo)
+            end
+            fprintf(fid_llr_hw, '%02X\n', sm_val);
+        end
+    end
+    fclose(fid_llr_hw);
+end
 
 %% 9. Carga y expansión de la matriz LDPC
 disp('9. Carga matriz LDPC y Sindrome...');
@@ -302,7 +348,7 @@ fprintf('   9.3. [!] Bits de Síndrome activos (Ecuaciones fallidas): %d / %d\n'
 disp('10. Iniciando decodificacion LDPC (scaled min-sum)...');
 
 alpha = 0.75;
-max_iter = 2; % Limitado a 2 iteraciones para verificar el cambio de iteración
+max_iter = 100; % Limitado a 2 iteraciones para verificar el cambio de iteración
 llr_scale = 1;
 
 % 1. Cálculo en flotante
