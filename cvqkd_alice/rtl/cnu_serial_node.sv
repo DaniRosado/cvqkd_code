@@ -80,9 +80,7 @@ module cnu_serial_node (
     
     always_comb begin
         scaled_min1 = reg_min1 - (reg_min1 >> 2);
-        //scaled_min1 = reg_min1;
         scaled_min2 = reg_min2 - (reg_min2 >> 2);
-        //scaled_min2 = reg_min2;
     end
 
     // Asignación a las salidas

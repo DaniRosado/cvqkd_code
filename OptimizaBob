@@ -1,0 +1,224 @@
+### Objetivo
+
+Refactorizar, parametrizar, estructurar y sintetizar el módulo hardware de Reconciliación Multidimensional (MDR) de Bob (SystemVerilog), transformando un prototipo funcional en un diseño modular de calidad profesional (RTL) para la extracción de métricas físicas (área y latencia).
+
+### Resumen general
+
+El proceso consta de tres fases secuenciales. La Fase 1 reorganiza el sistema de archivos del proyecto aislando el código fuente, los bancos de pruebas y los datos. La Fase 2 centraliza los parámetros estructurales ("números mágicos") en un paquete global unificado e inyecta estos parámetros en los módulos existentes. La Fase 3 automatiza la síntesis lógica aislada ("Out-of-Context") mediante un script TCL en Vivado para verificar la temporización y el consumo de recursos en silicio sin necesidad de conectarlo al resto de la FPGA.
+
+### Requisitos previos
+
+1. Entorno de terminal Linux accesible (bash, zsh o fish).
+2. Binario de Xilinx Vivado accesible en el `$PATH` del sistema (el comando `vivado` debe responder).
+3. Existencia de los siguientes archivos en el directorio actual:
+* `mdr_bob_top.sv`
+* `mdr_bob_fsm.sv`
+* `mdr_bob_datapath.sv`
+* `mdr_rom_pkg.sv`
+* `tb_mdr_bob_top.sv`
+* Archivos `.txt` exportados desde MATLAB (`bob_mdr_inputs.txt`, `expected_m_messages.txt`, `bob_random_bits.txt`).
+
+
+4. Editor de texto instalado (nvim, vim o nano).
+
+---
+
+### Fase 1: Estructuración del Directorio de Trabajo
+
+#### Paso 1.1: Creación del árbol de directorios
+
+* **Objetivo:** Crear una jerarquía de carpetas estandarizada para proyectos de diseño digital.
+* **Por qué debe hacerse:** Evita colisiones de nombres, facilita el control de versiones (Git) y permite que los scripts de automatización localicen los archivos de forma predecible.
+* **Entradas:** Directorio de trabajo actual.
+* **Acciones:** Ejecutar comandos de creación de directorios en la terminal.
+* **Resultado esperado:** Creación de cinco carpetas vacías: `rtl`, `tb`, `scripts`, `data`, `syn`.
+* **Verificación:** Ejecutar el comando `ls -d rtl tb scripts data syn`. Debe listar las cinco carpetas sin mostrar errores.
+* **Errores comunes y resolución:**
+* *Error:* Permisos denegados. *Solución:* Ejecutar con un usuario que tenga permisos de escritura en el directorio actual.
+
+
+
+#### Paso 1.2: Clasificación de archivos existentes
+
+* **Objetivo:** Mover cada archivo de diseño, simulación y datos a su carpeta semántica correspondiente.
+* **Por qué debe hacerse:** Aislar el código sintetizable (RTL) del código de simulación (Testbench) es obligatorio para que las herramientas de síntesis no intenten compilar archivos de prueba (lo cual provocaría fallos fatales).
+* **Entradas:** Archivos `.sv` y `.txt` en el directorio raíz.
+* **Acciones:** Mover los archivos a las carpetas creadas en el Paso 1.1 mediante comandos `mv`.
+1. Mover código RTL: `mv mdr_bob_top.sv mdr_bob_fsm.sv mdr_bob_datapath.sv mdr_rom_pkg.sv rtl/`
+2. Mover simulación: `mv tb_mdr_bob_top.sv tb/`
+3. Mover datos: `mv *.txt data/`
+
+
+* **Resultado esperado:** El directorio raíz solo debe contener las carpetas, sin archivos sueltos.
+* **Verificación:** Ejecutar `ls -p | grep -v /`. Si no devuelve nada, la limpieza ha sido exitosa.
+* **Errores comunes y resolución:**
+* *Error:* `No such file or directory`. *Solución:* Verificar que el nombre exacto del archivo coincide y que no ha sido movido previamente.
+
+
+
+---
+
+### Fase 2: Parametrización y Limpieza de Código (SystemVerilog)
+
+#### Paso 2.1: Creación del paquete global de parámetros
+
+* **Objetivo:** Centralizar todas las dimensiones y anchuras de bus de la arquitectura en un único archivo.
+* **Por qué debe hacerse:** Permite escalar la arquitectura (ej. pasar de 8 a 16 dimensiones) modificando un solo archivo, eliminando la necesidad de buscar y reemplazar valores a lo largo de múltiples módulos.
+* **Entradas:** Ninguna (archivo nuevo).
+* **Acciones:** Crear un archivo llamado `mdr_bob_pkg.sv` dentro del directorio `rtl/`.
+* **Resultado esperado:** Un paquete compilable que define las constantes de la arquitectura.
+* **Código a escribir:** (Ver Anexo A para el contenido exacto de `mdr_bob_pkg.sv`).
+* **Verificación:** Abrir el archivo creado (`cat rtl/mdr_bob_pkg.sv`) y comprobar que contiene la directiva `package mdr_bob_pkg;`.
+* **Errores comunes y resolución:**
+* *Error:* Errores de sintaxis al compilar más adelante. *Solución:* Asegurarse de cerrar el paquete con `endpackage` y usar la sintaxis `localparam int` o `localparam logic`.
+
+
+
+#### Paso 2.2: Refactorización del Datapath
+
+* **Objetivo:** Reemplazar los "números mágicos" hardcodeados en el Datapath por las variables del nuevo paquete.
+* **Por qué debe hacerse:** Hace que el datapath sea dependiente de los parámetros globales, garantizando la consistencia matemática estructural.
+* **Entradas:** El archivo `rtl/mdr_bob_datapath.sv`.
+* **Acciones:**
+1. Importar el paquete al principio del archivo, justo antes de la declaración del módulo: `import mdr_bob_pkg::*;`
+2. Buscar todos los bucles `for (int i = 0; i < 8; i++)` y reemplazarlos por `for (int i = 0; i < DIMENSIONS; i++)`.
+3. Buscar las declaraciones de arrays como `logic signed [15:0] Y_in [0:7]` y reemplazarlas por `logic signed [ADC_WIDTH-1:0] Y_in [0:DIMENSIONS-1]`.
+
+
+* **Resultado esperado:** Un datapath agnóstico al tamaño del bloque de datos.
+* **Verificación:** Ejecutar un `grep "8" rtl/mdr_bob_datapath.sv`. No debe haber referencias al número 8 relacionadas con el tamaño de los arrays o bucles.
+* **Errores comunes y resolución:**
+* *Error:* Índices de arrays negativos si se escribe `[DIMENSIONS:0]` en lugar de `[0:DIMENSIONS-1]`. *Solución:* Revisar la dirección de los buses en la sintaxis de SystemVerilog (Packed vs Unpacked).
+
+
+
+#### Paso 2.3: Inserción de Cabeceras y Limpieza de Código Muerto
+
+* **Objetivo:** Añadir metadatos descriptivos y purgar lógica comentada.
+* **Por qué debe hacerse:** Es un estándar de la industria hardware para documentar puertos, latencia y autoría. Eliminar código muerto evita confusiones de mantenimiento.
+* **Entradas:** Todos los archivos en `rtl/`.
+* **Acciones:**
+1. Eliminar cualquier bloque de código rodeado por `/* ... */` o precedido por `// BORRAR:`.
+2. Añadir en la primera línea de cada archivo la cabecera estándar especificada en el Anexo B.
+
+
+* **Resultado esperado:** Código fuente limpio con cabecera ASCII de 10 líneas al principio.
+* **Verificación:** Leer las primeras 10 líneas con `head -n 10 rtl/mdr_bob_top.sv`. Debe mostrar la cabecera formateada.
+
+---
+
+### Fase 3: Síntesis Out-of-Context en Vivado
+
+#### Paso 3.1: Creación del Script de Automatización (TCL)
+
+* **Objetivo:** Generar un script de control para que Vivado sintetice el diseño por línea de comandos, sin interfaz gráfica.
+* **Por qué debe hacerse:** Permite extraer métricas de hardware de forma automatizada y replicable. La síntesis "Out-of-Context" (OOC) evita que Vivado optimice y borre los puertos de entrada/salida que aún no están conectados a pines físicos de la FPGA.
+* **Entradas:** Ruta de los archivos RTL.
+* **Acciones:** Crear el archivo `syn/synth_ooc.tcl`.
+* **Resultado esperado:** Script TCL con instrucciones de carga de archivos, definición del módulo *Top* y comandos de síntesis.
+* **Código a escribir:** (Ver Anexo C para el contenido de `synth_ooc.tcl`).
+* **Verificación:** El archivo existe en `syn/` y contiene el comando `synth_design -mode out_of_context`.
+
+#### Paso 3.2: Ejecución de la Síntesis
+
+* **Objetivo:** Compilar el código RTL a puertas lógicas simuladas.
+* **Por qué debe hacerse:** Es la única manera de certificar que el código SystemVerilog no contiene bucles combinacionales puros, latches inferidos por accidente, y que cerrará *timing*.
+* **Entradas:** El script `synth_ooc.tcl` y los archivos RTL.
+* **Acciones:**
+1. Navegar a la carpeta de síntesis: `cd syn/`
+2. Ejecutar Vivado en modo lote (Batch): `vivado -mode batch -source synth_ooc.tcl`
+
+
+* **Resultado esperado:** Ejecución sin errores que finalice indicando `INFO: [Common 17-206] Exiting Vivado`.
+* **Verificación:** Comprobar que en la carpeta `syn/` han aparecido dos nuevos archivos: `utilization_report.txt` y `timing_report.txt`.
+* **Errores comunes y resolución:**
+* *Error:* `syntax error near unexpected token`. *Solución:* Revisar que los puntos y comas en SystemVerilog estén presentes.
+* *Error:* `Cannot resolve module`. *Solución:* Asegurarse de que el orden de lectura en el archivo TCL carga primero los paquetes (`_pkg.sv`) y luego los módulos jerárquicos.
+
+
+
+---
+
+### Validación final
+
+Verificar la siguiente Checklist de cumplimiento estricto:
+
+* [ ] La carpeta raíz contiene exactamente los directorios: `rtl`, `tb`, `scripts`, `data`, `syn`.
+* [ ] El archivo `rtl/mdr_bob_pkg.sv` existe y compila.
+* [ ] El datapath no contiene el número duro `8` para sus bucles principales.
+* [ ] Todos los archivos RTL tienen cabecera de documentación técnica.
+* [ ] La carpeta `syn/` contiene los archivos `utilization_report.txt` y `timing_report.txt`.
+* [ ] El reporte de *timing* indica `WNS > 0` (Worst Negative Slack positivo), asegurando que el diseño soporta la frecuencia objetivo.
+
+---
+
+### Anexos
+
+#### Anexo A: Contenido esperado para `mdr_bob_pkg.sv`
+
+Crear en: `rtl/mdr_bob_pkg.sv`
+
+```systemverilog
+package mdr_bob_pkg;
+    // Parámetros Arquitectónicos
+    localparam int DIMENSIONS = 8;
+    localparam int ADC_WIDTH  = 16;
+    
+    // Parámetros de Punto Fijo (DSP)
+    localparam int Q_FRAC_BITS_ROM  = 24; // Formato Q24 para la raíz inversa
+    localparam int Q_FRAC_BITS_OUT  = 24; // Mensajes m formateados a Q24 (Evita overflow)
+    
+    // Dimensionamiento de Tuberías
+    localparam int DELAY_STAGES = 7;
+endpackage
+
+```
+
+#### Anexo B: Cabecera Estándar ASCII
+
+Debe insertarse en la línea 1 de cada archivo `.sv`:
+
+```systemverilog
+// ============================================================================
+// Módulo:       [Nombre del Archivo, ej. mdr_bob_datapath]
+// Proyecto:     CV-QKD Hardware Accelerator
+// Descripción:  [Breve descripción de la funcionalidad]
+// Dependencias: mdr_bob_pkg.sv
+// ----------------------------------------------------------------------------
+// Notas de Arquitectura:
+// Diseño altamente pipelinizado (Latencia total: X ciclos).
+// ============================================================================
+
+```
+
+#### Anexo C: Contenido del Script de Síntesis `synth_ooc.tcl`
+
+Crear en: `syn/synth_ooc.tcl`
+
+```tcl
+# Script de Síntesis OOC para Vivado
+# Definición de la familia FPGA (Ajustar a la placa objetivo, ej. Zynq 7000)
+set part_number "xc7z020clg400-1"
+
+# 1. Leer los archivos fuente en el orden correcto de dependencias
+read_verilog -sv ../rtl/mdr_bob_pkg.sv
+read_verilog -sv ../rtl/mdr_rom_pkg.sv
+read_verilog -sv ../rtl/mdr_bob_datapath.sv
+read_verilog -sv ../rtl/mdr_bob_fsm.sv
+read_verilog -sv ../rtl/mdr_bob_top.sv
+
+# 2. Ejecutar la síntesis lógica Out-of-Context
+# El switch -mode out_of_context es crítico para evitar optimización de I/O
+synth_design -top mdr_bob_top -part $part_number -mode out_of_context
+
+# 3. Restricciones de reloj virtuales (100 MHz = 10 ns)
+create_clock -name clk -period 10.0 [get_ports clk]
+
+# 4. Generación de Reportes
+report_utilization -file utilization_report.txt
+report_timing_summary -file timing_report.txt
+
+# Finalizar script
+exit
+
+```

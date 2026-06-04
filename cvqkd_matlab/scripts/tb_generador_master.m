@@ -617,6 +617,30 @@ if ENABLE_EXPORT_VIVADO
     fclose(fid_acc);
 
     % =====================================================================
+    % EXPORTAR ENTRADAS MDR BOB (Bloques de 8 dimensiones en 16-bits)
+    % =====================================================================
+    disp('   -> Exportando bob_mdr_inputs.txt para Vivado (Bloques 8D)...');
+    fid_mdr_in = fopen(fullfile(DATA_DIR, 'bob_mdr_inputs.txt'), 'w');
+
+    for blk = 1:N_bloques
+        % Y(:, blk) tiene las 8 coordenadas en doble precisión en la simulación,
+        % pero recordamos que provienen del int16(round()) del ADC de Bob.
+        Y_int16 = int16(Y(:, blk)); 
+        
+        % Formateamos como un bus gigante de 128 bits (8 variables x 16 bits)
+        % Orden: Y8 Y7 Y6 Y5 Y4 Y3 Y2 Y1 (Endianness para SystemVerilog)
+        bin_str = '';
+        for dim = 8:-1:1
+            % Aseguramos formato complemento a 2 sin signo para dec2hex
+            hex_val = dec2hex(typecast(Y_int16(dim), 'uint16'), 4); 
+            bin_str = [bin_str, hex_val];
+        end
+        fprintf(fid_mdr_in, '%s\n', bin_str);
+    end
+    fclose(fid_mdr_in);
+    disp('   -> Archivo de entradas generado con éxito.');
+
+    % =====================================================================
     % Exportar Datos Crudos (ADC) para el DSP en FPGA
     % Cuantizamos a 16 bits la señal cruda con el ruido de fase INCLUIDO
     % =====================================================================
@@ -636,24 +660,38 @@ if ENABLE_EXPORT_VIVADO
         fprintf(fid_alice_full, '%04X%04X\n', typecast(Q_A_int(i), 'uint16'), typecast(P_A_int(i), 'uint16'));
     end
     fclose(fid_alice_full);
-    % Bob random bits (for MDR TX verification)
+   % =====================================================================
+    % Bob random bits (Empaquetado: 8 bits por línea para TB)
+    % =====================================================================
     fid_rand = fopen(fullfile(DATA_DIR, 'bob_random_bits.txt'), 'w');
-    bits_flat = bits_bob_all(:);
-    for i=1:length(bits_flat)
-        fprintf(fid_rand, '%d\n', bits_flat(i));
+    for blk = 1:N_bloques
+        bits_blk = bits_bob_all(:, blk);
+        bin_str = '';
+        % Orden Endianness SystemVerilog: [dim 8] ... [dim 1]
+        for dim = 8:-1:1
+            bin_str = [bin_str, num2str(bits_blk(dim))];
+        end
+        fprintf(fid_rand, '%s\n', bin_str);
     end
     fclose(fid_rand);
-    % Expected public messages m_i (for MDR TX verification)
+
+    % =====================================================================
+    % Expected public messages m_i (Empaquetado: 256 bits = 8 x 32b por línea)
+    % =====================================================================
     fid_m = fopen(fullfile(DATA_DIR, 'expected_m_messages.txt'), 'w');
     for blk = 1:N_bloques
         Y_i = Y(:, blk);
         Y_norm = Y_i / norm(Y_i);
         M_Y = generar_matriz_ortogonal(Y_norm);
         m_i = M_Y' * (1 - 2*bits_bob_all(:, blk));
-        for dim = 1:N_dimensiones
-            m_q31 = int32(round(m_i(dim) * 2^31));
-            fprintf(fid_m, '%08X\n', typecast(m_q31, 'uint32'));
+        
+        hex_str_line = '';
+        for dim = 8:-1:1
+            % CAMBIO VITAL: Formato Q24 en lugar de Q31 para cuadrar con FPGA
+            m_q24 = int32(round(m_i(dim) * 2^24));
+            hex_str_line = [hex_str_line, dec2hex(typecast(m_q24, 'uint32'), 8)];
         end
+        fprintf(fid_m, '%s\n', hex_str_line);
     end
     fclose(fid_m);
     % Expected LLR results (for MDR RX verification)
