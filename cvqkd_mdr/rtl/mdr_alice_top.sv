@@ -8,7 +8,9 @@
 // Dependencias: mdr_alice_fsm.sv, mdr_alice_datapath.sv
 // ============================================================================
 
-module mdr_alice_top (
+module mdr_alice_top #(
+    parameter int TOTAL_BLOCKS = 3264 // <--- AÑADIR ESTO
+)(
     input  logic         clk,
     input  logic         rst_n,
     
@@ -83,7 +85,9 @@ module mdr_alice_top (
     // =====================================================================
     
     // El Cerebro: Dicta el ritmo de carga (1 bloque cada 8 ciclos de reloj)
-    mdr_alice_fsm u_fsm (
+    mdr_alice_fsm#(
+        .TOTAL_BLOCKS(TOTAL_BLOCKS) // <--- PASARLO AQUÍ
+    ) u_fsm (
         .clk             (clk),
         .rst_n           (rst_n),
         .start           (start),
