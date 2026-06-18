@@ -146,7 +146,7 @@ module tb_mdr_alice_top();
                 $display("       -> ESPERADO LLR (SM): %b (%0d decimal)", exp_llr, exp_val);
                 errores_totales++;
                 
-                if (errores_totales > 10) begin
+                if (errores_totales > 20) begin
                     $display("[TB-ALICE] Demasiados errores detectados. Abortando.");
                     $stop;
                 end

@@ -12,6 +12,7 @@ module alice_post_processing_core #(
     parameter int Z = 384,
     parameter int W = 8,
     parameter int BUS_WIDTH = Z * W // 3072 bits
+    parameter int TOTAL_BLOCKS = 3264
 )(
     input  logic         clk,
     input  logic         rst_n,
@@ -48,7 +49,9 @@ module alice_post_processing_core #(
     // =====================================================================
     // 2. INSTANCIACIÓN DEL MDR (Generador de LLRs)
     // =====================================================================
-    mdr_alice_top u_MDR (
+    mdr_alice_top # (
+        .TOTAL_BLOCKS(TOTAL_BLOCKS)
+    )u_MDR (
         .clk             (clk),
         .rst_n           (rst_n),
         .start           (start_mdr),

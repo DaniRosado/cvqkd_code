@@ -13,7 +13,7 @@ ALICE_DATA_DIR = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_alice', 'data');
 ALICE_SIM_DIR  = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_alice', 'sim');
 
 %% 0.1. PARÁMETROS DEL SISTEMA
-ENABLE_EXPORT_VIVADO = false;
+ENABLE_EXPORT_VIVADO = true;
 ENABLE_GRAFICAS = false;
 
 % --- Parámetros de Trama y Memoria ---
@@ -235,6 +235,8 @@ LLR_all = zeros(N_dimensiones, N_bloques);
 sigma_eff = double(Sigma_ideal);
 inv_sigma2 = 2.0 / (sigma_eff * sigma_eff + eps);
 
+K_dyn_all = zeros(1, N_bloques);
+
 for blk = 1:N_bloques
     % --- 1. DATOS DE BOB Y ALICE ---
     Y_i = Y(:, blk);
@@ -265,6 +267,7 @@ for blk = 1:N_bloques
     
     % Cálculo final del LLR (incorporando la energía de ambos vectores)
     LLR_all(:, blk) = inv_sigma2 * norm_x * norm_y * U ;
+    K_dyn_all(blk) = inv_sigma2 * norm_y;
 end
 
 llrs_rx = LLR_all(:);
@@ -844,3 +847,69 @@ if ENABLE_EXPORT_VIVADO
     fclose(fid_l_write);
     fprintf('   -> expected_L_write_all.txt generado (%d edges).\n', length(L_write_history));
 end
+
+disp('======================================================');
+disp('--- PEGA ESTO EN MDR_ALICE_DATAPATH.SV ---');
+disp('======================================================');
+
+% Inyectamos un vector de prueba (1 a 8) para extraer el ADN de tu matriz
+X_dummy = (1:8)'; 
+M_X = generar_matriz_ortogonal(X_dummy);
+
+% Extraemos los índices (restamos 1 porque SystemVerilog empieza en 0)
+M_IDX = abs(M_X) - 1;
+
+% Extraemos los signos (1 si es negativo, 0 si es positivo)
+M_NEG = M_X < 0;
+
+% 1. Imprimir M_IDX
+fprintf('localparam int M_IDX [0:7][0:7] = ''{\n');
+for r = 1:8
+    fprintf('    ''{%d, %d, %d, %d, %d, %d, %d, %d}', M_IDX(r,:));
+    if r < 8, fprintf(','); end
+    fprintf('\n');
+end
+fprintf('};\n\n');
+
+% 2. Imprimir M_NEG
+fprintf('localparam logic M_NEG [0:7][0:7] = ''{\n');
+for r = 1:8
+    fprintf('    ''{%d, %d, %d, %d, %d, %d, %d, %d}', M_NEG(r,:));
+    if r < 8, fprintf(','); end
+    fprintf('\n');
+end
+fprintf('};\n');
+disp('======================================================');
+
+disp('======================================================');
+disp('--- PEGA ESTE CÓDIGO EN mdr_alice_datapath.sv ---');
+disp('======================================================');
+
+% Inyectamos un vector de prueba para extraer el ADN de TU matriz exacta
+X_dummy = (1:8)'; 
+M_X = generar_matriz_ortogonal(X_dummy);
+
+% Extraemos los índices (restamos 1 porque SystemVerilog empieza en 0)
+M_IDX = abs(M_X) - 1;
+
+% Extraemos los signos (1 si es negativo, 0 si es positivo)
+M_NEG = M_X < 0;
+
+% 1. Imprimir M_IDX
+fprintf('localparam int M_IDX [0:7][0:7] = ''{\n');
+for r = 1:8
+    fprintf('    ''{%d, %d, %d, %d, %d, %d, %d, %d}', M_IDX(r,:));
+    if r < 8, fprintf(','); end
+    fprintf('\n');
+end
+fprintf('};\n\n');
+
+% 2. Imprimir M_NEG
+fprintf('localparam logic M_NEG [0:7][0:7] = ''{\n');
+for r = 1:8
+    fprintf('    ''{%d, %d, %d, %d, %d, %d, %d, %d}', M_NEG(r,:));
+    if r < 8, fprintf(','); end
+    fprintf('\n');
+end
+fprintf('};\n');
+disp('======================================================');
