@@ -44,9 +44,9 @@ module tb_alice_post_processing_core();
 
     initial begin
         // Cargamos la "Verdad Absoluta" exportada desde MATLAB
-        $readmemh("alice_mdr_inputs.txt",    ram_x_mem);
-        $readmemh("expected_m_messages.txt", ram_m_mem); // Lo que llegó de Bob
-        $readmemh("alice_k_dynamic.txt",     ram_k_mem);
+        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/alice_mdr_inputs.txt",    ram_x_mem);
+        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_m_messages.txt", ram_m_mem); // Lo que llegó de Bob
+        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/alice_k_dynamic.txt",     ram_k_mem);
         
         $display("---------------------------------------------------");
         $display("[TB-CORE] Archivos de entrada cargados en memoria externa.");

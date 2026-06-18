@@ -11,7 +11,7 @@
 module alice_post_processing_core #(
     parameter int Z = 384,
     parameter int W = 8,
-    parameter int BUS_WIDTH = Z * W // 3072 bits
+    parameter int BUS_WIDTH = Z * W, // 3072 bits
     parameter int TOTAL_BLOCKS = 3264
 )(
     input  logic         clk,
