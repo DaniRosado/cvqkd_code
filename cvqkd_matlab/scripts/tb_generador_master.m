@@ -18,9 +18,9 @@ ENABLE_GRAFICAS = false;
 
 % --- Parámetros de Trama y Memoria ---
 L_trama     = 16;      % 1 Piloto + 15 Datos
-N_BOB_DATA  = 52224/2;   % Datos útiles que caben en la RAM de Bob
+N_BOB_DATA  = 26112;   % Datos útiles que caben en la RAM de Bob
 N_FRAMES    = ceil(N_BOB_DATA / 15); % ~3482 tramas
-N_SAMPLES   = 26112/2;   % Datos sacrificados para la estimación
+N_SAMPLES   = N_BOB_DATA/2;   % Datos sacrificados para la estimación
 
 % En la fibra viajan los datos + los pilotos. Sumamos 1 piloto final para interpolar
 N_FIBER     = N_FRAMES * L_trama + 1; 
@@ -128,7 +128,7 @@ P_B_int = int16(round(P_B_rec));  Q_B_int = int16(round(Q_B_rec));
 
 %% 5. SELECCIÓN DE PUNTEROS Y ESTIMACIÓN FLOTANTE (MATLAB IDEAL)
 disp('5. Seleccionando muestras de sacrificio y calculando métricas...');
-punteros = randperm(N_BOB_DATA, N_SAMPLES)' - 1;
+punteros = sort(randperm(N_BOB_DATA, N_SAMPLES)') - 1;
 
 % Máscara de sacrificio (1 = sacrificar, 0 = mantener)
 mascara_sacrificio = zeros(N_BOB_DATA, 1);

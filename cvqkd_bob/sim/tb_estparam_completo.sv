@@ -178,7 +178,7 @@ module tb_estparam_completo();
             $fclose(file_handle);
             $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_raw_adc.txt", mem_adc);
         end else begin
-            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/bob_raw_adc.txt", mem_adc);
+            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_raw_adc.txt", mem_adc);
         end
 
         file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/mask_bit.txt", "r");
@@ -186,7 +186,7 @@ module tb_estparam_completo();
             $fclose(file_handle);
             $readmemb("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/mask_bit.txt", mask_mem);
         end else begin
-            $readmemb("/home/drg/tmp/cvqkd_bob/Matlab/mask_bit.txt", mask_mem);
+            $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/mask_bit.txt", mask_mem);
         end
 
         file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/alice_ram.txt", "r");
@@ -194,7 +194,7 @@ module tb_estparam_completo();
             $fclose(file_handle);
             $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/alice_ram.txt", mem_alice_file);
         end else begin
-            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/alice_ram.txt", mem_alice_file);
+            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/alice_ram.txt", mem_alice_file);
         end
 
         file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/expected_llr_math.txt", "r");
@@ -202,7 +202,7 @@ module tb_estparam_completo();
             $fclose(file_handle);
             $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/expected_llr_math.txt", mem_expected);
         end else begin
-            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/expected_llr_math.txt", mem_expected);
+            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_llr_math.txt", mem_expected);
         end
 
         rst = 1; adc_valid = 0; adc_ptr = 0; calib_VarA = 32'd40000; alice_we = 0;
