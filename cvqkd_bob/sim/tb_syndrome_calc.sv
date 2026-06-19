@@ -36,7 +36,7 @@ module tb_syndrome_calc;
             $fclose(file_handle);
             $readmemb("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/u_bits.txt", ram_u_bits);
         end else begin
-            $readmemb("/home/drg/tmp/cvqkd_bob/Matlab/u_bits.txt", ram_u_bits);
+            $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/u_bits.txt", ram_u_bits);
         end
 
         file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/expected_syndrome.txt", "r");
@@ -44,7 +44,7 @@ module tb_syndrome_calc;
             $fclose(file_handle);
             $readmemb("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/expected_syndrome.txt", ram_expected_s);
         end else begin
-            $readmemb("/home/drg/tmp/cvqkd_bob/Matlab/expected_syndrome.txt", ram_expected_s);
+            $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_syndrome.txt", ram_expected_s);
         end
     end
 
