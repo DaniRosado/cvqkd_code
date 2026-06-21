@@ -1,0 +1,8 @@
+cordic_rot_ip.vhd,vhdl,xil_defaultlib,../../../../../../VivadoProyects/IPs_cqkd/cordic_rot_ip/sim/cordic_rot_ip.vhd,incdir="../../../../../../AMD/Xilin/2025.2/data/rsb/busdef"
+cordic_vect_ip.vhd,vhdl,xil_defaultlib,../../../../../../VivadoProyects/IPs_cqkd/cordic_vect_ip/sim/cordic_vect_ip.vhd,incdir="../../../../../../AMD/Xilin/2025.2/data/rsb/busdef"
+cvqkd_bob_dsp_top.sv,systemverilog,xil_defaultlib,../../../../../home/drg/TFG/cvqkd_code/cvqkd_bob/rtl/cvqkd_bob_dsp_top.sv,incdir="../../../../../../AMD/Xilin/2025.2/data/rsb/busdef"
+demux_framer.sv,systemverilog,xil_defaultlib,../../../../../home/drg/TFG/cvqkd_code/cvqkd_bob/rtl/demux_framer.sv,incdir="../../../../../../AMD/Xilin/2025.2/data/rsb/busdef"
+phase_interpolator.sv,systemverilog,xil_defaultlib,../../../../../home/drg/TFG/cvqkd_code/cvqkd_bob/rtl/phase_interpolator.sv,incdir="../../../../../../AMD/Xilin/2025.2/data/rsb/busdef"
+sync_fifo.sv,systemverilog,xil_defaultlib,../../../../../home/drg/TFG/cvqkd_code/cvqkd_bob/rtl/sync_fifo.sv,incdir="../../../../../../AMD/Xilin/2025.2/data/rsb/busdef"
+tb_cvqkd_bob_dsp_top.sv,systemverilog,xil_defaultlib,../../../../../home/drg/TFG/cvqkd_code/cvqkd_bob/sim/tb_cvqkd_bob_dsp_top.sv,incdir="../../../../../../AMD/Xilin/2025.2/data/rsb/busdef"
+glbl.v,Verilog,xil_defaultlib,glbl.v

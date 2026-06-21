@@ -122,14 +122,14 @@ module tb_param_estimator_top();
             // Si quieres ver lo robusto que es tu diseño, puedes descomentar 
             // esto para inyectar datos con pausas aleatorias simulando una red lenta.
             // ===============================================================
-            /*
+
             if ($urandom_range(0, 10) > 8) begin
                 bob_stream_valid   = 0;
                 alice_stream_valid = 0;
                 @(posedge clk);
                 @(posedge clk);
             end
-            */
+            
         end
         
         // 5. Apagamos el grifo de datos

@@ -64,9 +64,9 @@ module tb_cvqkd_bob_dsp_top();
             file_err = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_errors.txt", "w");
             file_phase = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_phase_interp.txt", "w");
         end else begin
-            file_out = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_bob/sim/sim_outputs.txt", "w");
-            file_err = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_bob/sim/sim_errors.txt", "w");
-            file_phase = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_bob/sim/sim_phase_interp.txt", "w");
+            file_out = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/sim_outputs.txt", "w");
+            file_err = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/sim_errors.txt", "w");
+            file_phase = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/sim_phase_interp.txt", "w");
         end
     end
 
@@ -161,7 +161,7 @@ module tb_cvqkd_bob_dsp_top();
             $fclose(file_handle);
             $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_raw_adc.txt", memoria_in);
         end else begin
-            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/bob_raw_adc.txt", memoria_in);
+            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_raw_adc.txt", memoria_in);
         end
 
         file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_ram.txt", "r");
@@ -169,7 +169,7 @@ module tb_cvqkd_bob_dsp_top();
             $fclose(file_handle);
             $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_ram.txt", memoria_expected);
         end else begin
-            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/bob_ram.txt", memoria_expected);
+            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/databob_ram.txt", memoria_expected);
         end
 
         file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_pilotos_raw.txt", "r");
@@ -177,7 +177,7 @@ module tb_cvqkd_bob_dsp_top();
             $fclose(file_handle);
             $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_pilotos_raw.txt", mem_pilotos_esperados);
         end else begin
-            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/fase_pilotos_raw.txt", mem_pilotos_esperados);
+            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/fase_pilotos_raw.txt", mem_pilotos_esperados);
         end
 
         file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_estimada_datos.txt", "r");
@@ -185,7 +185,7 @@ module tb_cvqkd_bob_dsp_top();
             $fclose(file_handle);
             $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_estimada_datos.txt", mem_fase_estimada);
         end else begin
-            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/fase_estimada_datos.txt", mem_fase_estimada);
+            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/fase_estimada_datos.txt", mem_fase_estimada);
         end
 
         rst = 1'b1; valid_in = 1'b0; p_in = '0; q_in = '0;

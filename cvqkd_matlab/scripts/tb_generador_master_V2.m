@@ -9,12 +9,10 @@ if isempty(SCRIPT_DIR), SCRIPT_DIR = pwd(); end
 addpath(SCRIPT_DIR);
 DATA_DIR   = fullfile(SCRIPT_DIR, '..', 'data');
 BOB_DIR    = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_bob');
-ALICE_DATA_DIR = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_alice', 'data');
-ALICE_SIM_DIR  = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_alice', 'sim');
 
 %% 0.1. PARÁMETROS DEL SISTEMA
 ENABLE_EXPORT_VIVADO = true;
-ENABLE_GRAFICAS = false;
+ENABLE_GRAFICAS = true;
 
 % --- Parámetros de Trama y Memoria ---
 L_trama     = 16;      % 1 Piloto + 15 Datos
@@ -520,7 +518,7 @@ if ENABLE_EXPORT_VIVADO
     % 2. DSP: Fase (Pilotos y Estimación)
     % Fase cruda de pilotos
     fid_pil = fopen(fullfile(DATA_DIR, 'fase_pilotos_raw.txt'), 'w');
-    fases_q15 = int32(round(fase_pilotos_raw * 32768));
+    fases_q15 = int32(round(fase_pilotos_limpia * 32768));
     for i=1:length(fases_q15)
         fprintf(fid_pil, '%08X\n', typecast(fases_q15(i), 'uint32'));
     end

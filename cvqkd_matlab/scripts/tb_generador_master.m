@@ -14,7 +14,7 @@ ALICE_SIM_DIR  = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_alice', 'sim');
 
 %% 0.1. PARÁMETROS DEL SISTEMA
 ENABLE_EXPORT_VIVADO = true;
-ENABLE_GRAFICAS = false;
+ENABLE_GRAFICAS = true;
 
 % --- Parámetros de Trama y Memoria ---
 L_trama     = 16;      % 1 Piloto + 15 Datos
@@ -639,7 +639,7 @@ if ENABLE_EXPORT_VIVADO
     fid_mask = fopen(fullfile(DATA_DIR, 'mask_bit.txt'), 'w');
     for i=1:N_BOB_DATA, fprintf(fid_mask, '%d\n', mascara_sacrificio(i)); end; fclose(fid_mask);
 
-    fid_bob = fopen(fullfile(DATA_DIR, 'bob_ram.txt'), 'w');
+    fid_bob = fopen(fullfile(DATA_DIR, 'bob_ram.txt')0, 'w');
     for i=1:N_BOB_DATA, fprintf(fid_bob, '%04X%04X\n', typecast(Q_B_int(i), 'uint16'), typecast(P_B_int(i), 'uint16')); end; fclose(fid_bob);
 
     fid_alice = fopen(fullfile(DATA_DIR, 'alice_ram.txt'), 'w');

@@ -101,7 +101,8 @@ module param_estimator_top #(
                 end
                 
                 // Cuando procesamos la última muestra, disparamos la unidad matemática
-                if (muestras_procesadas == NUM_SAMPLES && !done) begin
+                // 4. Disparamos las divisiones matemáticas (Pulso exacto de 1 ciclo)
+                if (mac_enable && (muestras_procesadas == NUM_SAMPLES - 1)) begin
                     start_math <= 1'b1;
                 end else begin
                     start_math <= 1'b0;
