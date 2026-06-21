@@ -91,7 +91,7 @@ module cvqkd_bob_subsystem_top #(
     ) param_estimator_inst (
         .clk(clk),
         .rst(rst),
-        .start(start_est),
+        .start(mask_valid),
         .done(done_est),
         .bob_stream_valid(router_valid_sac),
         .bob_stream_data(router_data_sac),

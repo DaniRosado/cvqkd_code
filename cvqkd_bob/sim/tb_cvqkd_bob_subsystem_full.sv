@@ -5,7 +5,7 @@ module tb_cvqkd_bob_subsystem_full();
     localparam ADC_WIDTH     = 16;
     localparam TEST_SAMPLES   = 26112/2; // 13056
     localparam TOTAL_BOB_DATA = 26112;
-    localparam FIBER_SAMPLES  = 27857;   // Trama con pilotos incluidos
+    localparam NUM_SAMPLES_IN  = 55713;   // Trama con pilotos incluidos
     
     logic clk, rst;
     
@@ -25,7 +25,7 @@ module tb_cvqkd_bob_subsystem_full();
     logic signed [31:0]          T_est, T_sqrt_est, sigma_sq_est, sigma_est;
 
     // Buffers para volcar los .txt de MATLAB
-    logic [31:0] mem_fiber      [0:FIBER_SAMPLES-1];
+    logic [31:0] mem_fiber      [0:NUM_SAMPLES_IN-1];
     logic        mem_mask       [0:TOTAL_BOB_DATA-1];
     logic [31:0] mem_alice      [0:TEST_SAMPLES-1];
     logic [31:0] mem_expected   [0:3];
@@ -74,7 +74,7 @@ module tb_cvqkd_bob_subsystem_full();
 
         // --- Fase 2: Recepción Óptica Incondicional (Llenado de Mega-FIFO) ---
         $display("[TB FULL] Generacion Cuantica: Inyectando tramas clasicas con pilotos desde fibra...");
-        for (int i = 0; i < FIBER_SAMPLES; i++) begin
+        for (int i = 0; i < NUM_SAMPLES_IN; i++) begin
             @(posedge clk);
             valid_in = 1'b1;
             q_in     = mem_fiber[i][31:16];

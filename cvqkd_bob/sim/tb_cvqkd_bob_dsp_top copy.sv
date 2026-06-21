@@ -5,46 +5,10 @@ module tb_cvqkd_bob_dsp_top_2();
     // =========================================================================
     // 1. Declaración de Parámetros y Señales
     // =========================================================================
-    localparam ADC_WIDTH = 16;
-    localparam NUM_SAMPLES_IN = 55713;  
-    localparam NUM_SAMPLES_OUT = 52230; 
-
-    logic clk;
-    logic rst;
-    
-    logic signed [ADC_WIDTH-1:0] p_in, q_in;
-    logic                        valid_in;
-    logic signed [ADC_WIDTH-1:0] p_out, q_out;
-    logic                        valid_out;
-
-    // Memorias
-    logic [31:0] memoria_in [0:NUM_SAMPLES_IN-1];
-    logic [31:0] memoria_expected [0:NUM_SAMPLES_OUT-1];
-    logic [31:0] mem_pilotos_esperados [0:3500]; 
-    logic [31:0] mem_fase_estimada [0:NUM_SAMPLES_OUT-1]; // NUEVO ARCHIVO
-
-    integer file_out, file_err, file_phase, file_handle;
-
-    // --- Contadores Datos ---
-    integer out_counter = 0;   
-    integer expected_idx = 0;  
-    integer error_counter = 0; 
-    logic signed [15:0] exp_q, exp_p;
-    integer diff_p, diff_q, abs_diff_p, abs_diff_q; 
-
-    // --- Contadores Pilotos ---
-    integer piloto_count = 0;
-    logic signed [17:0] fase_esperada;
-    integer error_fase, max_error_fase = 0, sum_error_fase = 0, pilotos_fuera_margen = 0;
-
-    // --- Contadores Interpolador ---
-    integer fase_datos_count = 0;
-    logic signed [17:0] fase_interpolada_esperada;
-    integer error_fase_interp, max_error_interp = 0, errores_interp_count = 0;
-
+    localparam ADC_WIDTH     = 16;
     localparam TEST_SAMPLES   = 26112/2; // 13056
     localparam TOTAL_BOB_DATA = 26112;
-    localparam FIBER_SAMPLES  = 27857;   // Trama con pilotos incluidos
+    localparam NUM_SAMPLES_IN  = 55713;   // Trama con pilotos incluidos
     
     logic clk, rst;
     
@@ -64,18 +28,18 @@ module tb_cvqkd_bob_dsp_top_2();
     logic signed [31:0]          T_est, T_sqrt_est, sigma_sq_est, sigma_est;
 
     // Buffers para volcar los .txt de MATLAB
-    logic [31:0] mem_fiber      [0:FIBER_SAMPLES-1];
+    logic [31:0] mem_fiber      [0:NUM_SAMPLES_IN-1];
     logic        mem_mask       [0:TOTAL_BOB_DATA-1];
     logic [31:0] mem_alice      [0:TEST_SAMPLES-1];
     logic [31:0] mem_expected   [0:3];
 
+    
+    
     // =========================================================================
     // 2. Instanciación del DUT
     // =========================================================================
-    // Instanciación del Sistema Completo bajo Prueba (DUT)
     cvqkd_bob_subsystem_top #(
-        .ADC_WIDTH(ADC_WIDTH),
-        .NUM_SAMPLES(TEST_SAMPLES)
+        .ADC_WIDTH(ADC_WIDTH)
     ) dut (
         .clk(clk), .rst(rst),
         .p_in(p_in), .q_in(q_in), .valid_in(valid_in),
@@ -87,125 +51,108 @@ module tb_cvqkd_bob_dsp_top_2();
         .T_final(T_est), .T_sqrt(T_sqrt_est), .sigma_sq(sigma_sq_est), .sigma(sigma_est)
     );
 
+    // Pipeline del Testbench para emparejar la transmisión clásica de Alice con el Router
+    logic        alice_en_pipe;
+    logic [31:0] alice_data_pipe;
+    int          alice_read_idx = 0;
+
     initial begin clk = 0; forever #5 clk = ~clk; end
 
     initial begin
-        // Apertura de archivos de salida (Compatible Windows/Linux)
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_outputs.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            file_out = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_outputs.txt", "w");
-            file_err = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_errors.txt", "w");
-            file_phase = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_phase_interp.txt", "w");
-        end else begin
-            file_out = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/sim_outputs.txt", "w");
-            file_err = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/sim_errors.txt", "w");
-            file_phase = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/sim_phase_interp.txt", "w");
-        end
-    end
+        $display("=========================================================================");
+        $display("[TB FULL] Cargando datos avanzados de simulacion desde archivos...");
+        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_raw_adc.txt", mem_fiber);
+        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/mask_bit.txt", mem_mask);
+        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/alice_ram.txt", mem_alice);
+        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_llr_math.txt", mem_expected);
+        $display("[TB FULL] Archivos cargados. Liberando Reset...");
 
-    // =========================================================================
-    // VERIFICACIÓN DE DATOS FINALES (P y Q)
-    // =========================================================================
-    always_ff @(negedge clk) begin
-        if (valid_out) begin
-            $fdisplay(file_out, "%04x%04x", q_out[15:0], p_out[15:0]);
+        // --- Fase 1: Inicialización de Buses ---
+        clk = 0; rst = 1; valid_in = 0; p_in = 0; q_in = 0;
+        start_est = 0; mask_valid = 0; mask_bit = 0;
+        alice_stream_valid = 0; alice_stream_data = '0;
+        alice_en_pipe = 0; alice_data_pipe = '0;
+        calib_VarA = 32'd40000;
 
-            if (expected_idx < 52224) begin
-                exp_q = memoria_expected[expected_idx][31:16];
-                exp_p = memoria_expected[expected_idx][15:0];
-                diff_p = $signed(p_out) - exp_p;
-                diff_q = $signed(q_out) - exp_q;
-    
-                if (file_err != 0) $fdisplay(file_err, "%0d %0d %0d", out_counter, diff_p, diff_q);
-
-                abs_diff_p = (diff_p < 0) ? -diff_p : diff_p;
-                abs_diff_q = (diff_q < 0) ? -diff_q : diff_q;
-
-                if (abs_diff_p > 100 || abs_diff_q > 100) begin
-                    $display("\n[STOP HW] ¡ERROR ENORME EN DATOS! Salida: %0d", out_counter);
-                    //$stop; 
-                end else if (abs_diff_p > 1 || abs_diff_q > 1) begin
-                    error_counter++;
-                end
-                expected_idx++;
-            end
-            out_counter++;
-        end
-    end
-
-
-    // =========================================================================
-    // 5. INYECCIÓN DE DATOS Y VEREDICTO
-    // =========================================================================
-    initial begin
-        // Carga de archivos de entrada (Compatible Windows/Linux)
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_raw_adc.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_raw_adc.txt", memoria_in);
-        end else begin
-            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_raw_adc.txt", memoria_in);
-        end
-
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_ram.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_ram.txt", memoria_expected);
-        end else begin
-            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/databob_ram.txt", memoria_expected);
-        end
-
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_pilotos_raw.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_pilotos_raw.txt", mem_pilotos_esperados);
-        end else begin
-            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/fase_pilotos_raw.txt", mem_pilotos_esperados);
-        end
-
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_estimada_datos.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_estimada_datos.txt", mem_fase_estimada);
-        end else begin
-            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/fase_estimada_datos.txt", mem_fase_estimada);
-        end
-
-        rst = 1'b1; valid_in = 1'b0; p_in = '0; q_in = '0;
-        #20; rst = 1'b0;
+        #40 rst = 0;
+        #40;
         
         for (int i = 0; i < NUM_SAMPLES_IN; i++) begin
             @(posedge clk);
             valid_in <= 1'b1;
-            q_in <= memoria_in[i][31:16]; p_in <= memoria_in[i][15:0];
+            q_in <= mem_fiber[i][31:16]; p_in <= mem_fiber[i][15:0];
         end
 
         @(posedge clk); valid_in <= 1'b0; p_in <= '0; q_in <= '0;
-        repeat(100) @(posedge clk);
-        $fclose(file_out); if (file_err != 0) $fclose(file_err);
-        if (file_phase != 0) $fclose(file_phase);
-        
-        $display("\n=================================================================");
-        $display("                  REPORTE DE AUTOVERIFICACIÓN                    ");
-        $display("=================================================================");
-        
-        $display("--> 1. PILOTOS (CORDIC 1)");
-        $display("    Pilotos evaluados       : %0d", piloto_count);
-        $display("    Error maximo detectado  : %0d unidades", max_error_fase);
-        
-        $display("\n--> 2. INTERPOLACIÓN (PHASE WRAP Y DIVISIÓN)");
-        $display("    Datos interpolados      : %0d", fase_datos_count);
-        $display("    Error max. acumulado    : %0d unidades", max_error_interp);
-        if (errores_interp_count > 0)
-            $display("    [ X ] ¡CUIDADO! La interpolacion se esta desviando (> 30 uds).");
-        else
-            $display("    [ OK ] Interpolacion precisa.");
 
-        $display("\n--> 3. ROTACIÓN FINAL (CORDIC 2)");
-        $display("    Errores P y Q (> 1 ud)  : %0d", error_counter);
+        $display("[TB FULL] Datos de fibra transmitidos por completo. Esperando estabilizacion DSP...");
+
+        // Damos un margen holgado para que el interpolador de fase y el CORDIC terminen de escribir
+        #1000;
+
+        @(posedge clk);
+        for (int i = 0; i < TOTAL_BOB_DATA; i++) begin
+            mask_valid = 1'b1;
+            mask_bit   = mem_mask[i];
+            
+            // Si este bit de la máscara exige sacrificio, preparamos el dato de Alice para el ciclo (+1)
+            if (mem_mask[i] == 1'b1) begin
+                alice_en_pipe   = 1'b1;
+                alice_data_pipe = mem_alice[alice_read_idx];
+                alice_read_idx++;
+            end else begin
+                alice_en_pipe   = 1'b0;
+                alice_data_pipe = 32'b0;
+            end
+            
+            // Aplicamos el pipeline al puerto: se consolidará exactamente cuando el Router responda
+            alice_stream_valid = alice_en_pipe;
+            alice_stream_data  = alice_data_pipe;
+            
+            @(posedge clk);
+        end
         
-        $display("=================================================================\n");
+        // Vaciamos el residuo final del pipeline del TB
+        mask_valid         = 1'b0;
+        mask_bit           = 1'b0;
+        alice_stream_valid = alice_en_pipe;
+        alice_stream_data  = alice_data_pipe;
+        @(posedge clk);
+        alice_stream_valid = 1'b0;
+        alice_stream_data  = '0;
+
+        $display("[TB FULL] Mascara inyectada completamente. Esperando calculo asintotico final (done)...");
+        
+        // --- Fase 5: Validación de Resultados Matemáticos ---
+        wait(done_est == 1'b1);
+        @(posedge clk);
+        
+        begin
+            integer err [4];
+            err[0] = T_est        - mem_expected[0];
+            err[1] = T_sqrt_est   - mem_expected[1];
+            err[2] = sigma_sq_est - mem_expected[2];
+            err[3] = sigma_est    - mem_expected[3];
+
+            for(int i=0; i<4; i++) if(err[i] < 0) err[i] = -err[i];
+
+            $display("-------------------------------------------------------------------------");
+            $display("    METRICA CUANTICA  | FPGA (SUBSYSTEM) |  MATLAB (IDEAL)  | ERROR (Bits) ");
+            $display("----------------------+------------------+------------------+------------------");
+            $display(" Ganancia T_est       |     %12d |     %12d |     %8d", T_est,        mem_expected[0], err[0]);
+            $display(" Raiz Sqrt(T)         |     %12d |     %12d |     %8d", T_sqrt_est,   mem_expected[1], err[1]);
+            $display(" Varianza Sigma^2     |     %12d |     %12d |     %8d", sigma_sq_est, mem_expected[2], err[2]);
+            $display(" Desviacion Sigma     |     %12d |     %12d |     %8d", sigma_est,    mem_expected[3], err[3]);
+            $display("-------------------------------------------------------------------------");
+
+            if (err[0]<=5 && err[1]<=5 && err[2]<=5 && err[3]<=5) begin
+                $display("  [ OK ] ¡SISTEMA VALIDADO! El subsistema completo encaja de extremo a extremo.");
+            end else begin
+                $display("  [ X ]  ¡FALLO! Desajuste detectado en la integracion de flujo.");
+            end
+            $display("=========================================================================");
+        end
+        
         $finish;
     end
 endmodule

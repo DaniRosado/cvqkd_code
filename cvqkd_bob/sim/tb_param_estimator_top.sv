@@ -95,7 +95,7 @@ module tb_param_estimator_top();
         @(posedge clk);
         start = 1;
         @(posedge clk);
-        start = 0;
+        //start = 0;
         @(posedge clk);
 
         // 4. INYECCIÓN DE STREAMING (Emulando al Router)

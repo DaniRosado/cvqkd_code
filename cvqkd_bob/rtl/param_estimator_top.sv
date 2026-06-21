@@ -73,6 +73,7 @@ module param_estimator_top #(
     logic        mac_enable;
     logic        mac_clear;
     logic        start_math;
+    logic        working;
 
     // Leemos de las FIFOs solo si ambas tienen datos y no hemos terminado el bloque
     assign read_fifos = (!bob_empty && !alice_empty) && (muestras_procesadas < NUM_SAMPLES) && !start_math;
@@ -84,14 +85,16 @@ module param_estimator_top #(
             muestras_procesadas <= '0;
             start_math          <= 1'b0;
             done                <= 1'b0;
+            working             <= 1'b0;
         end else begin
             mac_clear <= 1'b0;
             
-            if (start) begin
+            if (start & !working) begin
                 mac_clear           <= 1'b1; // Pulso para resetear acumuladores MAC
                 muestras_procesadas <= '0;
                 start_math          <= 1'b0;
                 done                <= 1'b0;
+                working             <= 1'b1;
             end else begin
                 // Como tu FIFO tarda 1 ciclo en sacar el dato, retrasamos read_fifos
                 mac_enable <= read_fifos;
@@ -111,6 +114,7 @@ module param_estimator_top #(
                 // El proceso global termina cuando la LLR_math_unit da el data_ready
                 if (data_ready) begin
                     done <= 1'b1;
+                    working <= 1'b0;
                 end
             end
         end
