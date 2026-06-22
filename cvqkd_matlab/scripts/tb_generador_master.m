@@ -619,6 +619,20 @@ disp('========================================================================')
 if ENABLE_EXPORT_VIVADO
     disp('9. Exportando RAMs para Testbench de Vivado...');
 
+    % =====================================================================
+    % Exportar Decisiones Fuertes (block_bits.txt) para tb_syndrome_calc
+    % =====================================================================
+    block_matrix = reshape(block_1, Z, nb).';
+    
+    fid_bb = fopen(fullfile(DATA_DIR, 'block_bits.txt'), 'w');
+    for c = 1:nb
+        % Escribimos al revés (Z bajando a 1) para el Endianness de SystemVerilog
+        fprintf(fid_bb, '%d', block_matrix(c, Z:-1:1));
+        fprintf(fid_bb, '\n');
+    end
+    fclose(fid_bb);
+    disp('   -> block_bits.txt generado con éxito (68 líneas x 384 bits).');
+
     fase_estimada_datos = fase_estimada(idx_datos);
     fase_est_q15 = int32(round(fase_estimada_datos * 32768));
 

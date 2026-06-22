@@ -1,62 +1,55 @@
 `timescale 1ns / 1ps
 
-import bg_rom_pkg::*;
-
-module tb_syndrome_calc;
+module tb_syndrome_calc_bg1();
 
     // =========================================================================
-    // 1. Declaración de Señales
+    // 1. PARÁMETROS DEL SISTEMA LDPC (BG1)
     // =========================================================================
-    logic         clk;
-    logic         rst_n;
-    logic         start;
-    
+    localparam int Z = 384;
+    localparam int COLS = 68; // Columnas del Base Graph (Datos + Paridad)
+    localparam int ROWS = 46; // Filas del Base Graph (Check Nodes)
+
+    logic clk;
+    logic rst_n;
+    logic start;
+
+    // Interfaz de memoria y DUT
     logic [6:0]   u_addr;
     logic [383:0] u_data_in;
-    
     logic         done;
-    logic [383:0] syndrome_out [0:MB-1];
+    logic [383:0] syndrome_out [0:45];
 
     // =========================================================================
-    // 2. Memorias del Testbench y Emulación de BRAM
+    // 2. MEMORIAS DEL TESTBENCH (Plantillas de Oro)
     // =========================================================================
-    // Memoria para almacenar el vector de entrada U (68 bloques)
-    logic [383:0] ram_u_bits [0:NB-1];
+    // Memoria que emula la RAM de Bob/Alice (68 palabras de 384 bits)
+    logic [Z-1:0] mem_u_bits [0:COLS-1];
     
-    // Memoria para almacenar el resultado correcto esperado (46 bloques)
-    logic [383:0] ram_expected_s [0:MB-1];
+    // Memoria con el síndrome teórico calculado por MATLAB (46 palabras de 384 bits)
+    logic [Z-1:0] mem_expected_syndrome [0:ROWS-1];
 
-    // Variables auxiliares
-    integer file_handle;
+    // =========================================================================
+    // 3. GENERACIÓN DE RELOJ (100 MHz)
+    // =========================================================================
+    initial clk = 0;
+    always #5 clk = ~clk;
 
-    // Carga de los ficheros de texto generados por MATLAB (Compatible Windows/Linux)
-    initial begin
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/u_bits.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            $readmemb("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/u_bits.txt", ram_u_bits);
-        end else begin
-            $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/u_bits.txt", ram_u_bits);
-        end
-
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/expected_syndrome.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            $readmemb("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/expected_syndrome.txt", ram_expected_s);
-        end else begin
-            $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_syndrome.txt", ram_expected_s);
-        end
-    end
-
-    // Emulación de una Block RAM síncrona real (Latencia de 1 ciclo)
+    // =========================================================================
+    // 4. EMULADOR DE BRAM (Latencia de 1 ciclo)
+    // =========================================================================
+    // El módulo pide una dirección en u_addr, y la RAM entrega el dato en el siguiente flanco
     always_ff @(posedge clk) begin
-        u_data_in <= ram_u_bits[u_addr];
+        if (u_addr < COLS) begin
+            u_data_in <= mem_u_bits[u_addr];
+        end else begin
+            u_data_in <= '0;
+        end
     end
 
     // =========================================================================
-    // 3. Instanciación del Unit Under Test (UUT)
+    // 5. INSTANCIACIÓN DEL DUT (Device Under Test)
     // =========================================================================
-    syndrome_calc_bg1 uut (
+    syndrome_calc_bg1 dut (
         .clk(clk),
         .rst_n(rst_n),
         .start(start),
@@ -67,59 +60,63 @@ module tb_syndrome_calc;
     );
 
     // =========================================================================
-    // 4. Generación de Reloj y Ciclo de Vida del Test
+    // 6. PROCEDIMIENTO PRINCIPAL DE TEST
     // =========================================================================
-    // Reloj de 100 MHz (10 ns de periodo)
-    initial clk = 0;
-    always #5 clk = ~clk;
-
-    int errores_totales = 0;
+    int err_count = 0;
 
     initial begin
-        $display("=================================================");
-        $display(" Iniciando Verificación de Síndrome LDPC BG1     ");
-        $display("=================================================");
-        
-        // Condiciones iniciales y Reset
+        // --- A. Inicialización ---
         rst_n = 0;
         start = 0;
+
+        $display("=========================================================================");
+        $display("[TB LDPC] Iniciando validación del cálculo de Síndrome (H x C)...");
         
-        #50;        // Esperamos 5 ciclos de reloj
-        rst_n = 1;  // Liberamos el reset
-        #20;
+        // --- B. Cargar archivos de MATLAB ---
+        // IMPORTANTE: Asegúrate de que el nombre coincida con los que exportas en tu script
+        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/block_bits.txt", mem_u_bits); 
+        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_syndrome.txt", mem_expected_syndrome);
         
-        // Disparamos el pulso de inicio para la FSM
-        start = 1;
-        #10;
-        start = 0;
-        
-        $display("[INFO] Máquina de estados en marcha. Procesando %0d columnas...", NB);
-        
-        // Esperamos dinámicamente hasta que la FSM levante la bandera 'done'
+        #40;
+        rst_n = 1;
+        #40;
+
+        // --- C. Disparo de la Máquina de Estados (PULSO ESTRICTO DE 1 CICLO) ---
+        $display("[TB LDPC] Mandando pulso START al hardware...");
+        @(posedge clk);
+        start = 1'b1;
+        @(posedge clk);
+        start = 1'b0; // Apagamos inmediatamente para evitar el borrado al terminar
+
+        // --- D. Esperar a que termine ---
+        $display("[TB LDPC] Calculando... (Esperando señal DONE)");
         wait(done == 1'b1);
         
-        $display("[INFO] Cálculo completado. Iniciando escaneo de errores...");
-        $display("-------------------------------------------------");
+        // Damos un ciclo de gracia para que se estabilicen las señales de salida
+        @(posedge clk);
+
+        // --- E. AUTO-CHECKER MATRICIAL ---
+        $display("[TB LDPC] Cálculo terminado. Comprobando las 46 filas...");
+        $display("-------------------------------------------------------------------------");
         
-        // Bucle de comprobación de los 46 bloques (17.664 bits)
-        for (int i = 0; i < MB; i++) begin
-            if (syndrome_out[i] !== ram_expected_s[i]) begin
-                $display("[FAIL] Discrepancia en la fila %0d", i);
-                $display("       Esperado: %h", ram_expected_s[i]);
-                $display("       Obtenido: %h", syndrome_out[i]);
-                errores_totales++;
+        for (int i = 0; i < ROWS; i++) begin
+            if (syndrome_out[i] !== mem_expected_syndrome[i]) begin
+                $display("  [FAIL] Discrepancia en la fila %0d", i);
+                $display("         Esperado: %096X", mem_expected_syndrome[i]);
+                $display("         Obtenido: %096X", syndrome_out[i]);
+                err_count++;
             end
         end
-        
-        // Veredicto Final
-        $display("-------------------------------------------------");
-        if (errores_totales == 0) begin
-            $display("[SUCCESS] Verificación de hardware PERFECTA.");
-            $display("          Los 17.664 bits del síndrome coinciden exactamente.");
+
+        // --- F. Reporte Final ---
+        $display("-------------------------------------------------------------------------");
+        if (err_count == 0) begin
+            $display("  [ OK ] ¡EXITO ABSOLUTO! El hardware replica exactamente la matriz de MATLAB.");
         end else begin
-            $display("[CRITICAL] Se han encontrado %0d filas con errores.", errores_totales);
+            $display("  [CRITICAL] Se han encontrado %0d filas con errores.", err_count);
+            $display("             Revisa la dirección del barrel shifter o si los datos tienen ruido.");
         end
-        $display("=================================================");
+        $display("=========================================================================");
         
         $finish;
     end
