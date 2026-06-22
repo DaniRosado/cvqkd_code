@@ -5,7 +5,7 @@ module tb_mdr_bob_top();
     // =====================================================================
     // PARÁMETROS Y SEÑALES
     // =====================================================================
-    localparam int TOTAL_BLOCKS = 13056; // N_BOB_DATA / 4 (Mismo que en FSM)
+    localparam int TOTAL_BLOCKS = 3264; // N_BOB_DATA / 4 (Mismo que en FSM)
     localparam int CLK_PERIOD   = 10;    // 100 MHz
 
     logic clk;

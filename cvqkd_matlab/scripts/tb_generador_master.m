@@ -14,7 +14,7 @@ ALICE_SIM_DIR  = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_alice', 'sim');
 
 %% 0.1. PARÁMETROS DEL SISTEMA
 ENABLE_EXPORT_VIVADO = true;
-ENABLE_GRAFICAS = true;
+ENABLE_GRAFICAS = false;
 
 % --- Parámetros de Trama y Memoria ---
 L_trama     = 16;      % 1 Piloto + 15 Datos
@@ -209,15 +209,25 @@ end
 %% 8. RECONCILIACIÓN MULTIDIMENSIONAL (8D) Y EXTRACCIÓN DE LLRs
 disp('8. Simulando Mapeo Multidimensional (MDR 8D)...');
 
+% 1. Filtramos con la máscara (Criba clásica). 
+% ¡VITAL! Usamos los arrays _int para partir de los datos EXACTAMENTE cuantizados
+% que ve la FPGA, no de los floats puros. Esto elimina errores de redondeo en el testbench.
+idx_key = find(mascara_sacrificio == 0);
+
+P_A_key = double(P_A_int(idx_key));
+Q_A_key = double(Q_A_int(idx_key));
+P_B_key = double(P_B_int(idx_key));
+Q_B_key = double(Q_B_int(idx_key));
+
 N_dimensiones = 8;
 symbols_per_block = N_dimensiones / 2; % 4 simbolos complejos -> 8D
-N_bloques = floor(N_BOB_DATA / symbols_per_block);
+N_bloques = floor(length(P_B_key) / symbols_per_block); % AHORA SÍ: 3264 bloques útiles
 
 num_used = N_bloques * symbols_per_block;
-P_A_mdr = double(P_A_data(1:num_used));
-Q_A_mdr = double(Q_A_data(1:num_used));
-P_B_mdr = double(P_B_rec(1:num_used));
-Q_B_mdr = double(Q_B_rec(1:num_used));
+P_A_mdr = P_A_key(1:num_used); 
+Q_A_mdr = Q_A_key(1:num_used);
+P_B_mdr = P_B_key(1:num_used);
+Q_B_mdr = Q_B_key(1:num_used);
 
 X = zeros(N_dimensiones, N_bloques);
 Y = zeros(N_dimensiones, N_bloques);
@@ -234,7 +244,6 @@ LLR_all = zeros(N_dimensiones, N_bloques);
 
 sigma_eff = double(Sigma_ideal);
 inv_sigma2 = 2.0 / (sigma_eff * sigma_eff + eps);
-
 K_dyn_all = zeros(1, N_bloques);
 
 for blk = 1:N_bloques
@@ -247,25 +256,20 @@ for blk = 1:N_bloques
     if norm_y == 0, norm_y = 1.0; end
     Y_norm = Y_i / norm_y;
     
-    M_Y = generar_matriz_ortogonal(Y_norm); % Bob construye su matriz 8x8
+    M_Y = generar_matriz_ortogonal(Y_norm); % Bob construye su matriz
     
-    b_i = bits_bob_all(:, blk);             % Bits aleatorios (0 o 1)
-    C_i = 1 - 2*b_i;                        % Mapeo polar (+1 o -1)
-    m_i = M_Y' * C_i;                       % El mensaje público (R) que viaja hacia Alice
+    b_i = bits_bob_all(:, blk);             % Bits aleatorios
+    C_i = 1 - 2*b_i;                        % Mapeo polar
+    m_i = M_Y' * C_i;                       % Mensaje público
     
     % --- 3. ALICE: Reconstrucción y cálculo de LLR ---
-    norm_x = norm(X_i);
-    norm_x = 1;
-    if norm_x == 0, norm_x = 1.0; end
+    % Dejamos norm_x a 1 porque tu Datapath de Alice asume X sin normalizar por eficiencia
+    norm_x = 1.0; 
     X_norm = X_i / norm_x;
     
-    % Alice construye su propia matriz con sus medidas cuánticas
     M_X = generar_matriz_ortogonal(X_norm); 
-    
-    % Alice "deshace" la rotación de Bob mediante multiplicación matricial
     U = M_X * m_i; 
     
-    % Cálculo final del LLR (incorporando la energía de ambos vectores)
     LLR_all(:, blk) = inv_sigma2 * norm_x * norm_y * U ;
     K_dyn_all(blk) = inv_sigma2 * norm_y;
 end
@@ -639,7 +643,7 @@ if ENABLE_EXPORT_VIVADO
     fid_mask = fopen(fullfile(DATA_DIR, 'mask_bit.txt'), 'w');
     for i=1:N_BOB_DATA, fprintf(fid_mask, '%d\n', mascara_sacrificio(i)); end; fclose(fid_mask);
 
-    fid_bob = fopen(fullfile(DATA_DIR, 'bob_ram.txt')0, 'w');
+    fid_bob = fopen(fullfile(DATA_DIR, 'bob_ram.txt'), 'w');
     for i=1:N_BOB_DATA, fprintf(fid_bob, '%04X%04X\n', typecast(Q_B_int(i), 'uint16'), typecast(P_B_int(i), 'uint16')); end; fclose(fid_bob);
 
     fid_alice = fopen(fullfile(DATA_DIR, 'alice_ram.txt'), 'w');
