@@ -93,7 +93,7 @@ module tb_cvqkd_bob_subsystem_full();
         // Damos un margen holgado para que el interpolador de fase y el CORDIC terminen de escribir
         #1000; 
 
-        @(posedge clk);2111
+        @(posedge clk);
         for (int i = 0; i < TOTAL_BOB_DATA; i++) begin
             mask_valid = 1'b1;
             mask_bit   = mem_mask[i];
