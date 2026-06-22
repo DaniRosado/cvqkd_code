@@ -30,13 +30,10 @@ module tb_cvqkd_bob_subsystem_full();
     logic [31:0] mem_alice      [0:TEST_SAMPLES-1];
     logic [31:0] mem_expected   [0:3];
 
-    // Reloj a 100 MHz
-    always #5 clk = ~clk;
-
     // Instanciación del Sistema Completo bajo Prueba (DUT)
     cvqkd_bob_subsystem_top #(
-        .ADC_WIDTH(ADC_WIDTH),
-        .NUM_SAMPLES(TEST_SAMPLES)
+        .ADC_WIDTH(ADC_WIDTH)
+        //.NUM_SAMPLES(TEST_SAMPLES)
     ) dut (
         .clk(clk), .rst(rst),
         .p_in(p_in), .q_in(q_in), .valid_in(valid_in),
@@ -53,14 +50,9 @@ module tb_cvqkd_bob_subsystem_full();
     logic [31:0] alice_data_pipe;
     int          alice_read_idx = 0;
 
+    initial begin clk = 0; forever #5 clk = ~clk; end
+    
     initial begin
-        // --- Fase 1: Inicialización de Buses ---
-        clk = 0; rst = 1; valid_in = 0; p_in = 0; q_in = 0;
-        start_est = 0; mask_valid = 0; mask_bit = 0;
-        alice_stream_valid = 0; alice_stream_data = '0;
-        alice_en_pipe = 0; alice_data_pipe = '0;
-        calib_VarA = 32'd40000;
-
         $display("=========================================================================");
         $display("[TB FULL] Cargando datos avanzados de simulacion desde archivos...");
         $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_raw_adc.txt", mem_fiber);
@@ -69,6 +61,13 @@ module tb_cvqkd_bob_subsystem_full();
         $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_llr_math.txt", mem_expected);
         $display("[TB FULL] Archivos cargados. Liberando Reset...");
         
+        // --- Fase 1: Inicialización de Buses ---
+        clk = 0; rst = 1; valid_in = 0; p_in = 0; q_in = 0;
+        start_est = 0; mask_valid = 0; mask_bit = 0;
+        alice_stream_valid = 0; alice_stream_data = '0;
+        alice_en_pipe = 0; alice_data_pipe = '0;
+        calib_VarA = 32'd40000;
+
         #40 rst = 0;
         #40;
 
@@ -76,42 +75,25 @@ module tb_cvqkd_bob_subsystem_full();
         $display("[TB FULL] Generacion Cuantica: Inyectando tramas clasicas con pilotos desde fibra...");
         for (int i = 0; i < NUM_SAMPLES_IN; i++) begin
             @(posedge clk);
-            valid_in = 1'b1;
-            q_in     = mem_fiber[i][31:16];
-            p_in     = mem_fiber[i][15:0];
+            valid_in <= 1'b1;
+            q_in     <= mem_fiber[i][31:16];
+            p_in     <= mem_fiber[i][15:0];
         end
-
-        // --- ¡EL PARCHE MÁGICO!: VACIADO (FLUSH) DEL PIPELINE ---
-        $display("[TB FULL] Inyectando 50 ceros para empujar los datos atrapados en el DSP...");
+        //vamos a hacer un flush de los últimos 50 datos introduciendo 50 ceros
         for (int i = 0; i < 50; i++) begin
             @(posedge clk);
-            valid_in = 1'b1;
-            q_in     = 16'd0;
-            p_in     = 16'd0;
+            valid_in <= 1'b1;
+            q_in     <= 16'd0;
+            p_in     <= 16'd0;
         end
-        
-        @(posedge clk);
-        valid_in = 1'b0;
-        @(posedge clk);
-        valid_in = 1'b0;
-        p_in = '0; q_in = '0;
+
+        @(posedge clk); valid_in <= 1'b0; p_in <= '0; q_in <= '0;
         $display("[TB FULL] Datos de fibra transmitidos por completo. Esperando estabilizacion DSP...");
         
         // Damos un margen holgado para que el interpolador de fase y el CORDIC terminen de escribir
         #1000; 
 
-        // --- Fase 3: Disparo del Estimador de Parámetros ---
-        $display("[TB FULL] Reiniciando acumuladores de seguridad (START_EST)...");
-        @(posedge clk);
-        
-        @(posedge clk);
-        start_est = 1'b1;
-        
-        @(posedge clk);
-        start_est = 1'b0;
-        // --- Fase 4: Criba Clásica en Streaming Co-Diseñado ---
-        $display("[TB FULL] Abriendo grifo de mascara clásica y cruzando con Alice...");
-        
+        @(posedge clk);2111
         for (int i = 0; i < TOTAL_BOB_DATA; i++) begin
             mask_valid = 1'b1;
             mask_bit   = mem_mask[i];
