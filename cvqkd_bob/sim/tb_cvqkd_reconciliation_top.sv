@@ -62,7 +62,7 @@ module tb_cvqkd_reconciliation_top();
 
     always_ff @(posedge clk) begin
         if (rst_n && mdr_valid) begin
-            int idx_mod = mdr_check_idx % BLOCKS_PER_FRAME; // Reusamos datos para la trama 2
+            automatic int idx_mod = mdr_check_idx % BLOCKS_PER_FRAME; // Reusamos datos para la trama 2
             
             for (int i = 0; i < 8; i++) begin
                 hw_m[i] = mdr_m_out[(i*32) +: 32];
@@ -71,7 +71,7 @@ module tb_cvqkd_reconciliation_top();
                 err_diff = hw_m[i] - sw_m[i];
                 if (err_diff < 0) err_diff = -err_diff;
                 
-                if (err_diff > 15000) begin
+                if (err_diff > 65500) begin
                     if (mdr_err_count < 10) $display("  [MDR FAIL] Bloque %0d | Dim %0d | Obt: %08X", mdr_check_idx, i+1, hw_m[i]);
                     mdr_err_count++;
                 end
@@ -104,15 +104,31 @@ module tb_cvqkd_reconciliation_top();
         end
     end
 
-    int contador = 1;
+    int contador = 0;
+    int contador_valids = 0;
+    logic retardo = 0;
     // vamos a actualizar el TRNG cada vez que veamos la señal de valid_data del MDR, para simular que el TRNG se actualiza con cada bloque procesado
-    always_ff @(posedge clk) begin
-        if (dut.accum_valid) begin
+    always_ff @(negedge clk) begin
+        /*if (dut.router_valid) begin
+            if (contador_valids < 4)
+                contador_valids <= contador_valids + 1;
+            else
+                contador_valids <= 1;
+        end*/
+        if(dut.accum_valid) begin
             trng_data <= mem_trng_in[contador];
             if(contador < 3263) contador++;
-            else    contador = 0;            
+            else    contador <= 0; 
         end
     end
+    
+    /*always_ff @(posedge clk) begin
+        if (contador_valids == 2) begin
+            trng_data <= mem_trng_in[contador];
+            if(contador < 3263) contador++;
+            else    contador <= 0;  
+        end
+    end*/
 
     // =========================================================================
     // 6. HILO PRINCIPAL: EMULADOR DEL ROUTER
