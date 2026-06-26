@@ -56,7 +56,7 @@ module tb_cvqkd_bob_dsp_top();
     initial begin clk = 0; forever #5 clk = ~clk; end
 
     initial begin
-        // Apertura de archivos de salida (Compatible Windows/Linux)
+        // Apertura de archivos de SALIDAAAAAA (Compatible Windows/Linux)
         file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_outputs.txt", "r");
         if (file_handle != 0) begin
             $fclose(file_handle);

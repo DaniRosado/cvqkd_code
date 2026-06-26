@@ -1,176 +1,187 @@
 `timescale 1ns / 1ps
 
 module param_estimator_top #(
-    parameter NUM_SAMPLES = 26112/2
+    parameter int NUM_SAMPLES = 26112/2
 )(
     input  logic        clk,
-    input  logic        rst,
+    input  logic        rst_n,
     
     // --- Control Global ---
     input  logic        start,
     output logic        done,
     
-    // --- NUEVA INTERFAZ DE STREAMING (En sustitución de las RAMs) ---
+    // --- Interfaz de Streaming (FIFOs de Entrada) ---
     input  logic        bob_stream_valid,
-    input  logic [31:0] bob_stream_data,   // Viene del Router: {Q_Bob, P_Bob}
+    input  logic [31:0] bob_stream_data,   // {Q_Bob, P_Bob}
     
     input  logic        alice_stream_valid,
-    input  logic [31:0] alice_stream_data, // Viene de la red clásica: {Q_Alice, P_Alice}
+    input  logic [31:0] alice_stream_data, // {Q_Alice, P_Alice}
     
-    // --- Entradas de Calibración ---
+    // ==========================================================
+    // --- INTERFAZ HACIA EL WRAPPER AXI4-LITE ---
+    // ==========================================================
+    // Entradas (Escritas por la CPU mediante AXI)
     input  logic signed [31:0] calib_VarA,
+    input  logic               skr_valid, // 1 = La CPU ha evaluado el SKR
+    input  logic               skr_safe,  // 1 = Clave segura, 0 = Trama comprometida
     
-    // --- Salidas de Métricas de Seguridad (Q16.16) ---
-    output logic signed [31:0] T_final,
-    output logic signed [31:0] T_sqrt,
-    output logic signed [31:0] sigma_sq,
-    output logic signed [31:0] sigma,
-    output logic        data_ready
+    // Salidas (Leídas por la CPU mediante AXI)
+    output logic signed [31:0] T_final_out,
+    output logic signed [31:0] sigma_sq_out,
+    output logic signed [31:0] sigma_out,
+    output logic [31:0]        num_samples_out,
+    
+    // Señal de Interrupción
+    output logic               irq,
+    
+    // --- Control de Flujo hacia el resto del HW ---
+    output logic               frame_valid_out // Activa el MDR y el Síndrome
 );
 
     // =================================================================
-    // 1. INSTANCIACIÓN DE LAS FIFOS GEMELAS (Tu propio sync_fifo.sv)
+    // 1. FIFOS GEMELAS (Entrada de Datos)
     // =================================================================
     logic        read_fifos;
     logic [31:0] bob_fifo_dout, alice_fifo_dout;
     logic        bob_empty, alice_empty;
     logic        bob_full, alice_full;
 
-    // FIFO de Bob: Almacena los datos de sacrificio enrutados
-    sync_fifo #(
-        .DATA_WIDTH(32),
-        .DEPTH(1024) 
-    ) fifo_bob_inst (
-        .clk(clk),
-        .rst(rst),
-        .we (bob_stream_valid),
-        .din(bob_stream_data),
-        .re (read_fifos),
-        .dout(bob_fifo_dout),
-        .empty(bob_empty),
-        .full(bob_full)
+    sync_fifo #(.DATA_WIDTH(32), .DEPTH(1024)) fifo_bob_inst (
+        .clk(clk), .rst(~rst_n), 
+        .we (bob_stream_valid), .din(bob_stream_data),
+        .re (read_fifos), .dout(bob_fifo_dout),
+        .empty(bob_empty), .full(bob_full)
     );
 
-    // FIFO de Alice: Almacena los datos recibidos de Alice por canal clásico
-    sync_fifo #(
-        .DATA_WIDTH(32),
-        .DEPTH(1024)
-    ) fifo_alice_inst (
-        .clk(clk),
-        .rst(rst),
-        .we (alice_stream_valid),
-        .din(alice_stream_data),
-        .re (read_fifos),
-        .dout(alice_fifo_dout),
-        .empty(alice_empty),
-        .full(alice_full)
+    sync_fifo #(.DATA_WIDTH(32), .DEPTH(1024)) fifo_alice_inst (
+        .clk(clk), .rst(~rst_n),
+        .we (alice_stream_valid), .din(alice_stream_data),
+        .re (read_fifos), .dout(alice_fifo_dout),
+        .empty(alice_empty), .full(alice_full)
     );
 
     // =================================================================
-    // 2. MICRO-CONTROLADOR DE FLUJO (Streaming Controller)
+    // 2. MICRO-CONTROLADOR DE FLUJO (Lectura de FIFOs)
     // =================================================================
     logic [14:0] muestras_procesadas;
-    logic        mac_enable;
-    logic        mac_clear;
-    logic        start_math;
-    logic        working;
+    logic        mac_enable, mac_clear, start_math, working, math_done;
 
-    // Leemos de las FIFOs solo si ambas tienen datos y no hemos terminado el bloque
     assign read_fifos = (!bob_empty && !alice_empty) && (muestras_procesadas < NUM_SAMPLES) && !start_math;
 
-    always_ff @(posedge clk) begin
-        if (rst) begin
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
             mac_enable          <= 1'b0;
             mac_clear           <= 1'b1;
             muestras_procesadas <= '0;
             start_math          <= 1'b0;
-            done                <= 1'b0;
             working             <= 1'b0;
         end else begin
             mac_clear <= 1'b0;
-            
             if (start & !working) begin
-                mac_clear           <= 1'b1; // Pulso para resetear acumuladores MAC
+                mac_clear           <= 1'b1;
                 muestras_procesadas <= '0;
                 start_math          <= 1'b0;
-                done                <= 1'b0;
                 working             <= 1'b1;
             end else begin
-                // Como tu FIFO tarda 1 ciclo en sacar el dato, retrasamos read_fifos
                 mac_enable <= read_fifos;
+                if (mac_enable) muestras_procesadas <= muestras_procesadas + 1'b1;
                 
-                if (mac_enable) begin
-                    muestras_procesadas <= muestras_procesadas + 1'b1;
-                end
+                if (mac_enable && (muestras_procesadas == NUM_SAMPLES - 1)) start_math <= 1'b1;
+                else start_math <= 1'b0;
                 
-                // Cuando procesamos la última muestra, disparamos la unidad matemática
-                // 4. Disparamos las divisiones matemáticas (Pulso exacto de 1 ciclo)
-                if (mac_enable && (muestras_procesadas == NUM_SAMPLES - 1)) begin
-                    start_math <= 1'b1;
-                end else begin
-                    start_math <= 1'b0;
-                end
-                
-                // El proceso global termina cuando la LLR_math_unit da el data_ready
-                if (data_ready) begin
-                    done <= 1'b1;
-                    working <= 1'b0;
-                end
+                if (done) working <= 1'b0; 
             end
         end
     end
 
-    // Desempaquetamos los datos de salida de las FIFOs ({Q, P}) para los MACs
-    logic signed [15:0] bob_p, bob_q;
-    logic signed [15:0] alice_p, alice_q;
-
+    logic signed [15:0] bob_p, bob_q, alice_p, alice_q;
     assign bob_p   = bob_fifo_dout[15:0];
     assign bob_q   = bob_fifo_dout[31:16];
     assign alice_p = alice_fifo_dout[15:0];
     assign alice_q = alice_fifo_dout[31:16];
 
     // =================================================================
-    // 3. ACELERADORES HARDWARE (Multiplicadores MAC de 64 bits)
+    // 3. ACELERADORES HARDWARE MAC Y UNIDAD MATEMÁTICA
     // =================================================================
-    logic signed [63:0] var_P_sum_sq, var_P_sum_val;
-    logic signed [63:0] cov_P_sum_cov, cov_P_sum_alice, ignore_cov_bob_p;
-    logic signed [63:0] var_Q_sum_sq, var_Q_sum_val;
-    logic signed [63:0] cov_Q_sum_cov, cov_Q_sum_alice, ignore_cov_bob_q;
+    logic signed [63:0] var_P_sum_sq, var_P_sum_val, cov_P_sum_cov, cov_P_sum_alice, ignore_cov_bob_p;
+    logic signed [63:0] var_Q_sum_sq, var_Q_sum_val, cov_Q_sum_cov, cov_Q_sum_alice, ignore_cov_bob_q;
+    
+    // Cables internos conectados a la unidad matemática
+    logic signed [31:0] T_final_int, T_sqrt_int, sigma_sq_int, sigma_int;
 
-    // --- Cuadratura P ---
-    mac_variance var_P_inst (
-        .clk(clk), .rst(rst), .clear(mac_clear), .enable(mac_enable), .data_in(bob_p),
-        .sum_sq(var_P_sum_sq), .sum_val(var_P_sum_val)
-    );
+    mac_variance var_P_inst (.clk(clk), .rst(~rst_n), .clear(mac_clear), .enable(mac_enable), .data_in(bob_p), .sum_sq(var_P_sum_sq), .sum_val(var_P_sum_val));
+    mac_covariance cov_P_inst (.clk(clk), .rst(~rst_n), .clear(mac_clear), .enable(mac_enable), .data_bob(bob_p), .data_alice(alice_p), .sum_cov(cov_P_sum_cov), .sum_val_bob(ignore_cov_bob_p), .sum_val_alice(cov_P_sum_alice));
+    mac_variance var_Q_inst (.clk(clk), .rst(~rst_n), .clear(mac_clear), .enable(mac_enable), .data_in(bob_q), .sum_sq(var_Q_sum_sq), .sum_val(var_Q_sum_val));
+    mac_covariance cov_Q_inst (.clk(clk), .rst(~rst_n), .clear(mac_clear), .enable(mac_enable), .data_bob(bob_q), .data_alice(alice_q), .sum_cov(cov_Q_sum_cov), .sum_val_bob(ignore_cov_bob_q), .sum_val_alice(cov_Q_sum_alice));
 
-    mac_covariance cov_P_inst (
-        .clk(clk), .rst(rst), .clear(mac_clear), .enable(mac_enable),
-        .data_bob(bob_p), .data_alice(alice_p),
-        .sum_cov(cov_P_sum_cov), .sum_val_bob(ignore_cov_bob_p), .sum_val_alice(cov_P_sum_alice)
-    );
-
-    // --- Cuadratura Q ---
-    mac_variance var_Q_inst (
-        .clk(clk), .rst(rst), .clear(mac_clear), .enable(mac_enable), .data_in(bob_q),
-        .sum_sq(var_Q_sum_sq), .sum_val(var_Q_sum_val)
-    );
-
-    mac_covariance cov_Q_inst (
-        .clk(clk), .rst(rst), .clear(mac_clear), .enable(mac_enable),
-        .data_bob(bob_q), .data_alice(alice_q),
-        .sum_cov(cov_Q_sum_cov), .sum_val_bob(ignore_cov_bob_q), .sum_val_alice(cov_Q_sum_alice)
-    );
-
-    // =================================================================
-    // 4. UNIDAD MATEMÁTICA FINAL (Divisiones e IPs CORDIC)
-    // =================================================================
     LLR_math_unit math_unit_inst (
-        .clk(clk), .rst(rst), .start_calc(start_math),
+        .clk(clk), .rst(~rst_n), .start_calc(start_math),
         .sum_sq_P_B(var_P_sum_sq), .sum_P_B(var_P_sum_val), .sum_cov_P(cov_P_sum_cov), .sum_P_A(cov_P_sum_alice),
         .sum_sq_Q_B(var_Q_sum_sq), .sum_Q_B(var_Q_sum_val), .sum_cov_Q(cov_Q_sum_cov), .sum_Q_A(cov_Q_sum_alice),
         .calib_VarA(calib_VarA),
-        .T_final(T_final), .T_sqrt(T_sqrt), .sigma_sq(sigma_sq), .sigma(sigma),
-        .data_ready(data_ready)
+        .T_final(T_final_int), .T_sqrt(T_sqrt_int), .sigma_sq(sigma_sq_int), .sigma(sigma_int),
+        .data_ready(math_done)
     );
+
+    // =================================================================
+    // 4. MAPEO CONSTANTE DE REGISTROS AXI
+    // =================================================================
+    // Estos cables se mantienen estables permitiendo que la CPU los lea en cualquier momento
+    assign num_samples_out = NUM_SAMPLES;
+    assign T_final_out     = T_final_int;
+    assign sigma_sq_out    = sigma_sq_int;
+    assign sigma_out       = sigma_int;
+
+    // =================================================================
+    // 5. FSM DE COMUNICACIÓN CON LA CPU (Interrupciones)
+    // =================================================================
+    typedef enum logic [1:0] {
+        ST_IDLE,
+        ST_WAIT_SKR,
+        ST_DONE
+    } cpu_fsm_t;
+
+    cpu_fsm_t cpu_state;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            cpu_state       <= ST_IDLE;
+            irq             <= 1'b0;
+            frame_valid_out <= 1'b0;
+            done            <= 1'b0;
+        end else begin
+            done <= 1'b0; 
+            
+            case (cpu_state)
+                ST_IDLE: begin
+                    frame_valid_out <= 1'b0;
+                    irq             <= 1'b0;
+                    
+                    if (math_done) begin
+                        irq       <= 1'b1; // Lanzamos el chispazo a la CPU
+                        cpu_state <= ST_WAIT_SKR;
+                    end
+                end
+                
+                ST_WAIT_SKR: begin
+                    irq <= 1'b0; // La interrupción es un pulso de 1 ciclo (Edge-Triggered para el ARM)
+                    
+                    if (skr_valid) begin
+                        // La CPU ha hablado. Reenviamos su decisión al resto del chip.
+                        frame_valid_out <= skr_safe; 
+                        cpu_state       <= ST_DONE;
+                    end
+                end
+                
+                ST_DONE: begin
+                    done <= 1'b1;
+                    // Nos preparamos para la siguiente trama cuando la CPU baje la bandera
+                    if (!skr_valid) begin
+                        cpu_state <= ST_IDLE;
+                    end
+                end
+            endcase
+        end
+    end
 
 endmodule

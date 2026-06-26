@@ -5,57 +5,87 @@ module cvqkd_bob_subsystem_top #(
     parameter NUM_SAMPLES = 26112/2 // 13056 Muestras de sacrificio
 )(
     input  logic        clk,
-    input  logic        rst,
+    input  logic        rst_n,      // Reset estándar AXI (Activo a nivel bajo)
     
-    // --- Interfaz de Entrada desde el ADC (Canal Cuántico) ---
+    // =========================================================================
+    // 1. INTERFAZ FÍSICA (Desde el ADC / Canal Cuántico)
+    // =========================================================================
     input  logic signed [ADC_WIDTH-1:0] p_in,
     input  logic signed [ADC_WIDTH-1:0] q_in,
     input  logic                        valid_in,
     
-    // --- Interfaz de Control Clásico (Procesador ARM / Bloque de Control) ---
-    input  logic                        start_est,
-    input  logic signed [31:0]          calib_VarA,
+    // =========================================================================
+    // 2. INTERFAZ DE RED CLÁSICA (Recepción desde Alice)
+    // =========================================================================
     input  logic                        mask_valid,
     input  logic                        mask_bit,
-    
-    // --- Entrada del canal clásico para Alice ---
     input  logic                        alice_stream_valid,
     input  logic [31:0]                 alice_stream_data,   // {Q_Alice, P_Alice}
     
-    // --- Interfaz de Clave Privada (Hacia Reconciliación MDR / LDPC) ---
-    output logic                        valid_key,
-    output logic [31:0]                 data_key,            // {Q_Bob, P_Bob} para la clave
+    // =========================================================================
+    // 3. INTERFAZ TRNG (Generador de Números Aleatorios)
+    // =========================================================================
+    input  logic [7:0]                  trng_data,           // 8 bits aleatorios por ciclo
     
-    // --- Salidas de Métricas de Seguridad (Hacia el Procesador ARM) ---
-    output logic                        done_est,
-    output logic                        data_ready_est,
-    output logic signed [31:0]          T_final,
-    output logic signed [31:0]          T_sqrt,
-    output logic signed [31:0]          sigma_sq,
-    output logic signed [31:0]          sigma
+    // =========================================================================
+    // 4. INTERFAZ AXI4-LITE (Hacia el Procesador ARM / Vitis)
+    // =========================================================================
+    // Entradas (Escritas por la CPU)
+    input  logic signed [31:0]          calib_VarA,          // Varianza calibrada
+    input  logic                        skr_valid,           // La CPU confirma que calculó el SKR
+    input  logic                        skr_safe,            // 1 = Segura, 0 = Comprometida
+    
+    // Salidas (Leídas por la CPU)
+    output logic signed [31:0]          T_final_out,
+    output logic signed [31:0]          sigma_sq_out,
+    output logic signed [31:0]          sigma_out,
+    output logic [31:0]                 num_samples_out,
+    
+    // Señales de Interrupción y Estado
+    output logic                        irq,                 // Aviso a la CPU: "Estimación lista"
+    output logic                        done_est,            // (Opcional) Fin de ciclo del estimador
+    output logic                        frame_valid_out,     // Reflejo del skr_safe para el resto del HW
+    
+    // =========================================================================
+    // 5. INTERFACES DE TRANSMISIÓN (Hacia fuera del chip)
+    // =========================================================================
+    // A. Hacia Alice (Mensajes Públicos MDR para reconciliar)
+    output logic                        mdr_valid,
+    output logic [255:0]                mdr_m_out,
+    
+    // B. Hacia Procesador/AXI-Stream (Síndrome para decodificar LDPC)
+    output logic                        syndrome_done,
+    output logic [383:0]                syndrome_out [0:45]
 );
 
     // =========================================================================
-    // CABLES INTERNOS DE INTERCONEXIÓN
+    // ADAPTADOR DE RESET PARA MÓDULOS ANTIGUOS
+    // =========================================================================
+    logic rst;
+    assign rst = ~rst_n; // El DSP y el Router usan reset a nivel alto
+
+    // =========================================================================
+    // CABLES INTERNOS DE ENRUTAMIENTO
     // =========================================================================
     logic signed [ADC_WIDTH-1:0] dsp_p_out;
     logic signed [ADC_WIDTH-1:0] dsp_q_out;
     logic                        dsp_valid_out;
-    
-    logic [31:0] dsp_data_packed;
+    logic [31:0]                 dsp_data_packed;
     
     logic        router_valid_sac;
     logic [31:0] router_data_sac;
+    
+    logic        valid_key;
+    logic [31:0] data_key;
 
-    // Empaquetamos las cuadraturas recuperadas por el DSP en un bus único de 32 bits
+    // Empaquetado del bus del DSP para el Router
     assign dsp_data_packed = {dsp_q_out, dsp_p_out};
 
     // =========================================================================
-    // 1. BLOQUE DSP: RECUPERACIÓN DE FASE VECTORIZADA
+    // BLOQUE 1: DSP (Recuperación de Fase Cuántica)
     // =========================================================================
     cvqkd_bob_dsp_top #(
         .ADC_WIDTH(ADC_WIDTH)
-        //.DSP_WIDTH(18) // Formato expandido para CORDIC
     ) dsp_inst (
         .clk(clk),
         .rst(rst),
@@ -68,7 +98,7 @@ module cvqkd_bob_subsystem_top #(
     );
 
     // =========================================================================
-    // 2. ENRUTADOR DE STREAMING: BUFFER SEGURO MEGA-FIFO
+    // BLOQUE 2: ENRUTADOR (Mega-FIFO y criba de datos)
     // =========================================================================
     bob_stream_router router_inst (
         .clk(clk),
@@ -79,36 +109,57 @@ module cvqkd_bob_subsystem_top #(
         .mask_bit(mask_bit),
         .valid_sac(router_valid_sac),
         .data_sac(router_data_sac),
-        .valid_key(valid_key),   // Directo al puerto del TOP para el MDR
-        .data_key(data_key)      // Directo al puerto del TOP para el MDR
+        .valid_key(valid_key),   
+        .data_key(data_key)      
     );
 
     // =========================================================================
-    // 3. ACELERADOR DE ESTIMACIÓN DE PARÁMETROS
+    // BLOQUE 3: ESTIMACIÓN DE PARÁMETROS (Hardware <-> Software)
     // =========================================================================
     param_estimator_top #(
         .NUM_SAMPLES(NUM_SAMPLES)
     ) param_estimator_inst (
         .clk(clk),
-        .rst(rst),
-        .start(mask_valid),
+        .rst_n(rst_n),
+        .start(mask_valid),         // La estimación arranca cuando empieza a llegar la máscara
         .done(done_est),
+        
+        // Entradas de Datos (Streaming)
         .bob_stream_valid(router_valid_sac),
         .bob_stream_data(router_data_sac),
         .alice_stream_valid(alice_stream_valid),
         .alice_stream_data(alice_stream_data),
+        
+        // Interfaz AXI hacia la CPU
         .calib_VarA(calib_VarA),
-        .T_final(T_final),
-        .T_sqrt(T_sqrt),
-        .sigma_sq(sigma_sq),
-        .sigma(sigma),
-        .data_ready(data_ready_est)
+        .skr_valid(skr_valid),
+        .skr_safe(skr_safe),
+        
+        .T_final_out(T_final_out),
+        .sigma_sq_out(sigma_sq_out),
+        .sigma_out(sigma_out),
+        .num_samples_out(num_samples_out),
+        .irq(irq),
+        .frame_valid_out(frame_valid_out)
     );
 
     // =========================================================================
-    // HUECO RESERVADO: GENERACIÓN DE SÍNDROME Y MDR (RECONCILIACIÓN)
+    // BLOQUE 4: SUBSISTEMA DE RECONCILIACIÓN (MDR + Síndrome)
     // =========================================================================
-    // Las señales 'valid_key' y 'data_key' alimentarán en el futuro el 
-    // bloque mdr_bob_top y las memorias BRAM del decodificador LDPC.
+    cvqkd_reconciliation_top reconciliation_inst (
+        .clk(clk),
+        .rst_n(rst_n),
+        
+        // Ingesta de datos de la clave desde el Router
+        .router_valid(valid_key),
+        .router_data(data_key),
+        .trng_data(trng_data),
+        
+        // Salidas públicas
+        .mdr_valid(mdr_valid),
+        .mdr_m_out(mdr_m_out),
+        .syndrome_done(syndrome_done),
+        .syndrome_out(syndrome_out)
+    );
 
 endmodule
