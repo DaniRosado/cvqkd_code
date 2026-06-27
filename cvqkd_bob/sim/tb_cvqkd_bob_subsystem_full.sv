@@ -124,7 +124,7 @@ module tb_cvqkd_bob_subsystem_top();
                 int err_diff = hw_m - sw_m;
                 if (err_diff < 0) err_diff = -err_diff;
                 
-                if (err_diff > 65500) begin
+                if (err_diff > 0) begin
                     if (mdr_err_count < 10) $display("  [FAIL MDR] Bloque %0d | Dim %0d | Error %0d", mdr_check_idx, i+1, err_diff);
                     mdr_err_count++;
                 end

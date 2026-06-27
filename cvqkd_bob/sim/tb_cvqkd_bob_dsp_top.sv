@@ -169,7 +169,7 @@ module tb_cvqkd_bob_dsp_top();
             $fclose(file_handle);
             $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_ram.txt", memoria_expected);
         end else begin
-            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/databob_ram.txt", memoria_expected);
+            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/data/bob_ram.txt", memoria_expected);
         end
 
         file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_pilotos_raw.txt", "r");

@@ -18,12 +18,12 @@ module param_estimator_top #(
     input  logic [31:0] alice_stream_data, // {Q_Alice, P_Alice}
     
     // ==========================================================
-    // --- INTERFAZ HACIA EL WRAPPER AXI4-LITE ---
+    // --- INTERFAZ HACIA EL WRAPPER AXI4-LITE (Solo CPU) ---
     // ==========================================================
     // Entradas (Escritas por la CPU mediante AXI)
     input  logic signed [31:0] calib_VarA,
-    input  logic               skr_valid, // 1 = La CPU ha evaluado el SKR
-    input  logic               skr_safe,  // 1 = Clave segura, 0 = Trama comprometida
+    input  logic               skr_valid, // 1 = La CPU ha escrito el SKR
+    input  logic signed [31:0] skr_in,    // El valor exacto del SKR calculado en C
     
     // Salidas (Leídas por la CPU mediante AXI)
     output logic signed [31:0] T_final_out,
@@ -34,8 +34,12 @@ module param_estimator_top #(
     // Señal de Interrupción
     output logic               irq,
     
-    // --- Control de Flujo hacia el resto del HW ---
-    output logic               frame_valid_out // Activa el MDR y el Síndrome
+    // ==========================================================
+    // --- SALIDAS HACIA EL RESTO DEL HARDWARE (Globales) ---
+    // ==========================================================
+    output logic               frame_valid_out, // 1 = Trama segura, 0 = Trama comprometida
+    output logic signed [31:0] T_sqrt_out,      // Para el destilador de Alice
+    output logic signed [31:0] skr_out          // SKR propagado al resto del chip
 );
 
     // =================================================================
@@ -61,7 +65,7 @@ module param_estimator_top #(
     );
 
     // =================================================================
-    // 2. MICRO-CONTROLADOR DE FLUJO (Lectura de FIFOs)
+    // 2. MICRO-CONTROLADOR DE FLUJO
     // =================================================================
     logic [14:0] muestras_procesadas;
     logic        mac_enable, mac_clear, start_math, working, math_done;
@@ -106,7 +110,7 @@ module param_estimator_top #(
     logic signed [63:0] var_P_sum_sq, var_P_sum_val, cov_P_sum_cov, cov_P_sum_alice, ignore_cov_bob_p;
     logic signed [63:0] var_Q_sum_sq, var_Q_sum_val, cov_Q_sum_cov, cov_Q_sum_alice, ignore_cov_bob_q;
     
-    // Cables internos conectados a la unidad matemática
+    // Cables internos 
     logic signed [31:0] T_final_int, T_sqrt_int, sigma_sq_int, sigma_int;
 
     mac_variance var_P_inst (.clk(clk), .rst(~rst_n), .clear(mac_clear), .enable(mac_enable), .data_in(bob_p), .sum_sq(var_P_sum_sq), .sum_val(var_P_sum_val));
@@ -124,16 +128,16 @@ module param_estimator_top #(
     );
 
     // =================================================================
-    // 4. MAPEO CONSTANTE DE REGISTROS AXI
+    // 4. MAPEO DE SALIDAS (Lectura asíncrona)
     // =================================================================
-    // Estos cables se mantienen estables permitiendo que la CPU los lea en cualquier momento
     assign num_samples_out = NUM_SAMPLES;
     assign T_final_out     = T_final_int;
+    assign T_sqrt_out      = T_sqrt_int;     
     assign sigma_sq_out    = sigma_sq_int;
     assign sigma_out       = sigma_int;
 
     // =================================================================
-    // 5. FSM DE COMUNICACIÓN CON LA CPU (Interrupciones)
+    // 5. FSM DE COMUNICACIÓN CON LA CPU (Decisión Hardware de Seguridad)
     // =================================================================
     typedef enum logic [1:0] {
         ST_IDLE,
@@ -148,6 +152,7 @@ module param_estimator_top #(
             cpu_state       <= ST_IDLE;
             irq             <= 1'b0;
             frame_valid_out <= 1'b0;
+            skr_out         <= '0;
             done            <= 1'b0;
         end else begin
             done <= 1'b0; 
@@ -158,24 +163,31 @@ module param_estimator_top #(
                     irq             <= 1'b0;
                     
                     if (math_done) begin
-                        irq       <= 1'b1; // Lanzamos el chispazo a la CPU
+                        irq       <= 1'b1; // Chispazo a la CPU
                         cpu_state <= ST_WAIT_SKR;
                     end
                 end
                 
                 ST_WAIT_SKR: begin
-                    irq <= 1'b0; // La interrupción es un pulso de 1 ciclo (Edge-Triggered para el ARM)
+                    irq <= 1'b0; 
                     
                     if (skr_valid) begin
-                        // La CPU ha hablado. Reenviamos su decisión al resto del chip.
-                        frame_valid_out <= skr_safe; 
-                        cpu_state       <= ST_DONE;
+                        // 1. Guardamos el SKR para el resto del HW
+                        skr_out <= skr_in;
+                        
+                        // 2. EL HARDWARE JUZGA: ¿Es mayor que 0?
+                        if (skr_in > 0) begin
+                            frame_valid_out <= 1'b1; // Trama OK
+                        end else begin
+                            frame_valid_out <= 1'b0; // Eve detectada
+                        end
+                        
+                        cpu_state <= ST_DONE;
                     end
                 end
                 
                 ST_DONE: begin
                     done <= 1'b1;
-                    // Nos preparamos para la siguiente trama cuando la CPU baje la bandera
                     if (!skr_valid) begin
                         cpu_state <= ST_IDLE;
                     end

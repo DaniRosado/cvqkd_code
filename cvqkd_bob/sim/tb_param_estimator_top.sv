@@ -5,23 +5,32 @@ module tb_param_estimator_top();
     // =========================================================================
     // PARÁMETROS Y SEÑALES
     // =========================================================================
-    localparam TEST_SAMPLES = 26112/2; // 13056 Muestras de Sacrificio
-    localparam NUM_BOB_RAM  = 52224;   // Tamaño total de la RAM de Bob
+    localparam TEST_SAMPLES = 26112/2;
+    localparam NUM_BOB_RAM  = 52224;
     
-    logic clk, rst, start, done;
+    logic clk, rst_n, start, done;
     
-    // --- NUEVAS SEÑALES DE STREAMING ---
+    // --- SEÑALES DE STREAMING ---
     logic        bob_stream_valid;
     logic [31:0] bob_stream_data;
     logic        alice_stream_valid;
     logic [31:0] alice_stream_data;
     
-    // Calibración
+    // --- INTERFAZ AXI4-LITE (CPU ARM) ---
     logic signed [31:0] calib_VarA;
+    logic               skr_valid;
+    logic signed [31:0] skr_in;       // NUEVO: Bus AXI para escribir el SKR
     
-    // Salidas Finales (Q16.16)
-    logic signed [31:0] T_est, T_sqrt_est, sigma_sq_est, sigma_est;
-    logic data_ready;
+    logic signed [31:0] T_final_out;
+    logic signed [31:0] sigma_sq_out;
+    logic signed [31:0] sigma_out;
+    logic [31:0]        num_samples_out;
+    logic               irq;
+    
+    // --- SALIDAS GLOBALES ---
+    logic signed [31:0] T_sqrt_out;
+    logic signed [31:0] skr_out;      // NUEVO: SKR devuelto al entorno
+    logic               frame_valid_out;
 
     // =========================================================================
     // ARRAYS DE MEMORIA (Lectura de archivos de MATLAB)
@@ -34,51 +43,84 @@ module tb_param_estimator_top();
     // =========================================================================
     // GENERACIÓN DE RELOJ (100 MHz)
     // =========================================================================
+    initial clk = 0;
     always #5 clk = ~clk;
 
     // =========================================================================
-    // INSTANCIACIÓN DEL DUT (Estimador de Parámetros)
+    // INSTANCIACIÓN DEL DUT 
     // =========================================================================
     param_estimator_top #(
         .NUM_SAMPLES(TEST_SAMPLES)
     ) dut (
         .clk(clk),
-        .rst(rst),
+        .rst_n(rst_n),
         .start(start),
         .done(done),
         
-        // Conectamos las nuevas tuberías de streaming
         .bob_stream_valid(bob_stream_valid),
         .bob_stream_data(bob_stream_data),
         .alice_stream_valid(alice_stream_valid),
         .alice_stream_data(alice_stream_data),
         
+        // Interfaz AXI (CPU -> HW)
         .calib_VarA(calib_VarA),
+        .skr_valid(skr_valid),
+        .skr_in(skr_in),
         
-        .T_final(T_est),
-        .T_sqrt(T_sqrt_est),
-        .sigma_sq(sigma_sq_est),
-        .sigma(sigma_est),
-        .data_ready(data_ready)
+        // Interfaz AXI (HW -> CPU)
+        .T_final_out(T_final_out),
+        .sigma_sq_out(sigma_sq_out),
+        .sigma_out(sigma_out),
+        .num_samples_out(num_samples_out),
+        .irq(irq),
+        
+        // Salidas Hardware Globales
+        .frame_valid_out(frame_valid_out),
+        .T_sqrt_out(T_sqrt_out),
+        .skr_out(skr_out)
     );
 
     // =========================================================================
-    // PROCEDIMIENTO DE TEST
+    // HILO PARALELO: EMULADOR DEL BUS AXI Y LA CPU ARM
     // =========================================================================
     initial begin
-        // 1. Inicialización a cero
-        clk = 0;
-        rst = 1;
+        skr_valid = 1'b0;
+        skr_in    = '0;
+        
+        forever begin
+            @(posedge clk);
+            if (irq) begin
+                $display("\n[CPU ARM AXI] !INTERRUPCION RECIBIDA! Leyendo registros AXI...");
+                $display("  -> T_final_out : %0d", T_final_out);
+                $display("  -> sigma_sq_out: %0d", sigma_sq_out);
+                $display("  -> sigma_out   : %0d", sigma_out);
+                
+                $display("[CPU ARM AXI] Procesando rutinas matemáticas en C...");
+                repeat(40) @(posedge clk); 
+                
+                // Simulamos un SKR positivo de 0.5 (En formato Q16.16: 0.5 * 65536 = 32768)
+                $display("[CPU ARM AXI] Resultado: SKR = 0.5. Escribiendo 32'd32768 en bus AXI...");
+                skr_in    <= 32'd32768;
+                skr_valid <= 1'b1;
+                
+                @(posedge clk);
+                skr_valid <= 1'b0; 
+            end
+        end
+    end
+
+    // =========================================================================
+    // PROCEDIMIENTO DE TEST (ESTÍMULOS)
+    // =========================================================================
+    initial begin
+        rst_n = 0;
         start = 0;
         bob_stream_valid   = 0;
         alice_stream_valid = 0;
         bob_stream_data    = 0;
         alice_stream_data  = 0;
-        
-        // Varianza de calibración exacta que espera MATLAB
-        calib_VarA = 32'd40000; 
+        calib_VarA = 32'd40000;
 
-        // 2. Cargar Archivos (Ajusta tus rutas absolutas si es necesario)
         $display("-------------------------------------------------------------------------");
         $display("[TB] Cargando archivos generados por MATLAB...");
         $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/ptr_ram.txt", mem_ptr);
@@ -87,86 +129,73 @@ module tb_param_estimator_top();
         $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_llr_math.txt", mem_expected);
         $display("[TB] Archivos cargados con exito.");
 
-        #20 rst = 0;
+        #20 rst_n = 1;
         #20;
 
-        // 3. Inicio del bloque
         $display("[TB] Mandando pulso de START al estimador...");
         @(posedge clk);
         start = 1;
         @(posedge clk);
-        //start = 0;
         @(posedge clk);
 
-        // 4. INYECCIÓN DE STREAMING (Emulando al Router)
-        $display("[TB] Inyectando las 13.056 muestras en Streaming (1 por ciclo de reloj)...");
-        
+        $display("[TB] Inyectando las %0d muestras en Streaming...", TEST_SAMPLES);
         for (int i = 0; i < TEST_SAMPLES; i++) begin
-            
-            // a) Miramos la máscara/puntero para saber qué dato coger de Bob
             int ptr_sacrificio = mem_ptr[i];
-            
-            // b) Preparamos los datos en los cables
             bob_stream_data   = mem_bob[ptr_sacrificio];
             alice_stream_data = mem_alice[i];
             
-            // c) Levantamos las banderas de "Dato Válido"
             bob_stream_valid   = 1;
             alice_stream_valid = 1;
             
-            // d) Esperamos 1 flanco de reloj (El hardware se traga el dato)
             @(posedge clk);
-            
-            // ===============================================================
-            // (OPCIONAL): Prueba de Estrés de la FIFO
-            // Si quieres ver lo robusto que es tu diseño, puedes descomentar 
-            // esto para inyectar datos con pausas aleatorias simulando una red lenta.
-            // ===============================================================
-
             if ($urandom_range(0, 10) > 8) begin
                 bob_stream_valid   = 0;
                 alice_stream_valid = 0;
                 @(posedge clk);
                 @(posedge clk);
             end
-            
         end
         
-        // 5. Apagamos el grifo de datos
         bob_stream_valid   = 0;
         alice_stream_valid = 0;
-        $display("[TB] Inyeccion terminada. Esperando a que termine el calculo matematico...");
+        $display("[TB] Inyeccion terminada. Esperando resolucion del HW y SW...");
 
-        // 6. Esperar a que la unidad de división termine (done = 1)
         wait(done == 1'b1);
         @(posedge clk);
         
-        // 7. COMPROBACIÓN DE ERRORES CONTRA MATLAB
+        // 7. COMPROBACIÓN FINAL
         begin
             integer err [4];
             integer i;
             
-            err[0] = T_est        - mem_expected[0];
-            err[1] = T_sqrt_est   - mem_expected[1];
-            err[2] = sigma_sq_est - mem_expected[2];
-            err[3] = sigma_est    - mem_expected[3];
+            err[0] = T_final_out  - mem_expected[0];
+            err[1] = T_sqrt_out   - mem_expected[1];
+            err[2] = sigma_sq_out - mem_expected[2];
+            err[3] = sigma_out    - mem_expected[3];
 
-            // Valor absoluto de los errores
             for(i=0; i<4; i++) if(err[i] < 0) err[i] = -err[i];
 
             $display("-------------------------------------------------------------------------");
             $display("    PARAMETRO     | FPGA (Q16.16) | MATLAB (Ideal) | ERROR (Bits) ");
             $display("------------------+---------------+----------------+------------------");
-            $display(" Ganancia T_est   |  %12d |   %12d |   %8d", T_est,        mem_expected[0], err[0]);
-            $display(" Raiz Sqrt(T)     |  %12d |   %12d |   %8d", T_sqrt_est,   mem_expected[1], err[1]);
-            $display(" Varianza Sigma^2 |  %12d |   %12d |   %8d", sigma_sq_est, mem_expected[2], err[2]);
-            $display(" Desviacion Sigma |  %12d |   %12d |   %8d", sigma_est,    mem_expected[3], err[3]);
+            $display(" Ganancia T_est   |  %12d |   %12d |   %8d", T_final_out,  mem_expected[0], err[0]);
+            $display(" T_sqrt           |  %12d |   %12d |   %8d", T_sqrt_out,   mem_expected[1], err[1]);
+            $display(" Varianza Sigma^2 |  %12d |   %12d |   %8d", sigma_sq_out, mem_expected[2], err[2]);
+            $display(" Desviacion Sigma |  %12d |   %12d |   %8d", sigma_out,    mem_expected[3], err[3]);
             $display("-------------------------------------------------------------------------");
+            
+            // Verificamos si el hardware tomó la decisión correcta
+            $display("  -> SKR Propagado por HW : %0d", skr_out);
+            if (frame_valid_out == 1'b1 && skr_out > 0) begin
+                $display("  [ OK ] El HW aprobo la trama basandose en el SKR del bus AXI.");
+            end else begin
+                $display("  [ X ]  Fallo en la logica de decision del hardware.");
+            end
 
             if (err[0]<=5 && err[1]<=5 && err[2]<=5 && err[3]<=5) begin
-                $display("  [ OK ]  ¡EXITO! El hardware emula a MATLAB con precision perfecta.");
+                $display("  [ OK ] ¡EXITO! El hardware emula a MATLAB con precision perfecta.");
             end else begin
-                $display("  [ X ]   ¡FALLO! Error detectado en la cadena matematica.");
+                $display("  [ X ]  ¡FALLO! Error detectado en la cadena matematica.");
             end
             $display("=========================================================================");
         end

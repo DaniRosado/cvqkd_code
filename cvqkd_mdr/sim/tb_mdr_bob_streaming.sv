@@ -71,7 +71,7 @@ module tb_mdr_bob_streaming();
                 if (err_diff < 0) err_diff = -err_diff;
                 
                 // Permitimos un margen de 5 unidades por redondeo en Q24
-                if (err_diff > 65500) begin
+                if (err_diff > 30000) begin
                     if (err_count < 20) begin // Imprimimos solo los 20 primeros errores
                         $display("  [FAIL] Bloque %0d | Dim %0d | Esperado: %08X | Obtenido: %08X", 
                                  check_idx, i+1, sw_m[i], hw_m[i]);
