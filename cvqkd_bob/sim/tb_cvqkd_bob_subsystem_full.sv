@@ -25,8 +25,8 @@ module tb_cvqkd_bob_subsystem_top();
     logic [7:0]                  trng_data;
     
     logic signed [31:0]          calib_VarA;
-    logic                        skr_valid, skr_safe;
-    logic signed [31:0]          T_final_out, sigma_sq_out, sigma_out, num_samples_out;
+    logic                        skr_valid;
+    logic signed [31:0]          T_final_out, T_sqrt_out, sigma_sq_out, sigma_out, num_samples_out, skr_out, skr_in;
     logic                        irq, done_est, frame_valid_out;
     
     logic                        mdr_valid;
@@ -65,8 +65,8 @@ module tb_cvqkd_bob_subsystem_top();
     // =========================================================================
     initial begin
         skr_valid  = 1'b0;
-        skr_safe   = 1'b0;
-        calib_VarA = 32'd262144000; // Valor ejemplo Q16.16 (4000.0)
+        skr_in   = '0;
+        calib_VarA = 32'd40000; // Valor ejemplo Q16.16 (4000.0)
         
         forever begin
             @(posedge clk);
@@ -79,8 +79,8 @@ module tb_cvqkd_bob_subsystem_top();
                 $display("[CPU ARM] Calculando SKR y cota de Holevo...");
                 repeat(50) @(posedge clk);
                 
-                $display("[CPU ARM] SKR Positivo. Autorizando trama (skr_safe = 1).");
-                skr_safe  <= 1'b1;
+                $display("[CPU ARM] SKR Positivo. Autorizando trama (skr_in = 1).");
+                skr_in <= 32'd32768;
                 skr_valid <= 1'b1;
                 @(posedge clk);
                 skr_valid <= 1'b0; // Pulso de escritura finalizado

@@ -32,8 +32,8 @@ module cvqkd_bob_subsystem_top #(
     // =========================================================================
     // Entradas (Escritas por la CPU)
     input  logic signed [31:0]          calib_VarA,          // Varianza calibrada
-    input  logic                        skr_valid,           // La CPU confirma que calculó el SKR
-    input  logic                        skr_safe,            // 1 = Segura, 0 = Comprometida
+    input  logic                        skr_valid,           // La CPU confirma que escribió el SKR
+    input  logic signed [31:0]          skr_in,              // Valor exacto del SKR calculado en C
     
     // Salidas (Leídas por la CPU)
     output logic signed [31:0]          T_final_out,
@@ -44,16 +44,20 @@ module cvqkd_bob_subsystem_top #(
     // Señales de Interrupción y Estado
     output logic                        irq,                 // Aviso a la CPU: "Estimación lista"
     output logic                        done_est,            // (Opcional) Fin de ciclo del estimador
-    output logic                        frame_valid_out,     // Reflejo del skr_safe para el resto del HW
     
     // =========================================================================
-    // 5. INTERFACES DE TRANSMISIÓN (Hacia fuera del chip)
+    // 5. INTERFACES DE TRANSMISIÓN (Hacia fuera del chip / Alice / Monitorización)
     // =========================================================================
-    // A. Hacia Alice (Mensajes Públicos MDR para reconciliar)
+    // A. Señales Globales de Seguridad
+    output logic                        frame_valid_out,     // 1 = Segura, 0 = Comprometida
+    output logic signed [31:0]          T_sqrt_out,          // Para el destilador de Alice
+    output logic signed [31:0]          skr_out,             // SKR propagado al resto del HW
+    
+    // B. Hacia Alice (Mensajes Públicos MDR para reconciliar)
     output logic                        mdr_valid,
     output logic [255:0]                mdr_m_out,
     
-    // B. Hacia Procesador/AXI-Stream (Síndrome para decodificar LDPC)
+    // C. Hacia Procesador/AXI-Stream (Síndrome para decodificar LDPC)
     output logic                        syndrome_done,
     output logic [383:0]                syndrome_out [0:45]
 );
@@ -130,17 +134,22 @@ module cvqkd_bob_subsystem_top #(
         .alice_stream_valid(alice_stream_valid),
         .alice_stream_data(alice_stream_data),
         
-        // Interfaz AXI hacia la CPU
+        // Interfaz AXI (CPU -> HW)
         .calib_VarA(calib_VarA),
         .skr_valid(skr_valid),
-        .skr_safe(skr_safe),
+        .skr_in(skr_in),
         
+        // Interfaz AXI (HW -> CPU)
         .T_final_out(T_final_out),
         .sigma_sq_out(sigma_sq_out),
         .sigma_out(sigma_out),
         .num_samples_out(num_samples_out),
         .irq(irq),
-        .frame_valid_out(frame_valid_out)
+        
+        // Salidas Hardware Globales
+        .frame_valid_out(frame_valid_out),
+        .T_sqrt_out(T_sqrt_out),
+        .skr_out(skr_out)
     );
 
     // =========================================================================
