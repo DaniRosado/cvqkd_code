@@ -18,19 +18,14 @@ module tb_param_estimator_top();
     
     // --- INTERFAZ AXI4-LITE (CPU ARM) ---
     logic signed [31:0] calib_VarA;
-    logic               skr_valid;
-    logic signed [31:0] skr_in;       // NUEVO: Bus AXI para escribir el SKR
     
     logic signed [31:0] T_final_out;
     logic signed [31:0] sigma_sq_out;
     logic signed [31:0] sigma_out;
     logic [31:0]        num_samples_out;
-    logic               irq;
     
     // --- SALIDAS GLOBALES ---
     logic signed [31:0] T_sqrt_out;
-    logic signed [31:0] skr_out;      // NUEVO: SKR devuelto al entorno
-    logic               frame_valid_out;
 
     // =========================================================================
     // ARRAYS DE MEMORIA (Lectura de archivos de MATLAB)
@@ -64,50 +59,16 @@ module tb_param_estimator_top();
         
         // Interfaz AXI (CPU -> HW)
         .calib_VarA(calib_VarA),
-        .skr_valid(skr_valid),
-        .skr_in(skr_in),
         
         // Interfaz AXI (HW -> CPU)
         .T_final_out(T_final_out),
         .sigma_sq_out(sigma_sq_out),
         .sigma_out(sigma_out),
         .num_samples_out(num_samples_out),
-        .irq(irq),
         
         // Salidas Hardware Globales
-        .frame_valid_out(frame_valid_out),
-        .T_sqrt_out(T_sqrt_out),
-        .skr_out(skr_out)
+        .T_sqrt_out(T_sqrt_out)
     );
-
-    // =========================================================================
-    // HILO PARALELO: EMULADOR DEL BUS AXI Y LA CPU ARM
-    // =========================================================================
-    initial begin
-        skr_valid = 1'b0;
-        skr_in    = '0;
-        
-        forever begin
-            @(posedge clk);
-            if (irq) begin
-                $display("\n[CPU ARM AXI] !INTERRUPCION RECIBIDA! Leyendo registros AXI...");
-                $display("  -> T_final_out : %0d", T_final_out);
-                $display("  -> sigma_sq_out: %0d", sigma_sq_out);
-                $display("  -> sigma_out   : %0d", sigma_out);
-                
-                $display("[CPU ARM AXI] Procesando rutinas matemáticas en C...");
-                repeat(40) @(posedge clk); 
-                
-                // Simulamos un SKR positivo de 0.5 (En formato Q16.16: 0.5 * 65536 = 32768)
-                $display("[CPU ARM AXI] Resultado: SKR = 0.5. Escribiendo 32'd32768 en bus AXI...");
-                skr_in    <= 32'd32768;
-                skr_valid <= 1'b1;
-                
-                @(posedge clk);
-                skr_valid <= 1'b0; 
-            end
-        end
-    end
 
     // =========================================================================
     // PROCEDIMIENTO DE TEST (ESTÍMULOS)
@@ -184,14 +145,6 @@ module tb_param_estimator_top();
             $display(" Desviacion Sigma |  %12d |   %12d |   %8d", sigma_out,    mem_expected[3], err[3]);
             $display("-------------------------------------------------------------------------");
             
-            // Verificamos si el hardware tomó la decisión correcta
-            $display("  -> SKR Propagado por HW : %0d", skr_out);
-            if (frame_valid_out == 1'b1 && skr_out > 0) begin
-                $display("  [ OK ] El HW aprobo la trama basandose en el SKR del bus AXI.");
-            end else begin
-                $display("  [ X ]  Fallo en la logica de decision del hardware.");
-            end
-
             if (err[0]<=5 && err[1]<=5 && err[2]<=5 && err[3]<=5) begin
                 $display("  [ OK ] ¡EXITO! El hardware emula a MATLAB con precision perfecta.");
             end else begin

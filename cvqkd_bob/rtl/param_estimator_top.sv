@@ -16,30 +16,17 @@ module param_estimator_top #(
     
     input  logic        alice_stream_valid,
     input  logic [31:0] alice_stream_data, // {Q_Alice, P_Alice}
-    
-    // ==========================================================
-    // --- INTERFAZ HACIA EL WRAPPER AXI4-LITE (Solo CPU) ---
-    // ==========================================================
+
     // Entradas (Escritas por la CPU mediante AXI)
     input  logic signed [31:0] calib_VarA,
-    input  logic               skr_valid, // 1 = La CPU ha escrito el SKR
-    input  logic signed [31:0] skr_in,    // El valor exacto del SKR calculado en C
     
     // Salidas (Leídas por la CPU mediante AXI)
     output logic signed [31:0] T_final_out,
+    output logic signed [31:0] T_sqrt_out,
     output logic signed [31:0] sigma_sq_out,
     output logic signed [31:0] sigma_out,
-    output logic [31:0]        num_samples_out,
+    output logic [31:0]        num_samples_out
     
-    // Señal de Interrupción
-    output logic               irq,
-    
-    // ==========================================================
-    // --- SALIDAS HACIA EL RESTO DEL HARDWARE (Globales) ---
-    // ==========================================================
-    output logic               frame_valid_out, // 1 = Trama segura, 0 = Trama comprometida
-    output logic signed [31:0] T_sqrt_out,      // Para el destilador de Alice
-    output logic signed [31:0] skr_out          // SKR propagado al resto del chip
 );
 
     // =================================================================
@@ -135,65 +122,6 @@ module param_estimator_top #(
     assign T_sqrt_out      = T_sqrt_int;     
     assign sigma_sq_out    = sigma_sq_int;
     assign sigma_out       = sigma_int;
-
-    // =================================================================
-    // 5. FSM DE COMUNICACIÓN CON LA CPU (Decisión Hardware de Seguridad)
-    // =================================================================
-    typedef enum logic [1:0] {
-        ST_IDLE,
-        ST_WAIT_SKR,
-        ST_DONE
-    } cpu_fsm_t;
-
-    cpu_fsm_t cpu_state;
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            cpu_state       <= ST_IDLE;
-            irq             <= 1'b0;
-            frame_valid_out <= 1'b0;
-            skr_out         <= '0;
-            done            <= 1'b0;
-        end else begin
-            done <= 1'b0; 
-            
-            case (cpu_state)
-                ST_IDLE: begin
-                    frame_valid_out <= 1'b0;
-                    irq             <= 1'b0;
-                    
-                    if (math_done) begin
-                        irq       <= 1'b1; // Chispazo a la CPU
-                        cpu_state <= ST_WAIT_SKR;
-                    end
-                end
-                
-                ST_WAIT_SKR: begin
-                    irq <= 1'b0; 
-                    
-                    if (skr_valid) begin
-                        // 1. Guardamos el SKR para el resto del HW
-                        skr_out <= skr_in;
-                        
-                        // 2. EL HARDWARE JUZGA: ¿Es mayor que 0?
-                        if (skr_in > 0) begin
-                            frame_valid_out <= 1'b1; // Trama OK
-                        end else begin
-                            frame_valid_out <= 1'b0; // Eve detectada
-                        end
-                        
-                        cpu_state <= ST_DONE;
-                    end
-                end
-                
-                ST_DONE: begin
-                    done <= 1'b1;
-                    if (!skr_valid) begin
-                        cpu_state <= ST_IDLE;
-                    end
-                end
-            endcase
-        end
-    end
-
+    assign done           = math_done;
+    
 endmodule
