@@ -53,7 +53,9 @@ module cvqkd_bob_subsystem_top #(
     
     // B. Hacia Procesador/AXI-Stream (Síndrome para decodificar LDPC)
     output logic                        syndrome_done,
-    output logic [383:0]                syndrome_out [0:45]
+    output logic                        syndrome_valid,
+    output logic [5:0]                  syndrome_row_idx,
+    output logic [383:0]                syndrome_data
 );
 
     // =========================================================================
@@ -157,7 +159,9 @@ module cvqkd_bob_subsystem_top #(
         .mdr_valid(mdr_valid),
         .mdr_m_out(mdr_m_out),
         .syndrome_done(syndrome_done),
-        .syndrome_out(syndrome_out)
+        .syndrome_valid(syndrome_valid),
+        .syndrome_row_idx(syndrome_row_idx),
+        .syndrome_data(syndrome_data)
     );
 
 endmodule

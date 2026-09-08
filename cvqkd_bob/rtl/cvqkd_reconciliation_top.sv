@@ -17,7 +17,9 @@ module cvqkd_reconciliation_top (
 
     // --- Interfaz de Salida 2: Hacia Procesador ARM (Síndrome LDPC) ---
     output logic         syndrome_done,
-    output logic [383:0] syndrome_out [0:45]
+    output logic         syndrome_valid,
+    output logic [5:0]   syndrome_row_idx,
+    output logic [383:0] syndrome_data
 );
 
     // =========================================================================
@@ -55,12 +57,14 @@ module cvqkd_reconciliation_top (
     // 3. EL CÁLCULO DE SÍNDROME (Espía la clave y usa Ping-Pong)
     // =========================================================================
     cvqkd_syndrome_pingpong u_syndrome (
-        .clk         (clk),
-        .rst_n       (rst_n),
-        .valid_data  (accum_valid), // Espía la misma señal que el MDR
-        .trng_data   (trng_data),   // Captura los mismos 8 bits que usa el MDR
-        .done        (syndrome_done),
-        .syndrome_out(syndrome_out)
+        .clk             (clk),
+        .rst_n           (rst_n),
+        .valid_data      (accum_valid),   // Espía la misma señal que el MDR
+        .trng_data       (trng_data),     // Captura los mismos 8 bits que usa el MDR
+        .done            (syndrome_done),
+        .syndrome_valid  (syndrome_valid),
+        .syndrome_row_idx(syndrome_row_idx),
+        .syndrome_data   (syndrome_data)
     );
 
 endmodule

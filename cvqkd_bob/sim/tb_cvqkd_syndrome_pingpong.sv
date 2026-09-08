@@ -17,7 +17,9 @@ module tb_cvqkd_syndrome_pingpong();
     
     // Señales de Salida
     logic         done;
-    logic [383:0] syndrome_out [0:45];
+    logic         syndrome_valid;
+    logic [5:0]   syndrome_row_idx;
+    logic [383:0] syndrome_data;
 
     // =========================================================================
     // 2. MEMORIAS PARA LEER LOS .TXT DE MATLAB
@@ -35,29 +37,45 @@ module tb_cvqkd_syndrome_pingpong();
     // 4. INSTANCIACIÓN DEL DUT (Device Under Test)
     // =========================================================================
     cvqkd_syndrome_pingpong dut (
-        .clk         (clk),
-        .rst_n       (rst_n),
-        .valid_data  (valid_data),
-        .trng_data   (trng_data),
-        .done        (done),
-        .syndrome_out(syndrome_out)
+        .clk              (clk),
+        .rst_n            (rst_n),
+        .valid_data       (valid_data),
+        .trng_data        (trng_data),
+        .done             (done),
+        .syndrome_valid   (syndrome_valid),
+        .syndrome_row_idx (syndrome_row_idx),
+        .syndrome_data    (syndrome_data)
     );
 
     // =========================================================================
-    // 5. HILO PARALELO: AUTO-CHECKER MATRICIAL (Se dispara con el 'done')
+    // 5. HILO PARALELO: AUTO-CHECKER MATRICIAL (Streaming)
     // =========================================================================
     int frames_checked = 0;
     int err_count      = 0;
 
+    // Array para capturar el síndrome emitido por streaming
+    logic [383:0] captured_syndrome [0:ROWS-1];
+    int           rows_captured = 0;
+
+    // Capturamos cada fila que llega con syndrome_valid
     always_ff @(posedge clk) begin
+        if (syndrome_valid) begin
+            captured_syndrome[syndrome_row_idx] <= syndrome_data;
+            rows_captured                       <= rows_captured + 1;
+        end
         if (done) begin
             $display("[CHECKER] !Senal DONE detectada! Verificando matriz del sindrome de la Trama %0d...", frames_checked + 1);
             
+            if (rows_captured != ROWS) begin
+                $display("  [FAIL] Solo se recibieron %0d filas (esperadas %0d).", rows_captured, ROWS);
+                err_count++;
+            end
+            
             for (int i = 0; i < ROWS; i++) begin
-                if (syndrome_out[i] !== mem_expected_syndrome[i]) begin
+                if (captured_syndrome[i] !== mem_expected_syndrome[i]) begin
                     $display("  [FAIL] Discrepancia en la fila %0d", i);
                     $display("         Esperado: %096X", mem_expected_syndrome[i]);
-                    $display("         Obtenido: %096X", syndrome_out[i]);
+                    $display("         Obtenido: %096X", captured_syndrome[i]);
                     err_count++;
                 end
             end
@@ -67,7 +85,8 @@ module tb_cvqkd_syndrome_pingpong();
             end
             
             frames_checked++;
-            err_count = 0; // Reseteamos para la siguiente trama
+            err_count      = 0;   // Reseteamos para la siguiente trama
+            rows_captured <= 0;
         end
     end
 

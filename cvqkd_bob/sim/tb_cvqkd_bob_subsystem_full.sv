@@ -31,7 +31,9 @@ module tb_cvqkd_bob_subsystem_top();
     logic                        mdr_valid;
     logic [255:0]                mdr_m_out;
     logic                        syndrome_done;
-    logic [383:0]                syndrome_out [0:45];
+    logic                        syndrome_valid;
+    logic [5:0]                  syndrome_row_idx;
+    logic [383:0]                syndrome_data;
 
     // =========================================================================
     // 2. MEMORIAS PARA LEER LOS ARCHIVOS DE MATLAB
@@ -94,6 +96,18 @@ module tb_cvqkd_bob_subsystem_top();
     int mdr_check_idx = 0;
     int mdr_err_count = 0;
     
+    // Array para capturar el síndrome emitido por streaming
+    logic [383:0] captured_syndrome [0:ROWS-1];
+    int           syn_rows_captured = 0;
+
+    // Captura streaming de las filas del síndrome
+    always_ff @(posedge clk) begin
+        if (syndrome_valid) begin
+            captured_syndrome[syndrome_row_idx] <= syndrome_data;
+            syn_rows_captured                   <= syn_rows_captured + 1;
+        end
+    end
+
     always_ff @(posedge clk) begin
         if (mdr_valid) begin
             for (int i = 0; i < 8; i++) begin
@@ -113,8 +127,12 @@ module tb_cvqkd_bob_subsystem_top();
         if (syndrome_done) begin
             int syn_err = 0;
             $display("\n[CHECKER] !Matriz de Sindrome Lista!");
+            if (syn_rows_captured != ROWS) begin
+                $display("  [FAIL] Solo se recibieron %0d filas (esperadas %0d).", syn_rows_captured, ROWS);
+                syn_err++;
+            end
             for (int i = 0; i < ROWS; i++) begin
-                if (syndrome_out[i] !== mem_syn_exp[i]) syn_err++;
+                if (captured_syndrome[i] !== mem_syn_exp[i]) syn_err++;
             end
             if (syn_err == 0) $display("  [ OK ] El Sindrome es PERFECTO y coincide con MATLAB.");
             else              $display("  [FAIL] %0d errores en las ecuaciones del Sindrome.", syn_err);

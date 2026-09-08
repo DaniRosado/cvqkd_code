@@ -10,7 +10,9 @@ module cvqkd_syndrome_pingpong (
     
     // --- Interfaz de Salida ---
     output logic         done,
-    output logic [383:0] syndrome_out [0:45]
+    output logic         syndrome_valid,
+    output logic [5:0]   syndrome_row_idx,
+    output logic [383:0] syndrome_data
 );
 
     // =========================================================================
@@ -133,7 +135,9 @@ module cvqkd_syndrome_pingpong (
         .u_addr(u_addr),         
         .u_data_in(u_data_in),   
         .done(calc_done),
-        .syndrome_out(syndrome_out)
+        .syndrome_valid(syndrome_valid),
+        .syndrome_row_idx(syndrome_row_idx),
+        .syndrome_data(syndrome_data)
     );
 
 endmodule

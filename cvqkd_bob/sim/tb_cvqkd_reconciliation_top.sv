@@ -20,7 +20,9 @@ module tb_cvqkd_reconciliation_top();
     logic         mdr_valid;
     logic [255:0] mdr_m_out;
     logic         syndrome_done;
-    logic [383:0] syndrome_out [0:45];
+    logic         syndrome_valid;
+    logic [5:0]   syndrome_row_idx;
+    logic [383:0] syndrome_data;
 
     // =========================================================================
     // 2. MEMORIAS (Plantillas de Oro de MATLAB)
@@ -40,15 +42,17 @@ module tb_cvqkd_reconciliation_top();
     // 4. INSTANCIACIÓN DEL DUT (Top Level)
     // =========================================================================
     cvqkd_reconciliation_top dut (
-        .clk          (clk),
-        .rst_n        (rst_n),
-        .router_valid (router_valid),
-        .router_data  (router_data),
-        .trng_data    (trng_data),
-        .mdr_valid    (mdr_valid),
-        .mdr_m_out    (mdr_m_out),
-        .syndrome_done(syndrome_done),
-        .syndrome_out (syndrome_out)
+        .clk                (clk),
+        .rst_n              (rst_n),
+        .router_valid       (router_valid),
+        .router_data        (router_data),
+        .trng_data          (trng_data),
+        .mdr_valid          (mdr_valid),
+        .mdr_m_out          (mdr_m_out),
+        .syndrome_done      (syndrome_done),
+        .syndrome_valid     (syndrome_valid),
+        .syndrome_row_idx   (syndrome_row_idx),
+        .syndrome_data      (syndrome_data)
     );
 
     // =========================================================================
@@ -81,17 +85,30 @@ module tb_cvqkd_reconciliation_top();
     end
 
     // =========================================================================
-    // 5B. AUTO-CHECKER: SÍNDROME LDPC (Por tramas completas)
+    // 5B. AUTO-CHECKER: SÍNDROME LDPC (Streaming por tramas completas)
     // =========================================================================
     int syn_frames_checked = 0;
     int syn_err_count      = 0;
 
+    // Captura de filas streaming + verificación
+    logic [383:0] captured_syndrome [0:ROWS-1];
+    int           syn_rows_captured = 0;
+
     always_ff @(posedge clk) begin
+        if (rst_n && syndrome_valid && !syndrome_done) begin
+            captured_syndrome[syndrome_row_idx] <= syndrome_data;
+            syn_rows_captured                   <= syn_rows_captured + 1;
+        end
         if (rst_n && syndrome_done) begin
             $display("[CHECKER] Matriz del Sindrome de la Trama %0d lista. Verificando...", syn_frames_checked + 1);
             
+            if (syn_rows_captured != ROWS) begin
+                $display("  [FAIL] Solo se recibieron %0d filas (esperadas %0d).", syn_rows_captured, ROWS);
+                syn_err_count++;
+            end
+            
             for (int i = 0; i < ROWS; i++) begin
-                if (syndrome_out[i] !== mem_syn_exp[i]) begin
+                if (captured_syndrome[i] !== mem_syn_exp[i]) begin
                     syn_err_count++;
                 end
             end
@@ -100,7 +117,8 @@ module tb_cvqkd_reconciliation_top();
             else                    $display("  [FAIL] Trama %0d: %0d errores en Sindrome.", syn_frames_checked + 1, syn_err_count);
             
             syn_frames_checked++;
-            syn_err_count = 0;
+            syn_err_count      = 0;
+            syn_rows_captured <= 0;
         end
     end
 

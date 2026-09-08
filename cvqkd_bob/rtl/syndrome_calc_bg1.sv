@@ -11,9 +11,11 @@ module syndrome_calc_bg1 (
     output logic [6:0]   u_addr,      // Columna del base graph (0 a 67)
     input  logic [383:0] u_data_in,   // Bus de 384 bits
 
-    // Salida
+    // Salida streaming (1 fila por pulso)
     output logic         done,
-    output logic [383:0] syndrome_out [0:45]
+    output logic         syndrome_valid,
+    output logic [5:0]   syndrome_row_idx,
+    output logic [383:0] syndrome_data
 );
 
     localparam int Z = 384;
@@ -56,6 +58,30 @@ module syndrome_calc_bg1 (
     assign current_row_info = ROW_INFO_ROM[row_idx];
     assign u_addr           = current_edge.col_idx;
     assign shift_val        = current_edge.shift_val;
+
+    // =================================================================
+    // Streaming: detectar cuándo una fila se completa
+    // =================================================================
+    logic        row_just_completed;
+    logic [5:0]  completed_row_idx;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            row_just_completed <= 1'b0;
+            completed_row_idx  <= '0;
+        end else begin
+            row_just_completed <= 1'b0;
+            if (state == ST_ACCUMULATE &&
+                edge_in_row == current_row_info.num_edges - 1) begin
+                row_just_completed <= 1'b1;
+                completed_row_idx  <= row_idx;
+            end
+        end
+    end
+
+    assign syndrome_valid   = row_just_completed;
+    assign syndrome_row_idx = completed_row_idx;
+    assign syndrome_data    = s_mem[completed_row_idx];
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -115,13 +141,6 @@ module syndrome_calc_bg1 (
                     state <= ST_IDLE;
                 end
             endcase
-        end
-    end
-
-    // Salida
-    always_comb begin
-        for (int i = 0; i < 46; i++) begin
-            syndrome_out[i] = s_mem[i];
         end
     end
 

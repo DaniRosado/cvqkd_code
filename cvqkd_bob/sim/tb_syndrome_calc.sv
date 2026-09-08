@@ -17,7 +17,9 @@ module tb_syndrome_calc_bg1();
     logic [6:0]   u_addr;
     logic [383:0] u_data_in;
     logic         done;
-    logic [383:0] syndrome_out [0:45];
+    logic         syndrome_valid;
+    logic [5:0]   syndrome_row_idx;
+    logic [383:0] syndrome_data;
 
     // =========================================================================
     // 2. MEMORIAS DEL TESTBENCH (Plantillas de Oro)
@@ -56,13 +58,25 @@ module tb_syndrome_calc_bg1();
         .u_addr(u_addr),
         .u_data_in(u_data_in),
         .done(done),
-        .syndrome_out(syndrome_out)
+        .syndrome_valid(syndrome_valid),
+        .syndrome_row_idx(syndrome_row_idx),
+        .syndrome_data(syndrome_data)
     );
 
     // =========================================================================
     // 6. PROCEDIMIENTO PRINCIPAL DE TEST
     // =========================================================================
     int err_count = 0;
+
+    // Array para capturar el síndrome emitido por streaming
+    logic [Z-1:0] captured_syndrome [0:ROWS-1];
+
+    // Auto-checker: captura cada fila que llega con syndrome_valid
+    always_ff @(posedge clk) begin
+        if (syndrome_valid) begin
+            captured_syndrome[syndrome_row_idx] <= syndrome_data;
+        end
+    end
 
     initial begin
         // --- A. Inicialización ---
@@ -100,10 +114,10 @@ module tb_syndrome_calc_bg1();
         $display("-------------------------------------------------------------------------");
         
         for (int i = 0; i < ROWS; i++) begin
-            if (syndrome_out[i] !== mem_expected_syndrome[i]) begin
+            if (captured_syndrome[i] !== mem_expected_syndrome[i]) begin
                 $display("  [FAIL] Discrepancia en la fila %0d", i);
                 $display("         Esperado: %096X", mem_expected_syndrome[i]);
-                $display("         Obtenido: %096X", syndrome_out[i]);
+                $display("         Obtenido: %096X", captured_syndrome[i]);
                 err_count++;
             end
         end
