@@ -4,7 +4,7 @@
 	module AXI4_Lite_Bob_slave_lite_v1_0_S00_AXI #
 	(
 		// Users to add parameters here
-
+        parameter integer ADC_WIDTH = 16,
 		// User parameters ends
 		// Do not modify the parameters beyond this line
 
@@ -15,7 +15,52 @@
 	)
 	(
 		// Users to add ports here
-
+		output  wire signed [ADC_WIDTH-1:0] p_in,
+		output  wire signed [ADC_WIDTH-1:0] q_in,
+		output  wire                        valid_in,
+		
+		// =========================================================================
+		// 2. INTERFAZ DE RED CLÁSICA (Recepción desde Alice)
+		// =========================================================================
+		output  wire                        mask_valid,
+		output  wire                        mask_bit,
+		output  wire                        alice_stream_valid,
+		output  wire [31:0]                 alice_stream_data,   // {Q_Alice, P_Alice}
+		
+		// =========================================================================
+		// 3. INTERFAZ TRNG (Generador de Números Aleatorios)
+		// =========================================================================
+		output  wire [7:0]                  trng_data,           // 8 bits aleatorios por ciclo
+		
+		// =========================================================================
+		// 4. INTERFAZ AXI4-LITE (Hacia el Procesador ARM / Vitis)
+		// =========================================================================
+		// Entradas (Escritas por la CPU)
+		output  wire signed [31:0]          calib_VarA,          // Varianza calibrada
+		
+		// Salidas (Leídas por la CPU)
+		input wire signed [31:0]          T_final_out,
+		input wire signed [31:0]          T_sqrt_out,
+		input wire signed [31:0]          sigma_sq_out,
+		input wire signed [31:0]          sigma_out,
+		input wire [31:0]                 num_samples_out,
+		
+		// Señales de Interrupción y Estado
+		input wire                        done_est,            // (Opcional) Fin de ciclo del estimador
+		
+		// =========================================================================
+		// 5. INTERFACES DE TRANSMISIÓN (Hacia fuera del chip / Alice / Monitorización)
+		// =========================================================================
+		
+		// A. Hacia Alice (Mensajes Públicos MDR para reconciliar)
+		input wire                        mdr_valid,
+		input wire [255:0]                mdr_m_out,
+		
+		// B. Hacia Procesador/AXI-Stream (Síndrome para decodificar LDPC)
+		input wire                        syndrome_done,
+		input wire                        syndrome_valid,
+		input wire [5:0]                  syndrome_row_idx,
+		input wire [383:0]                syndrome_data,
 		// User ports ends
 		// Do not modify the ports beyond this line
 
