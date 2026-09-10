@@ -1,0 +1,73 @@
+{
+   "ActiveEmotionalView":"Default View",
+   "Default View_ScaleFactor":"0.3125",
+   "Default View_TopLeft":"765,-934",
+   "ExpandedHierarchyInLayout":"",
+   "guistr":"# # String gsaved with Nlview 7.8.0 2024-04-26 e1825d835c VDI=44 GEI=38 GUI=JA:21.0
+#  -string -flagsOSRD
+preplace port DDR -pg 1 -lvl 9 -x 4140 -y -270 -defaultsOSRD
+preplace port FIXED_IO -pg 1 -lvl 9 -x 4140 -y -250 -defaultsOSRD
+preplace port gpio_rtl_0 -pg 1 -lvl 9 -x 4140 -y -540 -defaultsOSRD
+preplace port gpio_rtl_1 -pg 1 -lvl 9 -x 4140 -y -650 -defaultsOSRD
+preplace port gpio_rtl_2 -pg 1 -lvl 9 -x 4140 -y -670 -defaultsOSRD
+preplace inst processing_system7_0 -pg 1 -lvl 5 -x 2590 -y 80 -defaultsOSRD
+preplace inst axi_dma_0 -pg 1 -lvl 4 -x 2080 -y -370 -defaultsOSRD
+preplace inst axi_dma_1 -pg 1 -lvl 4 -x 2080 -y -90 -defaultsOSRD
+preplace inst cvqkd_bob_subsystem_0 -pg 1 -lvl 5 -x 2590 -y -270 -defaultsOSRD
+preplace inst axi_gpio_0 -pg 1 -lvl 3 -x 1660 -y -530 -defaultsOSRD
+preplace inst axi_gpio_1 -pg 1 -lvl 2 -x 1300 -y -500 -defaultsOSRD
+preplace inst axi_gpio_2 -pg 1 -lvl 1 -x 960 -y -500 -defaultsOSRD
+preplace inst xlslice_0 -pg 1 -lvl 3 -x 1660 -y -50 -defaultsOSRD
+preplace inst xlslice_1 -pg 1 -lvl 3 -x 1660 -y 60 -defaultsOSRD
+preplace inst xlslice_2 -pg 1 -lvl 3 -x 1660 -y -160 -defaultsOSRD
+preplace inst xlconcat_0 -pg 1 -lvl 4 -x 2080 -y 140 -defaultsOSRD
+preplace inst axi_smc -pg 1 -lvl 8 -x 3910 -y 40 -defaultsOSRD
+preplace inst rst_ps7_0_100M -pg 1 -lvl 7 -x 3520 -y -80 -defaultsOSRD
+preplace inst axi_mem_intercon -pg 1 -lvl 8 -x 3910 -y -380 -defaultsOSRD
+preplace netloc axi_dma_0_mm2s_introut 1 3 2 1900 -210 2250
+preplace netloc axi_dma_0_s2mm_introut 1 3 2 1890 -230 2240
+preplace netloc axi_dma_1_mm2s_introut 1 3 2 1910 240 2250
+preplace netloc axi_dma_1_s2mm_introut 1 3 2 1920 40 2240
+preplace netloc axi_gpio_1_gpio2_io_o 1 2 1 1460 -450n
+preplace netloc axi_gpio_1_gpio_io_o 1 2 3 1470J -450 1810J -490 2260
+preplace netloc cvqkd_bob_subsystem_0_T_final_out 1 2 4 1460J -660 NJ -660 NJ -660 2850
+preplace netloc cvqkd_bob_subsystem_0_T_sqrt_out 1 2 4 1480J -640 NJ -640 2260J -630 2830
+preplace netloc cvqkd_bob_subsystem_0_done_est 1 3 3 1880 -500 2350J -420 2810
+preplace netloc cvqkd_bob_subsystem_0_num_samples_out 1 3 3 1810J -530 NJ -530 2820
+preplace netloc cvqkd_bob_subsystem_0_sigma_out 1 1 5 1120J -650 NJ -650 NJ -650 NJ -650 2840
+preplace netloc cvqkd_bob_subsystem_0_sigma_sq_out 1 1 5 1110J -670 NJ -670 NJ -670 NJ -670 2860
+preplace netloc processing_system7_0_FCLK_CLK0 1 0 8 800 -600 1140 -610 1500 -620 1820 -510 2340 -50 2880 -50 3320 50 3750J
+preplace netloc processing_system7_0_FCLK_RESET0_N 1 5 2 2900 -100 N
+preplace netloc rst_ps7_0_100M_peripheral_aresetn 1 0 8 810 -590 1130 -620 1490 -630 1830 -540 NJ -540 2900J -460 3160 -530 3730
+preplace netloc xlconcat_0_dout 1 4 1 2320 130n
+preplace netloc xlslice_0_Dout 1 3 2 1850 -240 NJ
+preplace netloc xlslice_1_Dout 1 3 2 1840 -250 2370J
+preplace netloc xlslice_2_Dout 1 3 2 1860 -220 NJ
+preplace netloc axi_dma_0_M_AXIS_MM2S 1 4 1 2240 -390n
+preplace netloc axi_dma_0_M_AXI_MM2S 1 4 4 2240J -450 NJ -450 3170 -520 3740
+preplace netloc axi_dma_0_M_AXI_S2MM 1 4 4 2250 -430 NJ -430 3180 -510 NJ
+preplace netloc axi_dma_1_M_AXIS_MM2S 1 4 1 2380 -320n
+preplace netloc axi_dma_1_M_AXI_MM2S 1 4 4 2350 -410 NJ -410 3190 -490 NJ
+preplace netloc axi_dma_1_M_AXI_S2MM 1 4 4 2360 -400 NJ -400 3200 -470 NJ
+preplace netloc axi_mem_intercon_M00_AXI 1 4 5 2390 -640 NJ -640 N -640 NJ -640 4050
+preplace netloc axi_smc_M00_AXI 1 3 6 1920 -620 NJ -620 NJ -620 N -620 NJ -620 4080
+preplace netloc axi_smc_M01_AXI 1 3 6 1910 30 2370J -40 NJ -40 3140 20 3740J -60 4050
+preplace netloc axi_smc_M02_AXI 1 2 7 1510 -610 NJ -610 NJ -610 NJ -610 N -610 NJ -610 4070
+preplace netloc axi_smc_M03_AXI 1 1 8 1150 -690 NJ -690 NJ -690 NJ -690 NJ -690 N -690 NJ -690 4060
+preplace netloc axi_smc_M04_AXI 1 0 9 790 -680 NJ -680 NJ -680 NJ -680 NJ -680 NJ -680 N -680 NJ -680 4090
+preplace netloc cvqkd_bob_subsystem_0_m_axis_mdr 1 3 3 1910 -550 NJ -550 2800
+preplace netloc cvqkd_bob_subsystem_0_m_axis_syndrome 1 3 3 1870 -520 2360J -440 2790
+preplace netloc processing_system7_0_DDR 1 5 4 2870J -480 3140 -550 3690 -600 4110
+preplace netloc processing_system7_0_FIXED_IO 1 5 4 2890J -470 3150 -540 3700 -590 4100
+preplace netloc processing_system7_0_M_AXI_GP0 1 5 3 NJ 80 3350 40 3770
+preplace netloc processing_system7_0_M_AXI_GP1 1 5 3 2890J 70 3140 30 3760J
+levelinfo -pg 1 0 960 1300 1660 2080 2590 3120 3520 3910 4140
+pagesize -pg 1 -db -bbox -sgen -30 -720 4260 380
+"
+}
+{
+   "da_axi4_cnt":"13",
+   "da_board_cnt":"3",
+   "da_clkrst_cnt":"1",
+   "da_ps7_cnt":"1"
+}
