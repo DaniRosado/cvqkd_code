@@ -8,61 +8,91 @@ module cvqkd_bob_subsystem_top #(
     input  logic        rst_n,      // Reset estándar AXI (Activo a nivel bajo)
     
     // =========================================================================
-    // 1. INTERFAZ FÍSICA (Desde el ADC / Canal Cuántico) -- input_pq
+    // 1. INTERFAZ AXI4-STREAM ESCLAVA (Desde el ADC / Bob) -- input_pq
     // =========================================================================
-    input  logic signed [ADC_WIDTH-1:0] p_in,
-    input  logic signed [ADC_WIDTH-1:0] q_in,
-    input  logic                        valid_in,
+    input  logic [31:0] s_axis_pq_tdata,   // Recibe {q_in, p_in} concatenados
+    input  logic        s_axis_pq_tvalid,
+    output logic        s_axis_pq_tready,  // Avisa si el HW está listo para recibir
     
     // =========================================================================
-    // 2. INTERFAZ DE RED CLÁSICA (Recepción desde Alice)
+    // 2. INTERFAZ AXI4-STREAM ESCLAVA (Recepción desde Alice)
     // =========================================================================
-    input  logic                        mask_valid,
-    input  logic                        mask_bit,
-    input  logic                        alice_stream_valid,
-    input  logic [31:0]                 alice_stream_data,   // {Q_Alice, P_Alice}
+    input  logic [31:0] s_axis_alice_tdata,
+    input  logic        s_axis_alice_tvalid,
+    output logic        s_axis_alice_tready,
+    
+    // (Mantenidas sueltas temporalmente, pueden ir a pines físicos o AXI GPIO)
+    input  logic        mask_valid,
+    input  logic        mask_bit,
     
     // =========================================================================
     // 3. INTERFAZ TRNG (Generador de Números Aleatorios)
     // =========================================================================
-    input  logic [7:0]                  trng_data,           // 8 bits aleatorios por ciclo
+    input  logic [7:0]  trng_data,         
     
     // =========================================================================
-    // 4. INTERFAZ AXI4-LITE (Hacia el Procesador ARM / Vitis)
+    // 4. INTERFAZ AXI4-LITE / PUERTOS DE REGISTRO (Hacia el Procesador)
     // =========================================================================
-    // Entradas (Escritas por la CPU)
-    input  logic signed [31:0]          calib_VarA,          // Varianza calibrada
-    
-    // Salidas (Leídas por la CPU)
-    output logic signed [31:0]          T_final_out,
-    output logic signed [31:0]          T_sqrt_out,
-    output logic signed [31:0]          sigma_sq_out,
-    output logic signed [31:0]          sigma_out,
-    output logic [31:0]                 num_samples_out,
-    
-    // Señales de Interrupción y Estado
-    output logic                        done_est,            // (Opcional) Fin de ciclo del estimador
+    input  logic signed [31:0] calib_VarA,
+    output logic signed [31:0] T_final_out,
+    output logic signed [31:0] T_sqrt_out,
+    output logic signed [31:0] sigma_sq_out,
+    output logic signed [31:0] sigma_out,
+    output logic [31:0]        num_samples_out,
+    output logic               done_est,
     
     // =========================================================================
-    // 5. INTERFACES DE TRANSMISIÓN (Hacia fuera del chip / Alice / Monitorización)
+    // 5. INTERFAZ AXI4-STREAM MAESTRA (Hacia CPU - MDR para reconciliar)
     // =========================================================================
+    output logic [255:0] m_axis_mdr_tdata,
+    output logic         m_axis_mdr_tvalid,
+    input  logic         m_axis_mdr_tready,
+    output logic         m_axis_mdr_tlast,  // Marca el final de un bloque MDR
     
-    // A. Hacia Alice (Mensajes Públicos MDR para reconciliar)
-    output logic                        mdr_valid,
-    output logic [255:0]                mdr_m_out,
-    
-    // B. Hacia Procesador/AXI-Stream (Síndrome para decodificar LDPC)
-    output logic                        syndrome_done,
-    output logic                        syndrome_valid,
-    output logic [5:0]                  syndrome_row_idx,
-    output logic [383:0]                syndrome_data
+    // =========================================================================
+    // 6. INTERFAZ AXI4-STREAM MAESTRA (Hacia CPU - Síndrome LDPC)
+    // =========================================================================
+    output logic [511:0] m_axis_syndrome_tdata,
+    output logic         m_axis_syndrome_tvalid,
+    input  logic         m_axis_syndrome_tready,
+    output logic         m_axis_syndrome_tlast  // Dispara la interrupción del DMA
 );
 
     // =========================================================================
-    // ADAPTADOR DE RESET PARA MÓDULOS ANTIGUOS
+    // ADAPTADOR DE RESET Y MANEJO DE BUSES AXI-STREAM
     // =========================================================================
     logic rst;
     assign rst = ~rst_n; // El DSP y el Router usan reset a nivel alto
+
+    // --- Desempaquetado de buses de entrada (Esclavos) ---
+    logic signed [ADC_WIDTH-1:0] p_in;
+    logic signed [ADC_WIDTH-1:0] q_in;
+    logic                        valid_in;
+
+    // Asumimos que la CPU empaqueta p_in en los bits bajos y q_in en los altos (o viceversa)
+    assign p_in     = s_axis_pq_tdata[ADC_WIDTH-1:0];
+    assign q_in     = s_axis_pq_tdata[2*ADC_WIDTH-1:ADC_WIDTH];
+    assign valid_in = s_axis_pq_tvalid;
+    
+    // Control de flujo: ponemos 'ready' a 1 indicando que el HW siempre puede recibir.
+    // (Si tus módulos internos necesitan pausarse, tendrías que conectar esto a su lógica).
+    assign s_axis_pq_tready    = 1'b1;
+    assign s_axis_alice_tready = 1'b1;
+
+    logic alice_stream_valid;
+    logic [31:0] alice_stream_data;
+    
+    assign alice_stream_data  = s_axis_alice_tdata;
+    assign alice_stream_valid = s_axis_alice_tvalid;
+
+    // --- Control de señales tlast para buses de salida (Maestros) ---
+    
+    // Si el MDR se envía en una única transacción de 256 bits, el último dato es también el primero.
+    assign m_axis_mdr_tlast = m_axis_mdr_tvalid; 
+    
+    // Para el síndrome, la señal 'syndrome_done' interna es perfecta para mapearla a 'tlast'
+    logic syndrome_done_internal;
+    assign m_axis_syndrome_tlast = syndrome_done_internal;
 
     // =========================================================================
     // CABLES INTERNOS DE ENRUTAMIENTO
@@ -77,9 +107,14 @@ module cvqkd_bob_subsystem_top #(
     
     logic        valid_key;
     logic [31:0] data_key;
+    
+    logic [383:0] syndrome_internal;
+    
+    assign m_axis_syndrome_tdata = {128'd0, syndrome_internal};
 
-    // Empaquetado del bus del DSP para el Router
     assign dsp_data_packed = {dsp_q_out, dsp_p_out};
+    
+    
 
     // =========================================================================
     // BLOQUE 1: DSP (Recuperación de Fase Cuántica)
@@ -114,54 +149,48 @@ module cvqkd_bob_subsystem_top #(
     );
 
     // =========================================================================
-    // BLOQUE 3: ESTIMACIÓN DE PARÁMETROS (Hardware <-> Software)
+    // BLOQUE 3: ESTIMACIÓN DE PARÁMETROS
     // =========================================================================
     param_estimator_top #(
         .NUM_SAMPLES(NUM_SAMPLES)
     ) param_estimator_inst (
         .clk(clk),
         .rst_n(rst_n),
-        .start(mask_valid),         // La estimación arranca cuando empieza a llegar la máscara
+        .start(mask_valid),         
         .done(done_est),
-        
-        // Entradas de Datos (Streaming)
         .bob_stream_valid(router_valid_sac),
         .bob_stream_data(router_data_sac),
         .alice_stream_valid(alice_stream_valid),
         .alice_stream_data(alice_stream_data),
-        
-        // Interfaz AXI (CPU -> HW)
         .calib_VarA(calib_VarA),
-        
-        // Interfaz AXI (HW -> CPU)
         .T_final_out(T_final_out),
         .sigma_sq_out(sigma_sq_out),
         .sigma_out(sigma_out),
         .num_samples_out(num_samples_out),
-        
-        // Salidas Hardware Globales
         .T_sqrt_out(T_sqrt_out)
     );
 
     // =========================================================================
     // BLOQUE 4: SUBSISTEMA DE RECONCILIACIÓN (MDR + Síndrome)
     // =========================================================================
+    logic [5:0] syndrome_row_idx_open; // Señal no expuesta al exterior (AXI-Stream asume el orden implícito)
+
     cvqkd_reconciliation_top reconciliation_inst (
         .clk(clk),
         .rst_n(rst_n),
-        
-        // Ingesta de datos de la clave desde el Router
         .router_valid(valid_key),
         .router_data(data_key),
         .trng_data(trng_data),
         
-        // Salidas públicas
-        .mdr_valid(mdr_valid),
-        .mdr_m_out(mdr_m_out),
-        .syndrome_done(syndrome_done),
-        .syndrome_valid(syndrome_valid),
-        .syndrome_row_idx(syndrome_row_idx),
-        .syndrome_data(syndrome_data)
+        // MDR conectado directamente a las salidas maestras
+        .mdr_valid(m_axis_mdr_tvalid),
+        .mdr_m_out(m_axis_mdr_tdata),
+        
+        // Síndrome conectado directamente a las salidas maestras
+        .syndrome_done(syndrome_done_internal),
+        .syndrome_valid(m_axis_syndrome_tvalid),
+        .syndrome_row_idx(syndrome_row_idx_open), 
+        .syndrome_data(syndrome_internal)
     );
 
 endmodule
