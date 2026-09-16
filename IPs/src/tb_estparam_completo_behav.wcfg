@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wave_config>
+   <wave_state>
+   </wave_state>
+   <db_ref_list>
+      <db_ref path="tb_estparam_completo_behav.wdb" id="1">
+         <top_modules>
+            <top_module name="glbl" />
+            <top_module name="tb_estparam_completo" />
+         </top_modules>
+      </db_ref>
+   </db_ref_list>
+   <zoom_setting>
+      <ZoomStartTime time="0.000000 us"></ZoomStartTime>
+      <ZoomEndTime time="2,600.000001 us"></ZoomEndTime>
+      <Cursor1Time time="410.555000 us"></Cursor1Time>
+   </zoom_setting>
+   <column_width_setting>
+      <NameColumnWidth column_width="264"></NameColumnWidth>
+      <ValueColumnWidth column_width="257"></ValueColumnWidth>
+   </column_width_setting>
+   <WVObjectSize size="32" />
+   <wvobject fp_name="/tb_estparam_completo/clk" type="logic">
+      <obj_property name="ElementShortName">clk</obj_property>
+      <obj_property name="ObjectShortName">clk</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/rst" type="logic">
+      <obj_property name="ElementShortName">rst</obj_property>
+      <obj_property name="ObjectShortName">rst</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/adc_q" type="array">
+      <obj_property name="ElementShortName">adc_q[15:0]</obj_property>
+      <obj_property name="ObjectShortName">adc_q[15:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/adc_p" type="array">
+      <obj_property name="ElementShortName">adc_p[15:0]</obj_property>
+      <obj_property name="ObjectShortName">adc_p[15:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/adc_valid" type="logic">
+      <obj_property name="ElementShortName">adc_valid</obj_property>
+      <obj_property name="ObjectShortName">adc_valid</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/adc_ptr" type="array">
+      <obj_property name="ElementShortName">adc_ptr[31:0]</obj_property>
+      <obj_property name="ObjectShortName">adc_ptr[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/dsp_data_valid" type="logic">
+      <obj_property name="ElementShortName">dsp_data_valid</obj_property>
+      <obj_property name="ObjectShortName">dsp_data_valid</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/irq_buffer_ready" type="logic">
+      <obj_property name="ElementShortName">irq_buffer_ready</obj_property>
+      <obj_property name="ObjectShortName">irq_buffer_ready</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/irq_buffer_side" type="logic">
+      <obj_property name="ElementShortName">irq_buffer_side</obj_property>
+      <obj_property name="ObjectShortName">irq_buffer_side</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/bob_read_addr" type="array">
+      <obj_property name="ElementShortName">bob_read_addr[16:0]</obj_property>
+      <obj_property name="ObjectShortName">bob_read_addr[16:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/bob_read_data" type="array">
+      <obj_property name="ElementShortName">bob_read_data[31:0]</obj_property>
+      <obj_property name="ObjectShortName">bob_read_data[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/alice_we" type="logic">
+      <obj_property name="ElementShortName">alice_we</obj_property>
+      <obj_property name="ObjectShortName">alice_we</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/alice_wr_addr" type="array">
+      <obj_property name="ElementShortName">alice_wr_addr[14:0]</obj_property>
+      <obj_property name="ObjectShortName">alice_wr_addr[14:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/alice_wr_data" type="array">
+      <obj_property name="ElementShortName">alice_wr_data[31:0]</obj_property>
+      <obj_property name="ObjectShortName">alice_wr_data[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/alice_rd_addr" type="array">
+      <obj_property name="ElementShortName">alice_rd_addr[14:0]</obj_property>
+      <obj_property name="ObjectShortName">alice_rd_addr[14:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/alice_rd_data" type="array">
+      <obj_property name="ElementShortName">alice_rd_data[31:0]</obj_property>
+      <obj_property name="ObjectShortName">alice_rd_data[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/ptr_rd_addr" type="array">
+      <obj_property name="ElementShortName">ptr_rd_addr[14:0]</obj_property>
+      <obj_property name="ObjectShortName">ptr_rd_addr[14:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/ptr_rd_data" type="array">
+      <obj_property name="ElementShortName">ptr_rd_data[15:0]</obj_property>
+      <obj_property name="ObjectShortName">ptr_rd_data[15:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/mem_expected" type="array">
+      <obj_property name="ElementShortName">mem_expected[0:3][31:0]</obj_property>
+      <obj_property name="ObjectShortName">mem_expected[0:3][31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/calib_VarA" type="array">
+      <obj_property name="ElementShortName">calib_VarA[31:0]</obj_property>
+      <obj_property name="ObjectShortName">calib_VarA[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/est_start" type="logic">
+      <obj_property name="ElementShortName">est_start</obj_property>
+      <obj_property name="ObjectShortName">est_start</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/est_side" type="logic">
+      <obj_property name="ElementShortName">est_side</obj_property>
+      <obj_property name="ObjectShortName">est_side</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/est_done" type="logic">
+      <obj_property name="ElementShortName">est_done</obj_property>
+      <obj_property name="ObjectShortName">est_done</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/T_est" type="array">
+      <obj_property name="ElementShortName">T_est[31:0]</obj_property>
+      <obj_property name="ObjectShortName">T_est[31:0]</obj_property>
+      <obj_property name="Radix">REALRADIX</obj_property>
+      <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+      <obj_property name="radix_fractionWidth">16</obj_property>
+      <obj_property name="radix_otherWidth">0</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/T_sqrt_est" type="array">
+      <obj_property name="ElementShortName">T_sqrt_est[31:0]</obj_property>
+      <obj_property name="ObjectShortName">T_sqrt_est[31:0]</obj_property>
+      <obj_property name="Radix">REALRADIX</obj_property>
+      <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+      <obj_property name="radix_fractionWidth">16</obj_property>
+      <obj_property name="radix_otherWidth">0</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/sigma_sq_est" type="array">
+      <obj_property name="ElementShortName">sigma_sq_est[31:0]</obj_property>
+      <obj_property name="ObjectShortName">sigma_sq_est[31:0]</obj_property>
+      <obj_property name="Radix">REALRADIX</obj_property>
+      <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+      <obj_property name="radix_fractionWidth">0</obj_property>
+      <obj_property name="radix_otherWidth">0</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/sigma_est" type="array">
+      <obj_property name="ElementShortName">sigma_est[31:0]</obj_property>
+      <obj_property name="ObjectShortName">sigma_est[31:0]</obj_property>
+      <obj_property name="Radix">REALRADIX</obj_property>
+      <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+      <obj_property name="radix_fractionWidth">16</obj_property>
+      <obj_property name="radix_otherWidth">0</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/N_SAMPLES" type="array">
+      <obj_property name="ElementShortName">N_SAMPLES[31:0]</obj_property>
+      <obj_property name="ObjectShortName">N_SAMPLES[31:0]</obj_property>
+      <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/N_BOB_DATA" type="array">
+      <obj_property name="ElementShortName">N_BOB_DATA[31:0]</obj_property>
+      <obj_property name="ObjectShortName">N_BOB_DATA[31:0]</obj_property>
+      <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/N_FIBER" type="array">
+      <obj_property name="ElementShortName">N_FIBER[31:0]</obj_property>
+      <obj_property name="ObjectShortName">N_FIBER[31:0]</obj_property>
+      <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_estparam_completo/bob_ram_inst/write_counter" type="array">
+      <obj_property name="ElementShortName">write_counter[15:0]</obj_property>
+      <obj_property name="ObjectShortName">write_counter[15:0]</obj_property>
+      <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+   </wvobject>
+   <wvobject fp_name="group72" type="group">
+      <obj_property name="label">Math_unit_signals</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <obj_property name="isExpanded"></obj_property>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/clk" type="logic">
+         <obj_property name="ElementShortName">clk</obj_property>
+         <obj_property name="ObjectShortName">clk</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/rst" type="logic">
+         <obj_property name="ElementShortName">rst</obj_property>
+         <obj_property name="ObjectShortName">rst</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/start_calc" type="logic">
+         <obj_property name="ElementShortName">start_calc</obj_property>
+         <obj_property name="ObjectShortName">start_calc</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/sum_sq_P_B" type="array">
+         <obj_property name="ElementShortName">sum_sq_P_B[63:0]</obj_property>
+         <obj_property name="ObjectShortName">sum_sq_P_B[63:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/sum_P_B" type="array">
+         <obj_property name="ElementShortName">sum_P_B[63:0]</obj_property>
+         <obj_property name="ObjectShortName">sum_P_B[63:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/sum_cov_P" type="array">
+         <obj_property name="ElementShortName">sum_cov_P[63:0]</obj_property>
+         <obj_property name="ObjectShortName">sum_cov_P[63:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/sum_P_A" type="array">
+         <obj_property name="ElementShortName">sum_P_A[63:0]</obj_property>
+         <obj_property name="ObjectShortName">sum_P_A[63:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/sum_sq_Q_B" type="array">
+         <obj_property name="ElementShortName">sum_sq_Q_B[63:0]</obj_property>
+         <obj_property name="ObjectShortName">sum_sq_Q_B[63:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/sum_Q_B" type="array">
+         <obj_property name="ElementShortName">sum_Q_B[63:0]</obj_property>
+         <obj_property name="ObjectShortName">sum_Q_B[63:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/sum_cov_Q" type="array">
+         <obj_property name="ElementShortName">sum_cov_Q[63:0]</obj_property>
+         <obj_property name="ObjectShortName">sum_cov_Q[63:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/sum_Q_A" type="array">
+         <obj_property name="ElementShortName">sum_Q_A[63:0]</obj_property>
+         <obj_property name="ObjectShortName">sum_Q_A[63:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/calib_VarA" type="array">
+         <obj_property name="ElementShortName">calib_VarA[31:0]</obj_property>
+         <obj_property name="ObjectShortName">calib_VarA[31:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/T_final" type="array">
+         <obj_property name="ElementShortName">T_final[31:0]</obj_property>
+         <obj_property name="ObjectShortName">T_final[31:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/T_sqrt" type="array">
+         <obj_property name="ElementShortName">T_sqrt[31:0]</obj_property>
+         <obj_property name="ObjectShortName">T_sqrt[31:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/sigma_sq" type="array">
+         <obj_property name="ElementShortName">sigma_sq[31:0]</obj_property>
+         <obj_property name="ObjectShortName">sigma_sq[31:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/sigma" type="array">
+         <obj_property name="ElementShortName">sigma[31:0]</obj_property>
+         <obj_property name="ObjectShortName">sigma[31:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/data_ready" type="logic">
+         <obj_property name="ElementShortName">data_ready</obj_property>
+         <obj_property name="ObjectShortName">data_ready</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/pipe_v1" type="logic">
+         <obj_property name="ElementShortName">pipe_v1</obj_property>
+         <obj_property name="ObjectShortName">pipe_v1</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/pipe_v2" type="logic">
+         <obj_property name="ElementShortName">pipe_v2</obj_property>
+         <obj_property name="ObjectShortName">pipe_v2</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/pipe_v3" type="logic">
+         <obj_property name="ElementShortName">pipe_v3</obj_property>
+         <obj_property name="ObjectShortName">pipe_v3</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/cross_P_AB" type="array">
+         <obj_property name="ElementShortName">cross_P_AB[63:0]</obj_property>
+         <obj_property name="ObjectShortName">cross_P_AB[63:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/cross_Q_AB" type="array">
+         <obj_property name="ElementShortName">cross_Q_AB[63:0]</obj_property>
+         <obj_property name="ObjectShortName">cross_Q_AB[63:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/sq_sum_P_B" type="array">
+         <obj_property name="ElementShortName">sq_sum_P_B[63:0]</obj_property>
+         <obj_property name="ObjectShortName">sq_sum_P_B[63:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/sq_sum_Q_B" type="array">
+         <obj_property name="ElementShortName">sq_sum_Q_B[63:0]</obj_property>
+         <obj_property name="ObjectShortName">sq_sum_Q_B[63:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/num_cov_AB" type="array">
+         <obj_property name="ElementShortName">num_cov_AB[63:0]</obj_property>
+         <obj_property name="ObjectShortName">num_cov_AB[63:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/num_var_B" type="array">
+         <obj_property name="ElementShortName">num_var_B[63:0]</obj_property>
+         <obj_property name="ObjectShortName">num_var_B[63:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/cov_AB_pure" type="array">
+         <obj_property name="ElementShortName">cov_AB_pure[31:0]</obj_property>
+         <obj_property name="ObjectShortName">cov_AB_pure[31:0]</obj_property>
+         <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+         <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+         <obj_property name="radix_fractionWidth">16</obj_property>
+         <obj_property name="radix_otherWidth">0</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/var_B_pure" type="array">
+         <obj_property name="ElementShortName">var_B_pure[31:0]</obj_property>
+         <obj_property name="ObjectShortName">var_B_pure[31:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/div_t_raw" type="array">
+         <obj_property name="ElementShortName">div_t_raw[47:0]</obj_property>
+         <obj_property name="ObjectShortName">div_t_raw[47:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/div_done" type="logic">
+         <obj_property name="ElementShortName">div_done</obj_property>
+         <obj_property name="ObjectShortName">div_done</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/sqrt_sigma_raw" type="array">
+         <obj_property name="ElementShortName">sqrt_sigma_raw[31:0]</obj_property>
+         <obj_property name="ObjectShortName">sqrt_sigma_raw[31:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/t_sq_full" type="array">
+         <obj_property name="ElementShortName">t_sq_full[63:0]</obj_property>
+         <obj_property name="ObjectShortName">t_sq_full[63:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/N_SAMPLES" type="array">
+         <obj_property name="ElementShortName">N_SAMPLES[63:0]</obj_property>
+         <obj_property name="ObjectShortName">N_SAMPLES[63:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_estparam_completo/estimator_inst/math_unit_inst/INV_2N2" type="array">
+         <obj_property name="ElementShortName">INV_2N2[63:0]</obj_property>
+         <obj_property name="ObjectShortName">INV_2N2[63:0]</obj_property>
+      </wvobject>
+   </wvobject>
+</wave_config>

@@ -1,0 +1,352 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wave_config>
+   <wave_state>
+   </wave_state>
+   <db_ref_list>
+      <db_ref path="tb_cvqkd_bob_dsp_top_behav.wdb" id="1">
+         <top_modules>
+            <top_module name="glbl" />
+            <top_module name="tb_cvqkd_bob_dsp_top" />
+         </top_modules>
+      </db_ref>
+   </db_ref_list>
+   <zoom_setting>
+      <ZoomStartTime time="544.000 ns"></ZoomStartTime>
+      <ZoomEndTime time="1,681.001 ns"></ZoomEndTime>
+      <Cursor1Time time="755.000 ns"></Cursor1Time>
+   </zoom_setting>
+   <column_width_setting>
+      <NameColumnWidth column_width="246"></NameColumnWidth>
+      <ValueColumnWidth column_width="218"></ValueColumnWidth>
+   </column_width_setting>
+   <WVObjectSize size="23" />
+   <wave_markers>
+      <marker time="995000" label="" />
+      <marker time="755000" label="" />
+   </wave_markers>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/clk" type="logic">
+      <obj_property name="ElementShortName">clk</obj_property>
+      <obj_property name="ObjectShortName">clk</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/rst" type="logic">
+      <obj_property name="ElementShortName">rst</obj_property>
+      <obj_property name="ObjectShortName">rst</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/p_in" type="array">
+      <obj_property name="ElementShortName">p_in[15:0]</obj_property>
+      <obj_property name="ObjectShortName">p_in[15:0]</obj_property>
+      <obj_property name="Radix">HEXRADIX</obj_property>
+      <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+      <obj_property name="radix_fractionWidth">16</obj_property>
+      <obj_property name="radix_otherWidth">0</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/q_in" type="array">
+      <obj_property name="ElementShortName">q_in[15:0]</obj_property>
+      <obj_property name="ObjectShortName">q_in[15:0]</obj_property>
+      <obj_property name="Radix">HEXRADIX</obj_property>
+      <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+      <obj_property name="radix_fractionWidth">16</obj_property>
+      <obj_property name="radix_otherWidth">0</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/valid_in" type="logic">
+      <obj_property name="ElementShortName">valid_in</obj_property>
+      <obj_property name="ObjectShortName">valid_in</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/p_out" type="array">
+      <obj_property name="ElementShortName">p_out[15:0]</obj_property>
+      <obj_property name="ObjectShortName">p_out[15:0]</obj_property>
+      <obj_property name="Radix">REALRADIX</obj_property>
+      <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+      <obj_property name="radix_fractionWidth">16</obj_property>
+      <obj_property name="radix_otherWidth">0</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/q_out" type="array">
+      <obj_property name="ElementShortName">q_out[15:0]</obj_property>
+      <obj_property name="ObjectShortName">q_out[15:0]</obj_property>
+      <obj_property name="Radix">REALRADIX</obj_property>
+      <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+      <obj_property name="radix_fractionWidth">16</obj_property>
+      <obj_property name="radix_otherWidth">0</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/valid_out" type="logic">
+      <obj_property name="ElementShortName">valid_out</obj_property>
+      <obj_property name="ObjectShortName">valid_out</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/file_out" type="array">
+      <obj_property name="ElementShortName">file_out[31:0]</obj_property>
+      <obj_property name="ObjectShortName">file_out[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/out_counter" type="array">
+      <obj_property name="ElementShortName">out_counter[31:0]</obj_property>
+      <obj_property name="ObjectShortName">out_counter[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/expected_idx" type="array">
+      <obj_property name="ElementShortName">expected_idx[31:0]</obj_property>
+      <obj_property name="ObjectShortName">expected_idx[31:0]</obj_property>
+      <obj_property name="Radix">SIGNEDDECRADIX</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/error_counter" type="array">
+      <obj_property name="ElementShortName">error_counter[31:0]</obj_property>
+      <obj_property name="ObjectShortName">error_counter[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/exp_p" type="array">
+      <obj_property name="ElementShortName">exp_p[15:0]</obj_property>
+      <obj_property name="ObjectShortName">exp_p[15:0]</obj_property>
+      <obj_property name="Radix">REALRADIX</obj_property>
+      <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+      <obj_property name="radix_fractionWidth">16</obj_property>
+      <obj_property name="radix_otherWidth">0</obj_property>
+      <obj_property name="CustomSignalColor">#FFD700</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/exp_q" type="array">
+      <obj_property name="ElementShortName">exp_q[15:0]</obj_property>
+      <obj_property name="ObjectShortName">exp_q[15:0]</obj_property>
+      <obj_property name="Radix">REALRADIX</obj_property>
+      <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+      <obj_property name="radix_fractionWidth">16</obj_property>
+      <obj_property name="radix_otherWidth">0</obj_property>
+      <obj_property name="CustomSignalColor">#FFD700</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/diff_p" type="array">
+      <obj_property name="ElementShortName">diff_p[31:0]</obj_property>
+      <obj_property name="ObjectShortName">diff_p[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/diff_q" type="array">
+      <obj_property name="ElementShortName">diff_q[31:0]</obj_property>
+      <obj_property name="ObjectShortName">diff_q[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/ADC_WIDTH" type="array">
+      <obj_property name="ElementShortName">ADC_WIDTH[31:0]</obj_property>
+      <obj_property name="ObjectShortName">ADC_WIDTH[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/NUM_SAMPLES_IN" type="array">
+      <obj_property name="ElementShortName">NUM_SAMPLES_IN[31:0]</obj_property>
+      <obj_property name="ObjectShortName">NUM_SAMPLES_IN[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cvqkd_bob_dsp_top/NUM_SAMPLES_OUT" type="array">
+      <obj_property name="ElementShortName">NUM_SAMPLES_OUT[31:0]</obj_property>
+      <obj_property name="ObjectShortName">NUM_SAMPLES_OUT[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="group546" type="group">
+      <obj_property name="label">INTERPOLADOR</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <obj_property name="isExpanded"></obj_property>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_interpolator/clk" type="logic">
+         <obj_property name="ElementShortName">clk</obj_property>
+         <obj_property name="ObjectShortName">clk</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_interpolator/rst" type="logic">
+         <obj_property name="ElementShortName">rst</obj_property>
+         <obj_property name="ObjectShortName">rst</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_interpolator/theta_in" type="array">
+         <obj_property name="ElementShortName">theta_in[17:0]</obj_property>
+         <obj_property name="ObjectShortName">theta_in[17:0]</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_interpolator/valid_in" type="logic">
+         <obj_property name="ElementShortName">valid_in</obj_property>
+         <obj_property name="ObjectShortName">valid_in</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_interpolator/fifo_re" type="logic">
+         <obj_property name="ElementShortName">fifo_re</obj_property>
+         <obj_property name="ObjectShortName">fifo_re</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_interpolator/cordic_theta" type="array">
+         <obj_property name="ElementShortName">cordic_theta[17:0]</obj_property>
+         <obj_property name="ObjectShortName">cordic_theta[17:0]</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_interpolator/cordic_valid" type="logic">
+         <obj_property name="ElementShortName">cordic_valid</obj_property>
+         <obj_property name="ObjectShortName">cordic_valid</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_interpolator/theta_A" type="array">
+         <obj_property name="ElementShortName">theta_A[17:0]</obj_property>
+         <obj_property name="ObjectShortName">theta_A[17:0]</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_interpolator/delta_theta" type="array">
+         <obj_property name="ElementShortName">delta_theta[17:0]</obj_property>
+         <obj_property name="ObjectShortName">delta_theta[17:0]</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_interpolator/acumulador" type="array">
+         <obj_property name="ElementShortName">acumulador[17:0]</obj_property>
+         <obj_property name="ObjectShortName">acumulador[17:0]</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+         <obj_property name="Radix">REALRADIX</obj_property>
+         <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+         <obj_property name="radix_fractionWidth">15</obj_property>
+         <obj_property name="radix_otherWidth">0</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_interpolator/contador_datos" type="array">
+         <obj_property name="ElementShortName">contador_datos[3:0]</obj_property>
+         <obj_property name="ObjectShortName">contador_datos[3:0]</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_interpolator/theta_raw" type="array">
+         <obj_property name="ElementShortName">theta_raw[17:0]</obj_property>
+         <obj_property name="ObjectShortName">theta_raw[17:0]</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_interpolator/estado_actual" type="array">
+         <obj_property name="ElementShortName">estado_actual[1:0]</obj_property>
+         <obj_property name="ObjectShortName">estado_actual[1:0]</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_interpolator/THETA_WIDTH" type="array">
+         <obj_property name="ElementShortName">THETA_WIDTH[31:0]</obj_property>
+         <obj_property name="ObjectShortName">THETA_WIDTH[31:0]</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject fp_name="group547" type="group">
+      <obj_property name="label">CORDIC_VECT</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <obj_property name="isExpanded"></obj_property>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_cordic_rot/s_axis_phase_tdata" type="array">
+         <obj_property name="ElementShortName">s_axis_phase_tdata[23:0]</obj_property>
+         <obj_property name="ObjectShortName">s_axis_phase_tdata[23:0]</obj_property>
+         <obj_property name="Radix">HEXRADIX</obj_property>
+         <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+         <obj_property name="radix_fractionWidth">15</obj_property>
+         <obj_property name="radix_otherWidth">0</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_cordic_vect/aclk" type="logic">
+         <obj_property name="ElementShortName">aclk</obj_property>
+         <obj_property name="ObjectShortName">aclk</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_cordic_vect/s_axis_cartesian_tvalid" type="logic">
+         <obj_property name="ElementShortName">s_axis_cartesian_tvalid</obj_property>
+         <obj_property name="ObjectShortName">s_axis_cartesian_tvalid</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_cordic_vect/s_axis_cartesian_tdata" type="array">
+         <obj_property name="ElementShortName">s_axis_cartesian_tdata[47:0]</obj_property>
+         <obj_property name="ObjectShortName">s_axis_cartesian_tdata[47:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_cordic_vect/m_axis_dout_tvalid" type="logic">
+         <obj_property name="ElementShortName">m_axis_dout_tvalid</obj_property>
+         <obj_property name="ObjectShortName">m_axis_dout_tvalid</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_cordic_vect/m_axis_dout_tdata" type="array">
+         <obj_property name="ElementShortName">m_axis_dout_tdata[47:0]</obj_property>
+         <obj_property name="ObjectShortName">m_axis_dout_tdata[47:0]</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject fp_name="group568" type="group">
+      <obj_property name="label">DEMUX</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <obj_property name="isExpanded"></obj_property>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_demux/clk" type="logic">
+         <obj_property name="ElementShortName">clk</obj_property>
+         <obj_property name="ObjectShortName">clk</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_demux/rst" type="logic">
+         <obj_property name="ElementShortName">rst</obj_property>
+         <obj_property name="ObjectShortName">rst</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_demux/valid_in" type="logic">
+         <obj_property name="ElementShortName">valid_in</obj_property>
+         <obj_property name="ObjectShortName">valid_in</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_demux/p_in" type="array">
+         <obj_property name="ElementShortName">p_in[15:0]</obj_property>
+         <obj_property name="ObjectShortName">p_in[15:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_demux/q_in" type="array">
+         <obj_property name="ElementShortName">q_in[15:0]</obj_property>
+         <obj_property name="ObjectShortName">q_in[15:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_demux/m_axis_cordic_tdata" type="array">
+         <obj_property name="ElementShortName">m_axis_cordic_tdata[31:0]</obj_property>
+         <obj_property name="ObjectShortName">m_axis_cordic_tdata[31:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_demux/m_axis_cordic_tvalid" type="logic">
+         <obj_property name="ElementShortName">m_axis_cordic_tvalid</obj_property>
+         <obj_property name="ObjectShortName">m_axis_cordic_tvalid</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_demux/fifo_data_out" type="array">
+         <obj_property name="ElementShortName">fifo_data_out[31:0]</obj_property>
+         <obj_property name="ObjectShortName">fifo_data_out[31:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_demux/fifo_we" type="logic">
+         <obj_property name="ElementShortName">fifo_we</obj_property>
+         <obj_property name="ObjectShortName">fifo_we</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_demux/frame_counter" type="array">
+         <obj_property name="ElementShortName">frame_counter[3:0]</obj_property>
+         <obj_property name="ObjectShortName">frame_counter[3:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_demux/packed_data" type="array">
+         <obj_property name="ElementShortName">packed_data[31:0]</obj_property>
+         <obj_property name="ObjectShortName">packed_data[31:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_demux/DATA_WIDTH" type="array">
+         <obj_property name="ElementShortName">DATA_WIDTH[31:0]</obj_property>
+         <obj_property name="ObjectShortName">DATA_WIDTH[31:0]</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject fp_name="group555" type="group">
+      <obj_property name="label">CORDIC_ROT</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <obj_property name="isExpanded"></obj_property>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_cordic_rot/aclk" type="logic">
+         <obj_property name="ElementShortName">aclk</obj_property>
+         <obj_property name="ObjectShortName">aclk</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_cordic_rot/s_axis_phase_tvalid" type="logic">
+         <obj_property name="ElementShortName">s_axis_phase_tvalid</obj_property>
+         <obj_property name="ObjectShortName">s_axis_phase_tvalid</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_cordic_rot/s_axis_phase_tdata" type="array">
+         <obj_property name="ElementShortName">s_axis_phase_tdata[23:0]</obj_property>
+         <obj_property name="ObjectShortName">s_axis_phase_tdata[23:0]</obj_property>
+         <obj_property name="Radix">REALRADIX</obj_property>
+         <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+         <obj_property name="radix_fractionWidth">15</obj_property>
+         <obj_property name="radix_otherWidth">0</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_cordic_rot/s_axis_cartesian_tvalid" type="logic">
+         <obj_property name="ElementShortName">s_axis_cartesian_tvalid</obj_property>
+         <obj_property name="ObjectShortName">s_axis_cartesian_tvalid</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_cordic_rot/s_axis_cartesian_tdata" type="array">
+         <obj_property name="ElementShortName">s_axis_cartesian_tdata[47:0]</obj_property>
+         <obj_property name="ObjectShortName">s_axis_cartesian_tdata[47:0]</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_cordic_rot/m_axis_dout_tvalid" type="logic">
+         <obj_property name="ElementShortName">m_axis_dout_tvalid</obj_property>
+         <obj_property name="ObjectShortName">m_axis_dout_tvalid</obj_property>
+      </wvobject>
+      <wvobject fp_name="/tb_cvqkd_bob_dsp_top/dut/inst_cordic_rot/m_axis_dout_tdata" type="array">
+         <obj_property name="ElementShortName">m_axis_dout_tdata[47:0]</obj_property>
+         <obj_property name="ObjectShortName">m_axis_dout_tdata[47:0]</obj_property>
+      </wvobject>
+   </wvobject>
+</wave_config>

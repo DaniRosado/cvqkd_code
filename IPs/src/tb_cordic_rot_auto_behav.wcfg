@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wave_config>
+   <wave_state>
+   </wave_state>
+   <db_ref_list>
+      <db_ref path="tb_cordic_rot_auto_behav.wdb" id="1">
+         <top_modules>
+            <top_module name="glbl" />
+            <top_module name="tb_cordic_rot_auto" />
+         </top_modules>
+      </db_ref>
+   </db_ref_list>
+   <zoom_setting>
+      <ZoomStartTime time="127.945000 us"></ZoomStartTime>
+      <ZoomEndTime time="155.495001 us"></ZoomEndTime>
+      <Cursor1Time time="134.030000 us"></Cursor1Time>
+   </zoom_setting>
+   <column_width_setting>
+      <NameColumnWidth column_width="246"></NameColumnWidth>
+      <ValueColumnWidth column_width="234"></ValueColumnWidth>
+   </column_width_setting>
+   <WVObjectSize size="25" />
+   <wvobject fp_name="/tb_cordic_rot_auto/clk" type="logic">
+      <obj_property name="ElementShortName">clk</obj_property>
+      <obj_property name="ObjectShortName">clk</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/rst" type="logic">
+      <obj_property name="ElementShortName">rst</obj_property>
+      <obj_property name="ObjectShortName">rst</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/s_axis_phase_tvalid" type="logic">
+      <obj_property name="ElementShortName">s_axis_phase_tvalid</obj_property>
+      <obj_property name="ObjectShortName">s_axis_phase_tvalid</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/s_axis_phase_tdata" type="array">
+      <obj_property name="ElementShortName">s_axis_phase_tdata[23:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axis_phase_tdata[23:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/s_axis_cartesian_tvalid" type="logic">
+      <obj_property name="ElementShortName">s_axis_cartesian_tvalid</obj_property>
+      <obj_property name="ObjectShortName">s_axis_cartesian_tvalid</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/s_axis_cartesian_tdata" type="array">
+      <obj_property name="ElementShortName">s_axis_cartesian_tdata[47:0]</obj_property>
+      <obj_property name="ObjectShortName">s_axis_cartesian_tdata[47:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/m_axis_dout_tvalid" type="logic">
+      <obj_property name="ElementShortName">m_axis_dout_tvalid</obj_property>
+      <obj_property name="ObjectShortName">m_axis_dout_tvalid</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/m_axis_dout_tdata" type="array">
+      <obj_property name="ElementShortName">m_axis_dout_tdata[47:0]</obj_property>
+      <obj_property name="ObjectShortName">m_axis_dout_tdata[47:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/data_idx" type="array">
+      <obj_property name="ElementShortName">data_idx[31:0]</obj_property>
+      <obj_property name="ObjectShortName">data_idx[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/out_idx" type="array">
+      <obj_property name="ElementShortName">out_idx[31:0]</obj_property>
+      <obj_property name="ObjectShortName">out_idx[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/error_counter" type="array">
+      <obj_property name="ElementShortName">error_counter[31:0]</obj_property>
+      <obj_property name="ObjectShortName">error_counter[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/p_in" type="array">
+      <obj_property name="ElementShortName">p_in[15:0]</obj_property>
+      <obj_property name="ObjectShortName">p_in[15:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/q_in" type="array">
+      <obj_property name="ElementShortName">q_in[15:0]</obj_property>
+      <obj_property name="ObjectShortName">q_in[15:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/phase_in" type="array">
+      <obj_property name="ElementShortName">phase_in[17:0]</obj_property>
+      <obj_property name="ObjectShortName">phase_in[17:0]</obj_property>
+      <obj_property name="Radix">REALRADIX</obj_property>
+      <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+      <obj_property name="radix_fractionWidth">15</obj_property>
+      <obj_property name="radix_otherWidth">0</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/out_P" type="array">
+      <obj_property name="ElementShortName">out_P[15:0]</obj_property>
+      <obj_property name="ObjectShortName">out_P[15:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/out_Q" type="array">
+      <obj_property name="ElementShortName">out_Q[15:0]</obj_property>
+      <obj_property name="ObjectShortName">out_Q[15:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/exp_P" type="array">
+      <obj_property name="ElementShortName">exp_P[15:0]</obj_property>
+      <obj_property name="ObjectShortName">exp_P[15:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/exp_Q" type="array">
+      <obj_property name="ElementShortName">exp_Q[15:0]</obj_property>
+      <obj_property name="ObjectShortName">exp_Q[15:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/diff_p" type="array">
+      <obj_property name="ElementShortName">diff_p[31:0]</obj_property>
+      <obj_property name="ObjectShortName">diff_p[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/diff_q" type="array">
+      <obj_property name="ElementShortName">diff_q[31:0]</obj_property>
+      <obj_property name="ObjectShortName">diff_q[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/abs_diff_p" type="array">
+      <obj_property name="ElementShortName">abs_diff_p[31:0]</obj_property>
+      <obj_property name="ObjectShortName">abs_diff_p[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/abs_diff_q" type="array">
+      <obj_property name="ElementShortName">abs_diff_q[31:0]</obj_property>
+      <obj_property name="ObjectShortName">abs_diff_q[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/neg_phase_in" type="array">
+      <obj_property name="ElementShortName">neg_phase_in[17:0]</obj_property>
+      <obj_property name="ObjectShortName">neg_phase_in[17:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/NUM_SAMPLES_IN" type="array">
+      <obj_property name="ElementShortName">NUM_SAMPLES_IN[31:0]</obj_property>
+      <obj_property name="ObjectShortName">NUM_SAMPLES_IN[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/tb_cordic_rot_auto/NUM_SAMPLES_OUT" type="array">
+      <obj_property name="ElementShortName">NUM_SAMPLES_OUT[31:0]</obj_property>
+      <obj_property name="ObjectShortName">NUM_SAMPLES_OUT[31:0]</obj_property>
+   </wvobject>
+</wave_config>
