@@ -1,0 +1,586 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wave_config>
+   <wave_state>
+   </wave_state>
+   <db_ref_list>
+      <db_ref path="tb_cvqkd_bob_subsystem_top_behav.wdb" id="1">
+         <top_modules>
+            <top_module name="bg1_rom_pkg" />
+            <top_module name="glbl" />
+            <top_module name="mdr_rom_pkg" />
+            <top_module name="tb_cvqkd_bob_subsystem_top" />
+         </top_modules>
+      </db_ref>
+   </db_ref_list>
+   <zoom_setting>
+      <ZoomStartTime time="0.000000 us"></ZoomStartTime>
+      <ZoomEndTime time="990.000001 us"></ZoomEndTime>
+      <Cursor1Time time="634.980000 us"></Cursor1Time>
+   </zoom_setting>
+   <column_width_setting>
+      <NameColumnWidth column_width="270"></NameColumnWidth>
+      <ValueColumnWidth column_width="266"></ValueColumnWidth>
+   </column_width_setting>
+   <WVObjectSize size="41" />
+   <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/clk">
+      <obj_property name="ElementShortName">clk</obj_property>
+      <obj_property name="ObjectShortName">clk</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/rst_n">
+      <obj_property name="ElementShortName">rst_n</obj_property>
+      <obj_property name="ObjectShortName">rst_n</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/p_in">
+      <obj_property name="ElementShortName">p_in[15:0]</obj_property>
+      <obj_property name="ObjectShortName">p_in[15:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/q_in">
+      <obj_property name="ElementShortName">q_in[15:0]</obj_property>
+      <obj_property name="ObjectShortName">q_in[15:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/valid_in">
+      <obj_property name="ElementShortName">valid_in</obj_property>
+      <obj_property name="ObjectShortName">valid_in</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/mask_valid">
+      <obj_property name="ElementShortName">mask_valid</obj_property>
+      <obj_property name="ObjectShortName">mask_valid</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/mask_bit">
+      <obj_property name="ElementShortName">mask_bit</obj_property>
+      <obj_property name="ObjectShortName">mask_bit</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/alice_stream_valid">
+      <obj_property name="ElementShortName">alice_stream_valid</obj_property>
+      <obj_property name="ObjectShortName">alice_stream_valid</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/alice_stream_data">
+      <obj_property name="ElementShortName">alice_stream_data[31:0]</obj_property>
+      <obj_property name="ObjectShortName">alice_stream_data[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/trng_data">
+      <obj_property name="ElementShortName">trng_data[7:0]</obj_property>
+      <obj_property name="ObjectShortName">trng_data[7:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/calib_VarA">
+      <obj_property name="ElementShortName">calib_VarA[31:0]</obj_property>
+      <obj_property name="ObjectShortName">calib_VarA[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/skr_valid">
+      <obj_property name="ElementShortName">skr_valid</obj_property>
+      <obj_property name="ObjectShortName">skr_valid</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/T_final_out">
+      <obj_property name="ElementShortName">T_final_out[31:0]</obj_property>
+      <obj_property name="ObjectShortName">T_final_out[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/sigma_sq_out">
+      <obj_property name="ElementShortName">sigma_sq_out[31:0]</obj_property>
+      <obj_property name="ObjectShortName">sigma_sq_out[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/sigma_out">
+      <obj_property name="ElementShortName">sigma_out[31:0]</obj_property>
+      <obj_property name="ObjectShortName">sigma_out[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/num_samples_out">
+      <obj_property name="ElementShortName">num_samples_out[31:0]</obj_property>
+      <obj_property name="ObjectShortName">num_samples_out[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/irq">
+      <obj_property name="ElementShortName">irq</obj_property>
+      <obj_property name="ObjectShortName">irq</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/done_est">
+      <obj_property name="ElementShortName">done_est</obj_property>
+      <obj_property name="ObjectShortName">done_est</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/frame_valid_out">
+      <obj_property name="ElementShortName">frame_valid_out</obj_property>
+      <obj_property name="ObjectShortName">frame_valid_out</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/mdr_valid">
+      <obj_property name="ElementShortName">mdr_valid</obj_property>
+      <obj_property name="ObjectShortName">mdr_valid</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/mdr_m_out">
+      <obj_property name="ElementShortName">mdr_m_out[255:0]</obj_property>
+      <obj_property name="ObjectShortName">mdr_m_out[255:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/syndrome_done">
+      <obj_property name="ElementShortName">syndrome_done</obj_property>
+      <obj_property name="ObjectShortName">syndrome_done</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/syndrome_out">
+      <obj_property name="ElementShortName">syndrome_out[0:45][383:0]</obj_property>
+      <obj_property name="ObjectShortName">syndrome_out[0:45][383:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/mem_mask">
+      <obj_property name="ElementShortName">mem_mask[0:26111]</obj_property>
+      <obj_property name="ObjectShortName">mem_mask[0:26111]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/mem_trng">
+      <obj_property name="ElementShortName">mem_trng[0:3263][7:0]</obj_property>
+      <obj_property name="ObjectShortName">mem_trng[0:3263][7:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/mem_syn_exp">
+      <obj_property name="ElementShortName">mem_syn_exp[0:45][383:0]</obj_property>
+      <obj_property name="ObjectShortName">mem_syn_exp[0:45][383:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/trng_ptr">
+      <obj_property name="ElementShortName">trng_ptr[31:0]</obj_property>
+      <obj_property name="ObjectShortName">trng_ptr[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/key_cnt">
+      <obj_property name="ElementShortName">key_cnt[31:0]</obj_property>
+      <obj_property name="ObjectShortName">key_cnt[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/mdr_check_idx">
+      <obj_property name="ElementShortName">mdr_check_idx[31:0]</obj_property>
+      <obj_property name="ObjectShortName">mdr_check_idx[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/mdr_err_count">
+      <obj_property name="ElementShortName">mdr_err_count[31:0]</obj_property>
+      <obj_property name="ObjectShortName">mdr_err_count[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/alice_ptr">
+      <obj_property name="ElementShortName">alice_ptr[31:0]</obj_property>
+      <obj_property name="ObjectShortName">alice_ptr[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/ADC_WIDTH">
+      <obj_property name="ElementShortName">ADC_WIDTH[31:0]</obj_property>
+      <obj_property name="ObjectShortName">ADC_WIDTH[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/NUM_SAMPLES">
+      <obj_property name="ElementShortName">NUM_SAMPLES[31:0]</obj_property>
+      <obj_property name="ObjectShortName">NUM_SAMPLES[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/N_BOB_DATA">
+      <obj_property name="ElementShortName">N_BOB_DATA[31:0]</obj_property>
+      <obj_property name="ObjectShortName">N_BOB_DATA[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/N_FIBER">
+      <obj_property name="ElementShortName">N_FIBER[31:0]</obj_property>
+      <obj_property name="ObjectShortName">N_FIBER[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/BLOCKS_PER_FRAME">
+      <obj_property name="ElementShortName">BLOCKS_PER_FRAME[31:0]</obj_property>
+      <obj_property name="ObjectShortName">BLOCKS_PER_FRAME[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/ROWS">
+      <obj_property name="ElementShortName">ROWS[31:0]</obj_property>
+      <obj_property name="ObjectShortName">ROWS[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="group" fp_name="group799">
+      <obj_property name="label">ROUTER</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/clk">
+         <obj_property name="ElementShortName">clk</obj_property>
+         <obj_property name="ObjectShortName">clk</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/rst">
+         <obj_property name="ElementShortName">rst</obj_property>
+         <obj_property name="ObjectShortName">rst</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/dsp_valid">
+         <obj_property name="ElementShortName">dsp_valid</obj_property>
+         <obj_property name="ObjectShortName">dsp_valid</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/dsp_data">
+         <obj_property name="ElementShortName">dsp_data[31:0]</obj_property>
+         <obj_property name="ObjectShortName">dsp_data[31:0]</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/mask_valid">
+         <obj_property name="ElementShortName">mask_valid</obj_property>
+         <obj_property name="ObjectShortName">mask_valid</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/mask_bit">
+         <obj_property name="ElementShortName">mask_bit</obj_property>
+         <obj_property name="ObjectShortName">mask_bit</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/valid_sac">
+         <obj_property name="ElementShortName">valid_sac</obj_property>
+         <obj_property name="ObjectShortName">valid_sac</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/data_sac">
+         <obj_property name="ElementShortName">data_sac[31:0]</obj_property>
+         <obj_property name="ObjectShortName">data_sac[31:0]</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/valid_key">
+         <obj_property name="ElementShortName">valid_key</obj_property>
+         <obj_property name="ObjectShortName">valid_key</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/data_key">
+         <obj_property name="ElementShortName">data_key[31:0]</obj_property>
+         <obj_property name="ObjectShortName">data_key[31:0]</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/mega_fifo_re">
+         <obj_property name="ElementShortName">mega_fifo_re</obj_property>
+         <obj_property name="ObjectShortName">mega_fifo_re</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/mega_fifo_dout">
+         <obj_property name="ElementShortName">mega_fifo_dout[31:0]</obj_property>
+         <obj_property name="ObjectShortName">mega_fifo_dout[31:0]</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/mega_fifo_empty">
+         <obj_property name="ElementShortName">mega_fifo_empty</obj_property>
+         <obj_property name="ObjectShortName">mega_fifo_empty</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/mega_fifo_full">
+         <obj_property name="ElementShortName">mega_fifo_full</obj_property>
+         <obj_property name="ObjectShortName">mega_fifo_full</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/mask_valid_delayed">
+         <obj_property name="ElementShortName">mask_valid_delayed</obj_property>
+         <obj_property name="ObjectShortName">mask_valid_delayed</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/router_inst/mask_bit_delayed">
+         <obj_property name="ElementShortName">mask_bit_delayed</obj_property>
+         <obj_property name="ObjectShortName">mask_bit_delayed</obj_property>
+         <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group829">
+      <obj_property name="label">MDR</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_mdr/clk">
+         <obj_property name="ElementShortName">clk</obj_property>
+         <obj_property name="ObjectShortName">clk</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_mdr/rst_n">
+         <obj_property name="ElementShortName">rst_n</obj_property>
+         <obj_property name="ObjectShortName">rst_n</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_mdr/valid_data">
+         <obj_property name="ElementShortName">valid_data</obj_property>
+         <obj_property name="ObjectShortName">valid_data</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_mdr/data_in">
+         <obj_property name="ElementShortName">data_in[127:0]</obj_property>
+         <obj_property name="ObjectShortName">data_in[127:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_mdr/trng_data">
+         <obj_property name="ElementShortName">trng_data[7:0]</obj_property>
+         <obj_property name="ObjectShortName">trng_data[7:0]</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_mdr/m_valid">
+         <obj_property name="ElementShortName">m_valid</obj_property>
+         <obj_property name="ObjectShortName">m_valid</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_mdr/m_out">
+         <obj_property name="ElementShortName">m_out[255:0]</obj_property>
+         <obj_property name="ObjectShortName">m_out[255:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_mdr/Y_array">
+         <obj_property name="ElementShortName">Y_array[0:7][15:0]</obj_property>
+         <obj_property name="ObjectShortName">Y_array[0:7][15:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_mdr/m_array">
+         <obj_property name="ElementShortName">m_array[0:7][31:0]</obj_property>
+         <obj_property name="ObjectShortName">m_array[0:7][31:0]</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group808">
+      <obj_property name="label">ACCUM</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_accum/clk">
+         <obj_property name="ElementShortName">clk</obj_property>
+         <obj_property name="ObjectShortName">clk</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_accum/rst_n">
+         <obj_property name="ElementShortName">rst_n</obj_property>
+         <obj_property name="ObjectShortName">rst_n</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_accum/valid_in">
+         <obj_property name="ElementShortName">valid_in</obj_property>
+         <obj_property name="ObjectShortName">valid_in</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_accum/data_in">
+         <obj_property name="ElementShortName">data_in[31:0]</obj_property>
+         <obj_property name="ObjectShortName">data_in[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_accum/valid_data">
+         <obj_property name="ElementShortName">valid_data</obj_property>
+         <obj_property name="ObjectShortName">valid_data</obj_property>
+         <obj_property name="CustomSignalColor">#FFA500</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/trng_data">
+         <obj_property name="ElementShortName">trng_data[7:0]</obj_property>
+         <obj_property name="ObjectShortName">trng_data[7:0]</obj_property>
+         <obj_property name="CustomSignalColor">#FFA500</obj_property>
+         <obj_property name="UseCustomSignalColor">true</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_accum/data_out">
+         <obj_property name="ElementShortName">data_out[127:0]</obj_property>
+         <obj_property name="ObjectShortName">data_out[127:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_accum/cnt">
+         <obj_property name="ElementShortName">cnt[1:0]</obj_property>
+         <obj_property name="ObjectShortName">cnt[1:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/reconciliation_inst/u_accum/shift_reg">
+         <obj_property name="ElementShortName">shift_reg[127:0]</obj_property>
+         <obj_property name="ObjectShortName">shift_reg[127:0]</obj_property>
+      </wvobject>
+   </wvobject>
+   <wvobject type="group" fp_name="group670">
+      <obj_property name="label">PARAM_ESTIMATOR</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+      <obj_property name="isExpanded"></obj_property>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/clk">
+         <obj_property name="ElementShortName">clk</obj_property>
+         <obj_property name="ObjectShortName">clk</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/rst_n">
+         <obj_property name="ElementShortName">rst_n</obj_property>
+         <obj_property name="ObjectShortName">rst_n</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/start">
+         <obj_property name="ElementShortName">start</obj_property>
+         <obj_property name="ObjectShortName">start</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/done">
+         <obj_property name="ElementShortName">done</obj_property>
+         <obj_property name="ObjectShortName">done</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/bob_stream_valid">
+         <obj_property name="ElementShortName">bob_stream_valid</obj_property>
+         <obj_property name="ObjectShortName">bob_stream_valid</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/bob_stream_data">
+         <obj_property name="ElementShortName">bob_stream_data[31:0]</obj_property>
+         <obj_property name="ObjectShortName">bob_stream_data[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/alice_stream_valid">
+         <obj_property name="ElementShortName">alice_stream_valid</obj_property>
+         <obj_property name="ObjectShortName">alice_stream_valid</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/alice_stream_data">
+         <obj_property name="ElementShortName">alice_stream_data[31:0]</obj_property>
+         <obj_property name="ObjectShortName">alice_stream_data[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/calib_VarA">
+         <obj_property name="ElementShortName">calib_VarA[31:0]</obj_property>
+         <obj_property name="ObjectShortName">calib_VarA[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/skr_valid">
+         <obj_property name="ElementShortName">skr_valid</obj_property>
+         <obj_property name="ObjectShortName">skr_valid</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/skr_in">
+         <obj_property name="ElementShortName">skr_in[31:0]</obj_property>
+         <obj_property name="ObjectShortName">skr_in[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/T_final_out">
+         <obj_property name="ElementShortName">T_final_out[31:0]</obj_property>
+         <obj_property name="ObjectShortName">T_final_out[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/sigma_sq_out">
+         <obj_property name="ElementShortName">sigma_sq_out[31:0]</obj_property>
+         <obj_property name="ObjectShortName">sigma_sq_out[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/sigma_out">
+         <obj_property name="ElementShortName">sigma_out[31:0]</obj_property>
+         <obj_property name="ObjectShortName">sigma_out[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/num_samples_out">
+         <obj_property name="ElementShortName">num_samples_out[31:0]</obj_property>
+         <obj_property name="ObjectShortName">num_samples_out[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/irq">
+         <obj_property name="ElementShortName">irq</obj_property>
+         <obj_property name="ObjectShortName">irq</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/frame_valid_out">
+         <obj_property name="ElementShortName">frame_valid_out</obj_property>
+         <obj_property name="ObjectShortName">frame_valid_out</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/T_sqrt_out">
+         <obj_property name="ElementShortName">T_sqrt_out[31:0]</obj_property>
+         <obj_property name="ObjectShortName">T_sqrt_out[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/skr_out">
+         <obj_property name="ElementShortName">skr_out[31:0]</obj_property>
+         <obj_property name="ObjectShortName">skr_out[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/read_fifos">
+         <obj_property name="ElementShortName">read_fifos</obj_property>
+         <obj_property name="ObjectShortName">read_fifos</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/bob_fifo_dout">
+         <obj_property name="ElementShortName">bob_fifo_dout[31:0]</obj_property>
+         <obj_property name="ObjectShortName">bob_fifo_dout[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/alice_fifo_dout">
+         <obj_property name="ElementShortName">alice_fifo_dout[31:0]</obj_property>
+         <obj_property name="ObjectShortName">alice_fifo_dout[31:0]</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/bob_empty">
+         <obj_property name="ElementShortName">bob_empty</obj_property>
+         <obj_property name="ObjectShortName">bob_empty</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/alice_empty">
+         <obj_property name="ElementShortName">alice_empty</obj_property>
+         <obj_property name="ObjectShortName">alice_empty</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/bob_full">
+         <obj_property name="ElementShortName">bob_full</obj_property>
+         <obj_property name="ObjectShortName">bob_full</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/alice_full">
+         <obj_property name="ElementShortName">alice_full</obj_property>
+         <obj_property name="ObjectShortName">alice_full</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/muestras_procesadas">
+         <obj_property name="ElementShortName">muestras_procesadas[14:0]</obj_property>
+         <obj_property name="ObjectShortName">muestras_procesadas[14:0]</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/mac_enable">
+         <obj_property name="ElementShortName">mac_enable</obj_property>
+         <obj_property name="ObjectShortName">mac_enable</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/mac_clear">
+         <obj_property name="ElementShortName">mac_clear</obj_property>
+         <obj_property name="ObjectShortName">mac_clear</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/start_math">
+         <obj_property name="ElementShortName">start_math</obj_property>
+         <obj_property name="ObjectShortName">start_math</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/working">
+         <obj_property name="ElementShortName">working</obj_property>
+         <obj_property name="ObjectShortName">working</obj_property>
+      </wvobject>
+      <wvobject type="logic" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/math_done">
+         <obj_property name="ElementShortName">math_done</obj_property>
+         <obj_property name="ObjectShortName">math_done</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/bob_p">
+         <obj_property name="ElementShortName">bob_p[15:0]</obj_property>
+         <obj_property name="ObjectShortName">bob_p[15:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/bob_q">
+         <obj_property name="ElementShortName">bob_q[15:0]</obj_property>
+         <obj_property name="ObjectShortName">bob_q[15:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/alice_p">
+         <obj_property name="ElementShortName">alice_p[15:0]</obj_property>
+         <obj_property name="ObjectShortName">alice_p[15:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/alice_q">
+         <obj_property name="ElementShortName">alice_q[15:0]</obj_property>
+         <obj_property name="ObjectShortName">alice_q[15:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/var_P_sum_sq">
+         <obj_property name="ElementShortName">var_P_sum_sq[63:0]</obj_property>
+         <obj_property name="ObjectShortName">var_P_sum_sq[63:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/var_P_sum_val">
+         <obj_property name="ElementShortName">var_P_sum_val[63:0]</obj_property>
+         <obj_property name="ObjectShortName">var_P_sum_val[63:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/cov_P_sum_cov">
+         <obj_property name="ElementShortName">cov_P_sum_cov[63:0]</obj_property>
+         <obj_property name="ObjectShortName">cov_P_sum_cov[63:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/cov_P_sum_alice">
+         <obj_property name="ElementShortName">cov_P_sum_alice[63:0]</obj_property>
+         <obj_property name="ObjectShortName">cov_P_sum_alice[63:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/ignore_cov_bob_p">
+         <obj_property name="ElementShortName">ignore_cov_bob_p[63:0]</obj_property>
+         <obj_property name="ObjectShortName">ignore_cov_bob_p[63:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/var_Q_sum_sq">
+         <obj_property name="ElementShortName">var_Q_sum_sq[63:0]</obj_property>
+         <obj_property name="ObjectShortName">var_Q_sum_sq[63:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/var_Q_sum_val">
+         <obj_property name="ElementShortName">var_Q_sum_val[63:0]</obj_property>
+         <obj_property name="ObjectShortName">var_Q_sum_val[63:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/cov_Q_sum_cov">
+         <obj_property name="ElementShortName">cov_Q_sum_cov[63:0]</obj_property>
+         <obj_property name="ObjectShortName">cov_Q_sum_cov[63:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/cov_Q_sum_alice">
+         <obj_property name="ElementShortName">cov_Q_sum_alice[63:0]</obj_property>
+         <obj_property name="ObjectShortName">cov_Q_sum_alice[63:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/ignore_cov_bob_q">
+         <obj_property name="ElementShortName">ignore_cov_bob_q[63:0]</obj_property>
+         <obj_property name="ObjectShortName">ignore_cov_bob_q[63:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/T_final_int">
+         <obj_property name="ElementShortName">T_final_int[31:0]</obj_property>
+         <obj_property name="ObjectShortName">T_final_int[31:0]</obj_property>
+         <obj_property name="Radix">REALRADIX</obj_property>
+         <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+         <obj_property name="radix_fractionWidth">16</obj_property>
+         <obj_property name="radix_otherWidth">0</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/T_sqrt_int">
+         <obj_property name="ElementShortName">T_sqrt_int[31:0]</obj_property>
+         <obj_property name="ObjectShortName">T_sqrt_int[31:0]</obj_property>
+         <obj_property name="Radix">REALRADIX</obj_property>
+         <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+         <obj_property name="radix_fractionWidth">16</obj_property>
+         <obj_property name="radix_otherWidth">0</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/sigma_sq_int">
+         <obj_property name="ElementShortName">sigma_sq_int[31:0]</obj_property>
+         <obj_property name="ObjectShortName">sigma_sq_int[31:0]</obj_property>
+         <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+         <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+         <obj_property name="radix_fractionWidth">16</obj_property>
+         <obj_property name="radix_otherWidth">0</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/sigma_int">
+         <obj_property name="ElementShortName">sigma_int[31:0]</obj_property>
+         <obj_property name="ObjectShortName">sigma_int[31:0]</obj_property>
+         <obj_property name="Radix">REALRADIX</obj_property>
+         <obj_property name="radix_realType">SIGNEDFIXEDPOINTRADIX</obj_property>
+         <obj_property name="radix_fractionWidth">16</obj_property>
+         <obj_property name="radix_otherWidth">0</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/cpu_state">
+         <obj_property name="ElementShortName">cpu_state[1:0]</obj_property>
+         <obj_property name="ObjectShortName">cpu_state[1:0]</obj_property>
+      </wvobject>
+      <wvobject type="array" fp_name="/tb_cvqkd_bob_subsystem_top/dut/param_estimator_inst/NUM_SAMPLES">
+         <obj_property name="ElementShortName">NUM_SAMPLES[31:0]</obj_property>
+         <obj_property name="ObjectShortName">NUM_SAMPLES[31:0]</obj_property>
+      </wvobject>
+   </wvobject>
+</wave_config>
