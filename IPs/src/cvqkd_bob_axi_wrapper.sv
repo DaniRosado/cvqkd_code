@@ -213,10 +213,6 @@ module cvqkd_bob_axi_wrapper #(
     // =========================================================================
     // DESERIALIZADOR 32:1 DE LA MÁSCARA (s_axis_mask -> mask_valid, mask_bit)
     // =========================================================================
-    // La CPU o el DMA envia palabras de 32 bits de mascara (816 palabras = 26112 bits).
-    // Cada bit determina si una muestra se sacrifica (1) o se usa para clave (0).
-    // Este bloque extrae 1 bit por ciclo (LSB primero).
-    // =========================================================================
     reg [31:0] mask_shift_reg;
     reg [5:0]  mask_bits_rem; // 0 a 32
     reg        mask_valid_int;
@@ -231,11 +227,10 @@ module cvqkd_bob_axi_wrapper #(
             mask_bits_rem    <= 6'd0;
             mask_valid_int   <= 1'b0;
             mask_bit_int     <= 1'b0;
-            mask_axis_tready <= 1'b1; // Listo para capturar la primera palabra
+            mask_axis_tready <= 1'b1; // Listo para recibir la primera palabra
         end else begin
             if (mask_bits_rem == 6'd0) begin
-                // Estamos esperando una palabra nueva
-                mask_axis_tready <= 1'b1;
+                // Esperando nueva palabra del DMA o capturándola
                 if (s_axis_mask_tvalid && mask_axis_tready) begin
                     mask_bit_int     <= s_axis_mask_tdata[0];
                     mask_shift_reg   <= {1'b0, s_axis_mask_tdata[31:1]};
@@ -244,23 +239,16 @@ module cvqkd_bob_axi_wrapper #(
                     mask_axis_tready <= 1'b0;
                 end else begin
                     mask_valid_int   <= 1'b0;
+                    mask_axis_tready <= 1'b1;
                 end
             end else if (mask_bits_rem == 6'd1) begin
-                // Ultimo bit de la palabra actual: extraemos y habilitamos tready para no perder ciclo
-                mask_bit_int   <= mask_shift_reg[0];
-                mask_valid_int <= 1'b1;
-                mask_bits_rem  <= 6'd0;
-                mask_axis_tready <= 1'b1;
-                
-                // Si la siguiente palabra ya esta disponible, la capturamos inmediatamente
-                if (s_axis_mask_tvalid) begin
-                    mask_shift_reg   <= {1'b0, s_axis_mask_tdata[31:1]};
-                    mask_bits_rem    <= 6'd31;
-                    mask_axis_tready <= 1'b0;
-                    mask_bit_int     <= s_axis_mask_tdata[0];
-                end
+                // Último bit de la palabra actual: extraemos y habilitamos tready para el SIGUIENTE ciclo
+                mask_bit_int     <= mask_shift_reg[0];
+                mask_valid_int   <= 1'b1;
+                mask_bits_rem    <= 6'd0;
+                mask_axis_tready <= 1'b1; // Estará en 1 en el bus en el flanco donde mask_bits_rem pase a 0
             end else begin
-                // Extrayendo bits intermedios de la palabra
+                // Extrayendo bits intermedios (del 1 al 30)
                 mask_bit_int     <= mask_shift_reg[0];
                 mask_shift_reg   <= {1'b0, mask_shift_reg[31:1]};
                 mask_valid_int   <= 1'b1;
