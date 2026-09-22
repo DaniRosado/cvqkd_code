@@ -54,6 +54,62 @@ module tb_barrel_shifter();
         #10;
         $display("TEST 3 (Shift 2, Inverso) -> Out[0]: %0d (Esperado: 10)", data_out[0]);
 
+        // --- TEST 4: Verificación Exhaustiva Automática (todos los shifts 0..Z-1 en ambos sentidos) ---
+        $display("\n--- INICIANDO VERIFICACIÓN EXHAUSTIVA (Z=%0d) ---", Z);
+        begin : test_exhaustive
+            int num_errors = 0;
+            logic [W-1:0] orig_data [0:Z-1];
+            logic [W-1:0] exp_data  [0:Z-1];
+
+            // Cargar datos base
+            for (int i = 0; i < Z; i++) begin
+                orig_data[i] = (i + 1) * 10;
+            end
+
+            // 4.1 Barrido Directo
+            dir_inverse = 1'b0;
+            for (int s = 0; s < Z; s++) begin
+                data_in = orig_data;
+                shift_val = s;
+                #10;
+                // Calcular esperado según fórmula original
+                for (int i = 0; i < Z; i++) begin
+                    exp_data[(i + s) % Z] = orig_data[i];
+                end
+                for (int i = 0; i < Z; i++) begin
+                    if (data_out[i] !== exp_data[i]) begin
+                        $display("[ERROR DIRECTO] Shift=%0d, Pos=%0d -> Obtenido: %0d, Esperado: %0d",
+                                 s, i, data_out[i], exp_data[i]);
+                        num_errors++;
+                    end
+                end
+            end
+
+            // 4.2 Barrido Inverso
+            dir_inverse = 1'b1;
+            for (int s = 0; s < Z; s++) begin
+                data_in = orig_data;
+                shift_val = s;
+                #10;
+                for (int i = 0; i < Z; i++) begin
+                    exp_data[(i + (Z - (s % Z))) % Z] = orig_data[i];
+                end
+                for (int i = 0; i < Z; i++) begin
+                    if (data_out[i] !== exp_data[i]) begin
+                        $display("[ERROR INVERSO] Shift=%0d, Pos=%0d -> Obtenido: %0d, Esperado: %0d",
+                                 s, i, data_out[i], exp_data[i]);
+                        num_errors++;
+                    end
+                end
+            end
+
+            if (num_errors == 0) begin
+                $display(">>> TEST 4 SUPERADO CON ÉXITO: Todos los desplazamientos verificados al 100%% sin errores.");
+            end else begin
+                $display(">>> TEST 4 FALLIDO: Se encontraron %0d errores.", num_errors);
+            end
+        end
+
         $display("=== TESTBENCH FINALIZADO ===");
         $finish;
     end

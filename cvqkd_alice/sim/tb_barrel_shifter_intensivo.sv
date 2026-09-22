@@ -106,12 +106,66 @@ module tb_barrel_shifter_intensivo();
         end
         
         // =======================================================
+        // PRUEBA AUTOMÁTICA AUTÓNOMA (384 Shifts x 2 Direcciones)
+        // =======================================================
+        $display("\n[TEST 3] Verificación Exhaustiva Autónoma (Todos los 384 desplazamientos con datos aleatorios)...");
+        begin
+            int total_tests_auto = 0;
+            logic [W-1:0] test_in [0:Z-1];
+            logic [W-1:0] exp_out [0:Z-1];
+
+            // Inicializar patrón aleatorio pero determinista
+            for (int z = 0; z < Z; z++) begin
+                test_in[z] = (z * 17 + 5) & 8'hFF;
+            end
+
+            // 3.1 Todos los shifts directos (0 a 383)
+            dir_inverse = 1'b0;
+            for (int s = 0; s < Z; s++) begin
+                data_in   = test_in;
+                shift_val = s[8:0];
+                #10;
+                for (int z = 0; z < Z; z++) begin
+                    exp_out[(z + s) % Z] = test_in[z];
+                end
+                for (int z = 0; z < Z; z++) begin
+                    if (data_out[z] !== exp_out[z]) begin
+                        $display("[FALLO AUTO DIRECTO] Shift %0d, Pos %0d: Esperado %0d, Obtenido %0d",
+                                 s, z, exp_out[z], data_out[z]);
+                        errores_directo++;
+                    end
+                end
+                total_tests_auto += Z;
+            end
+
+            // 3.2 Todos los shifts inversos (0 a 383)
+            dir_inverse = 1'b1;
+            for (int s = 0; s < Z; s++) begin
+                data_in   = test_in;
+                shift_val = s[8:0];
+                #10;
+                for (int z = 0; z < Z; z++) begin
+                    exp_out[(z + (Z - (s % Z))) % Z] = test_in[z];
+                end
+                for (int z = 0; z < Z; z++) begin
+                    if (data_out[z] !== exp_out[z]) begin
+                        $display("[FALLO AUTO INVERSO] Shift %0d, Pos %0d: Esperado %0d, Obtenido %0d",
+                                 s, z, exp_out[z], data_out[z]);
+                        errores_inverso++;
+                    end
+                end
+                total_tests_auto += Z;
+            end
+            $display("[INFO] Completados %0d chequeos individuales en modo autónomo.", total_tests_auto);
+        end
+
+        // =======================================================
         // VEREDICTO FINAL
         // =======================================================
         $display("==================================================");
         if (errores_directo == 0 && errores_inverso == 0) begin
             $display("   *** ÉXITO TOTAL: EL SHIFTER ES PERFECTO ***");
-            $display("   Superados con éxito %0d test individuales.", num_edges * Z * 2);
+            $display("   Superados con éxito todos los tests individuales.");
         end else begin
             $display("   *** ALERTA ROJA: SE ENCONTRARON FALLOS ***");
             $display("   Errores Directos: %0d", errores_directo);
