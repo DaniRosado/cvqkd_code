@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wave_config>
+   <wave_state>
+   </wave_state>
+   <db_ref_list>
+      <db_ref path="tb_alice_post_processing_core_behav.wdb" id="1">
+         <top_modules>
+            <top_module name="bg1_rom_pkg" />
+            <top_module name="glbl" />
+            <top_module name="tb_alice_post_processing_core" />
+         </top_modules>
+      </db_ref>
+   </db_ref_list>
+   <zoom_setting>
+      <ZoomStartTime time="0.000 ns"></ZoomStartTime>
+      <ZoomEndTime time="1,299.841 ns"></ZoomEndTime>
+      <Cursor1Time time="263.158 ns"></Cursor1Time>
+   </zoom_setting>
+   <column_width_setting>
+      <NameColumnWidth column_width="223"></NameColumnWidth>
+      <ValueColumnWidth column_width="181"></ValueColumnWidth>
+   </column_width_setting>
+   <WVObjectSize size="37" />
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/clk">
+      <obj_property name="ElementShortName">clk</obj_property>
+      <obj_property name="ObjectShortName">clk</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/rst_n">
+      <obj_property name="ElementShortName">rst_n</obj_property>
+      <obj_property name="ObjectShortName">rst_n</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/start_mdr">
+      <obj_property name="ElementShortName">start_mdr</obj_property>
+      <obj_property name="ObjectShortName">start_mdr</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/start_ldpc">
+      <obj_property name="ElementShortName">start_ldpc</obj_property>
+      <obj_property name="ObjectShortName">start_ldpc</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/mdr_done">
+      <obj_property name="ElementShortName">mdr_done</obj_property>
+      <obj_property name="ObjectShortName">mdr_done</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/ldpc_done">
+      <obj_property name="ElementShortName">ldpc_done</obj_property>
+      <obj_property name="ObjectShortName">ldpc_done</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/ldpc_success">
+      <obj_property name="ElementShortName">ldpc_success</obj_property>
+      <obj_property name="ObjectShortName">ldpc_success</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/ram_x_en">
+      <obj_property name="ElementShortName">ram_x_en</obj_property>
+      <obj_property name="ObjectShortName">ram_x_en</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/ram_x_addr">
+      <obj_property name="ElementShortName">ram_x_addr[13:0]</obj_property>
+      <obj_property name="ObjectShortName">ram_x_addr[13:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/ram_x_data">
+      <obj_property name="ElementShortName">ram_x_data[127:0]</obj_property>
+      <obj_property name="ObjectShortName">ram_x_data[127:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/ram_m_data">
+      <obj_property name="ElementShortName">ram_m_data[255:0]</obj_property>
+      <obj_property name="ObjectShortName">ram_m_data[255:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/ram_k_data">
+      <obj_property name="ElementShortName">ram_k_data[31:0]</obj_property>
+      <obj_property name="ObjectShortName">ram_k_data[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/TOTAL_BLOCKS">
+      <obj_property name="ElementShortName">TOTAL_BLOCKS[31:0]</obj_property>
+      <obj_property name="ObjectShortName">TOTAL_BLOCKS[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/CLK_PERIOD">
+      <obj_property name="ElementShortName">CLK_PERIOD[31:0]</obj_property>
+      <obj_property name="ObjectShortName">CLK_PERIOD[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/u_dut/mdr_write_en">
+      <obj_property name="ElementShortName">mdr_write_en</obj_property>
+      <obj_property name="ObjectShortName">mdr_write_en</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/u_dut/mdr_write_addr">
+      <obj_property name="ElementShortName">mdr_write_addr[16:0]</obj_property>
+      <obj_property name="ObjectShortName">mdr_write_addr[16:0]</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/u_dut/mdr_write_data">
+      <obj_property name="ElementShortName">mdr_write_data[7:0]</obj_property>
+      <obj_property name="ObjectShortName">mdr_write_data[7:0]</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/clk">
+      <obj_property name="ElementShortName">clk</obj_property>
+      <obj_property name="ObjectShortName">clk</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/rst_n">
+      <obj_property name="ElementShortName">rst_n</obj_property>
+      <obj_property name="ObjectShortName">rst_n</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/start">
+      <obj_property name="ElementShortName">start</obj_property>
+      <obj_property name="ObjectShortName">start</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/done">
+      <obj_property name="ElementShortName">done</obj_property>
+      <obj_property name="ObjectShortName">done</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/ram_x_en">
+      <obj_property name="ElementShortName">ram_x_en</obj_property>
+      <obj_property name="ObjectShortName">ram_x_en</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/ram_x_addr">
+      <obj_property name="ElementShortName">ram_x_addr[13:0]</obj_property>
+      <obj_property name="ObjectShortName">ram_x_addr[13:0]</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/ram_x_data">
+      <obj_property name="ElementShortName">ram_x_data[127:0]</obj_property>
+      <obj_property name="ObjectShortName">ram_x_data[127:0]</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/ram_m_data">
+      <obj_property name="ElementShortName">ram_m_data[255:0]</obj_property>
+      <obj_property name="ObjectShortName">ram_m_data[255:0]</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/ram_k_data">
+      <obj_property name="ElementShortName">ram_k_data[31:0]</obj_property>
+      <obj_property name="ObjectShortName">ram_k_data[31:0]</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/ram_write_en">
+      <obj_property name="ElementShortName">ram_write_en</obj_property>
+      <obj_property name="ObjectShortName">ram_write_en</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/ram_write_addr">
+      <obj_property name="ElementShortName">ram_write_addr[16:0]</obj_property>
+      <obj_property name="ObjectShortName">ram_write_addr[16:0]</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/ram_write_data">
+      <obj_property name="ElementShortName">ram_write_data[7:0]</obj_property>
+      <obj_property name="ObjectShortName">ram_write_data[7:0]</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/dp_valid_in">
+      <obj_property name="ElementShortName">dp_valid_in</obj_property>
+      <obj_property name="ObjectShortName">dp_valid_in</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="logic" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/dp_valid_out">
+      <obj_property name="ElementShortName">dp_valid_out</obj_property>
+      <obj_property name="ObjectShortName">dp_valid_out</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/dp_llr_out">
+      <obj_property name="ElementShortName">dp_llr_out[7:0]</obj_property>
+      <obj_property name="ObjectShortName">dp_llr_out[7:0]</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/dp_llr_idx">
+      <obj_property name="ElementShortName">dp_llr_idx[2:0]</obj_property>
+      <obj_property name="ObjectShortName">dp_llr_idx[2:0]</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/X_array">
+      <obj_property name="ElementShortName">X_array[0:7][15:0]</obj_property>
+      <obj_property name="ObjectShortName">X_array[0:7][15:0]</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/m_array">
+      <obj_property name="ElementShortName">m_array[0:7][31:0]</obj_property>
+      <obj_property name="ObjectShortName">m_array[0:7][31:0]</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/waddr_reg">
+      <obj_property name="ElementShortName">waddr_reg[16:0]</obj_property>
+      <obj_property name="ObjectShortName">waddr_reg[16:0]</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject type="array" fp_name="/tb_alice_post_processing_core/u_dut/u_MDR/TOTAL_BLOCKS">
+      <obj_property name="ElementShortName">TOTAL_BLOCKS[31:0]</obj_property>
+      <obj_property name="ObjectShortName">TOTAL_BLOCKS[31:0]</obj_property>
+      <obj_property name="CustomSignalColor">#FF00FF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+</wave_config>

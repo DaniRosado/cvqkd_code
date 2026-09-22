@@ -85,7 +85,15 @@ module tb_alice_post_processing_core();
         .ram_x_addr       (ram_x_addr),
         .ram_x_data       (ram_x_data),
         .ram_m_data       (ram_m_data),
-        .ram_k_data       (ram_k_data)
+        .ram_k_data       (ram_k_data),
+
+        // Señales opcionales (apagadas en este test)
+        .target_syn_we    (1'b0),
+        .target_syn_addr  (6'd0),
+        .target_syn_data  ('0),
+        .key_read_en      (1'b0),
+        .key_read_addr    (7'd0),
+        .key_read_data    ()
     );
 
     // =====================================================================
