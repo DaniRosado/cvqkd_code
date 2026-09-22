@@ -16,6 +16,7 @@ module param_estimator_top #(
     
     input  logic        alice_stream_valid,
     input  logic [31:0] alice_stream_data, // {Q_Alice, P_Alice}
+    output logic        alice_stream_ready,
 
     // Entradas (Escritas por la CPU mediante AXI)
     input  logic signed [31:0] calib_VarA,
@@ -36,6 +37,8 @@ module param_estimator_top #(
     logic [31:0] bob_fifo_dout, alice_fifo_dout;
     logic        bob_empty, alice_empty;
     logic        bob_full, alice_full;
+
+    assign alice_stream_ready = !alice_full;
 
     sync_fifo #(.DATA_WIDTH(32), .DEPTH(1024)) fifo_bob_inst (
         .clk(clk), .rst(~rst_n), 

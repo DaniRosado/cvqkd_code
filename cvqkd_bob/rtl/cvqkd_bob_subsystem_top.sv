@@ -40,6 +40,7 @@ module cvqkd_bob_subsystem_top #(
     output logic signed [31:0] sigma_out,
     output logic [31:0]        num_samples_out,
     output logic               done_est,
+    output logic               syndrome_done,
     
     // =========================================================================
     // 5. INTERFAZ AXI4-STREAM MAESTRA (Hacia CPU - MDR para reconciliar)
@@ -55,7 +56,10 @@ module cvqkd_bob_subsystem_top #(
     output logic [511:0] m_axis_syndrome_tdata,
     output logic         m_axis_syndrome_tvalid,
     input  logic         m_axis_syndrome_tready,
-    output logic         m_axis_syndrome_tlast  // Dispara la interrupción del DMA
+    output logic         m_axis_syndrome_tlast,  // Dispara la interrupción del DMA
+    
+    // Señal interna hacia el wrapper: pulso para avanzar el puntero de clave
+    output logic         trng_req
 );
 
     // =========================================================================
@@ -74,25 +78,27 @@ module cvqkd_bob_subsystem_top #(
     assign q_in     = s_axis_pq_tdata[2*ADC_WIDTH-1:ADC_WIDTH];
     assign valid_in = s_axis_pq_tvalid;
     
-    // Control de flujo: ponemos 'ready' a 1 indicando que el HW siempre puede recibir.
-    // (Si tus módulos internos necesitan pausarse, tendrías que conectar esto a su lógica).
-    assign s_axis_pq_tready    = 1'b1;
-    assign s_axis_alice_tready = 1'b1;
+    // Control de flujo: ponemos 'ready' a 1 para ADC (el FIFO del router almacena la trama).
+    // Para Alice, conectamos el ready al estado de su FIFO en el estimador de parametros.
+    assign s_axis_pq_tready = 1'b1;
 
     logic alice_stream_valid;
     logic [31:0] alice_stream_data;
+    logic alice_stream_ready;
     
-    assign alice_stream_data  = s_axis_alice_tdata;
-    assign alice_stream_valid = s_axis_alice_tvalid;
+    assign alice_stream_data   = s_axis_alice_tdata;
+    assign alice_stream_valid  = s_axis_alice_tvalid;
+    assign s_axis_alice_tready = alice_stream_ready;
 
     // --- Control de señales tlast para buses de salida (Maestros) ---
     
     // Si el MDR se envía en una única transacción de 256 bits, el último dato es también el primero.
     assign m_axis_mdr_tlast = m_axis_mdr_tvalid; 
     
-    // Para el síndrome, la señal 'syndrome_done' interna es perfecta para mapearla a 'tlast'
+    // Para el síndrome, TLAST debe coincidir con TVALID en la última fila (45 de 46)
     logic syndrome_done_internal;
-    assign m_axis_syndrome_tlast = syndrome_done_internal;
+    assign syndrome_done = syndrome_done_internal;
+    assign m_axis_syndrome_tlast = m_axis_syndrome_tvalid && (syndrome_row_idx_open == 6'd45);
 
     // =========================================================================
     // CABLES INTERNOS DE ENRUTAMIENTO
@@ -162,6 +168,7 @@ module cvqkd_bob_subsystem_top #(
         .bob_stream_data(router_data_sac),
         .alice_stream_valid(alice_stream_valid),
         .alice_stream_data(alice_stream_data),
+        .alice_stream_ready(alice_stream_ready),
         .calib_VarA(calib_VarA),
         .T_final_out(T_final_out),
         .sigma_sq_out(sigma_sq_out),
@@ -190,7 +197,9 @@ module cvqkd_bob_subsystem_top #(
         .syndrome_done(syndrome_done_internal),
         .syndrome_valid(m_axis_syndrome_tvalid),
         .syndrome_row_idx(syndrome_row_idx_open), 
-        .syndrome_data(syndrome_internal)
+        .syndrome_data(syndrome_internal),
+        
+        .trng_req(trng_req)
     );
 
 endmodule

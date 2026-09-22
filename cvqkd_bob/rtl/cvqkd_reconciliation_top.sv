@@ -19,7 +19,10 @@ module cvqkd_reconciliation_top (
     output logic         syndrome_done,
     output logic         syndrome_valid,
     output logic [5:0]   syndrome_row_idx,
-    output logic [383:0] syndrome_data
+    output logic [383:0] syndrome_data,
+    
+    // Pulso de solicitud para avanzar al siguiente byte de clave (1 ciclo por bloque 8D)
+    output logic         trng_req
 );
 
     // =========================================================================
@@ -27,6 +30,8 @@ module cvqkd_reconciliation_top (
     // =========================================================================
     logic         accum_valid;
     logic [127:0] accum_data;
+
+    assign trng_req = accum_valid;
 
     // =========================================================================
     // 1. EL ACUMULADOR (Convierte 4 pulsos de 32 bits en 1 pulso de 128 bits)

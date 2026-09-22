@@ -15,7 +15,7 @@ module cvqkd_bob_axi_wrapper #(
     parameter integer ADC_WIDTH           = 16,
     parameter integer NUM_SAMPLES         = 26112/2, // 13056 muestras de sacrificio
     parameter integer C_S_AXI_DATA_WIDTH  = 32,
-    parameter integer C_S_AXI_ADDR_WIDTH  = 5        // 8 registros de 32 bits (0x00 - 0x1C)
+    parameter integer C_S_AXI_ADDR_WIDTH  = 12       // 4 KB de espacio (0x000 - 0xFFF)
 )(
     // Reloj y Reset globales (AXI estándar)
     input  wire                                 aclk,
@@ -107,9 +107,18 @@ module cvqkd_bob_axi_wrapper #(
     wire signed [31:0] sigma_out;
     wire [31:0]        num_samples_out;
     wire               done_est;
-    wire               syndrome_done;
+    wire               syndrome_done_pulse;
+    reg                reg_syndrome_done;
 
-    assign reg_status = {30'd0, syndrome_done, done_est};
+    always @(posedge aclk) begin
+        if (!aresetn || reg_ctrl[0]) begin
+            reg_syndrome_done <= 1'b0;
+        end else if (syndrome_done_pulse) begin
+            reg_syndrome_done <= 1'b1;
+        end
+    end
+
+    assign reg_status = {30'd0, reg_syndrome_done, done_est};
 
     // --- Logica AXI4-Lite Slave Handshake ---
     reg axi_awready;
@@ -130,6 +139,20 @@ module cvqkd_bob_axi_wrapper #(
     assign s_axi_rresp   = 2'b00;
     assign s_axi_rvalid  = axi_rvalid;
     assign s_axi_rdata   = axi_rdata;
+
+    // =========================================================================
+    // MEMORIA DE CLAVE SECRETA (816 palabras de 32 bits = 3.264 B = 26.112 bits)
+    // Mapeada en AXI-Lite en el rango 0x100 - 0xDC0
+    // =========================================================================
+    (* ram_style = "distributed" *) reg [31:0] key_ram [0:815];
+    reg [11:0] trng_blk_cnt;
+    wire       trng_req;
+
+    wire is_key_wr = (axi_awaddr >= 12'h100) && (axi_awaddr < (12'h100 + 12'd3264));
+    wire [9:0] key_wr_idx = (axi_awaddr - 12'h100) >> 2;
+
+    wire is_key_rd = (axi_araddr >= 12'h100) && (axi_araddr < (12'h100 + 12'd3264));
+    wire [9:0] key_rd_idx = (axi_araddr - 12'h100) >> 2;
 
     // AXI-Lite Write Channel
     always @(posedge aclk) begin
@@ -158,11 +181,15 @@ module cvqkd_bob_axi_wrapper #(
 
             // Write Operation
             if (axi_awready && s_axi_awvalid && axi_wready && s_axi_wvalid) begin
-                case (axi_awaddr[4:2])
-                    3'b000: reg_ctrl       <= s_axi_wdata; // 0x00
-                    3'b001: reg_calib_vara <= s_axi_wdata; // 0x04
-                    default: ;
-                endcase
+                if (is_key_wr) begin
+                    key_ram[key_wr_idx] <= s_axi_wdata;
+                end else if (axi_awaddr < 12'h20) begin
+                    case (axi_awaddr[4:2])
+                        3'b000: reg_ctrl       <= s_axi_wdata; // 0x00
+                        3'b001: reg_calib_vara <= s_axi_wdata; // 0x04
+                        default: ;
+                    endcase
+                end
             end
 
             // Handshake B
@@ -193,17 +220,23 @@ module cvqkd_bob_axi_wrapper #(
             // Handshake R & Register Read Multiplexer
             if (axi_arready && s_axi_arvalid && ~axi_rvalid) begin
                 axi_rvalid <= 1'b1;
-                case (axi_araddr[4:2])
-                    3'b000: axi_rdata <= reg_ctrl;        // 0x00
-                    3'b001: axi_rdata <= reg_calib_vara;  // 0x04
-                    3'b010: axi_rdata <= reg_status;      // 0x08
-                    3'b011: axi_rdata <= T_final_out;     // 0x0C
-                    3'b100: axi_rdata <= T_sqrt_out;      // 0x10
-                    3'b101: axi_rdata <= sigma_sq_out;    // 0x14
-                    3'b110: axi_rdata <= sigma_out;       // 0x18
-                    3'b111: axi_rdata <= num_samples_out; // 0x1C
-                    default: axi_rdata <= 32'd0;
-                endcase
+                if (is_key_rd) begin
+                    axi_rdata <= key_ram[key_rd_idx];
+                end else if (axi_araddr < 12'h20) begin
+                    case (axi_araddr[4:2])
+                        3'b000: axi_rdata <= reg_ctrl;        // 0x00
+                        3'b001: axi_rdata <= reg_calib_vara;  // 0x04
+                        3'b010: axi_rdata <= reg_status;      // 0x08
+                        3'b011: axi_rdata <= T_final_out;     // 0x0C
+                        3'b100: axi_rdata <= T_sqrt_out;      // 0x10
+                        3'b101: axi_rdata <= sigma_sq_out;    // 0x14
+                        3'b110: axi_rdata <= sigma_out;       // 0x18
+                        3'b111: axi_rdata <= num_samples_out; // 0x1C
+                        default: axi_rdata <= 32'd0;
+                    endcase
+                end else begin
+                    axi_rdata <= 32'd0;
+                end
             end else if (s_axi_rready && axi_rvalid) begin
                 axi_rvalid <= 1'b0;
             end
@@ -259,20 +292,27 @@ module cvqkd_bob_axi_wrapper #(
     end
 
     // =========================================================================
-    // GENERADOR TRNG INTERNO AUTÓNOMO (8 bits)
+    // EXTRACCIÓN SECUENCIAL DE LA CLAVE SECRETA PARA EL MDR Y SÍNDROME
     // =========================================================================
-    // Proporciona un flujo de bytes pseudoaleatorios continuo para el modulador MDR
-    // evitando requerir pines físicos en la FPGA durante las pruebas.
+    // Avanza 1 byte de clave con cada pulso de 'trng_req' emitido por el acumulador
+    // (exactamente 1 vez por bloque 8D, total: 3.264 bloques = 3.264 bytes)
     // =========================================================================
-    reg [7:0] trng_reg;
     always @(posedge aclk) begin
         if (!aresetn || reg_ctrl[0]) begin
-            trng_reg <= 8'hA5; // Semilla de arranque
-        end else begin
-            // LFSR de 8 bits con polinomio irreducible (x^8 + x^6 + x^5 + x^4 + 1)
-            trng_reg <= {trng_reg[6:0], trng_reg[7] ^ trng_reg[5] ^ trng_reg[4] ^ trng_reg[3]};
+            trng_blk_cnt <= 12'd0;
+        end else if (trng_req) begin
+            if (trng_blk_cnt == 12'd3263) begin
+                trng_blk_cnt <= 12'd0;
+            end else begin
+                trng_blk_cnt <= trng_blk_cnt + 1'b1;
+            end
         end
     end
+
+    wire [9:0] trng_word_idx = trng_blk_cnt[11:2];
+    wire [1:0] trng_byte_idx = trng_blk_cnt[1:0];
+    wire [31:0] trng_word    = key_ram[trng_word_idx];
+    wire [7:0]  trng_data_out = trng_word[(trng_byte_idx * 8) +: 8];
 
     // =========================================================================
     // INSTANCIA DEL TOP DEL SUBSISTEMA CV-QKD BOB
@@ -298,8 +338,9 @@ module cvqkd_bob_axi_wrapper #(
         .mask_valid             (mask_valid_int),
         .mask_bit               (mask_bit_int),
         
-        // TRNG interno
-        .trng_data              (trng_reg),
+        // Clave secreta inyectada desde la memoria interna AXI-Lite
+        .trng_data              (trng_data_out),
+        .trng_req               (trng_req),
         
         // Registros AXI4-Lite
         .calib_VarA             (reg_calib_vara),
@@ -309,6 +350,7 @@ module cvqkd_bob_axi_wrapper #(
         .sigma_out              (sigma_out),
         .num_samples_out        (num_samples_out),
         .done_est               (done_est),
+        .syndrome_done          (syndrome_done_pulse),
         
         // Salida AXI-Stream MDR
         .m_axis_mdr_tdata       (m_axis_mdr_tdata),
