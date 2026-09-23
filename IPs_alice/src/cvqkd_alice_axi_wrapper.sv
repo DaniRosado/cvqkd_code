@@ -110,26 +110,19 @@ module cvqkd_alice_axi_wrapper #(
     end
 
     // =========================================================================
-    // MEMORIA DE SÍNDROME OBJETIVO DE BOB (552 palabras de 32 bits = 46 x 384b)
+    // MEMORIA DE SÍNDROME OBJETIVO DE BOB (46 filas x 384 bits = 552 palabras de 32b)
     // Mapeada en AXI-Lite: 0x100 a 0x99C
     // =========================================================================
-    (* ram_style = "distributed" *) reg [31:0] target_syn_words [0:551];
+    reg [383:0] target_syn_rows [0:45];
     initial begin
-        // Fallback de inicialización para simulación
-        automatic logic [383:0] temp_syn [0:45];
-        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_syndrome.txt", temp_syn);
-        for (int r = 0; r < 46; r++) begin
-            for (int w = 0; w < 12; w++) begin
-                target_syn_words[r * 12 + w] = temp_syn[r][(w * 32) +: 32];
-            end
-        end
+        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_syndrome.txt", target_syn_rows);
     end
 
     // =========================================================================
-    // MEMORIA DE CLAVE RECONCILIADA b_hat (816 palabras de 32 bits = 26.112 bits)
+    // MEMORIA DE CLAVE RECONCILIADA b_hat (68 columnas x 384 bits = 26.112 bits)
     // Mapeada en AXI-Lite: 0xA00 a 0x16BC (Lectura por ARM)
     // =========================================================================
-    (* ram_style = "distributed" *) reg [31:0] key_hat_words [0:815];
+    reg [383:0] key_hat_cols [0:67];
 
     // =========================================================================
     // HANDSHAKE AXI-LITE SLAVE
@@ -191,7 +184,7 @@ module cvqkd_alice_axi_wrapper #(
             // Write Execution
             if (axi_awready && s_axi_awvalid && axi_wready && s_axi_wvalid) begin
                 if (is_syn_wr && (syn_wr_idx < 552)) begin
-                    target_syn_words[syn_wr_idx] <= s_axi_wdata;
+                    target_syn_rows[syn_wr_idx / 12][(syn_wr_idx % 12)*32 +: 32] <= s_axi_wdata;
                 end else if (axi_awaddr < 13'h0100) begin
                     case (axi_awaddr[7:2])
                         6'h00: begin // 0x00: REG_CTRL
@@ -233,9 +226,9 @@ module cvqkd_alice_axi_wrapper #(
             if (axi_arready && s_axi_arvalid && ~axi_rvalid) begin
                 axi_rvalid <= 1'b1;
                 if (is_syn_rd && (syn_rd_idx < 552)) begin
-                    axi_rdata <= target_syn_words[syn_rd_idx];
+                    axi_rdata <= target_syn_rows[syn_rd_idx / 12][(syn_rd_idx % 12)*32 +: 32];
                 end else if (is_key_rd && (key_rd_idx < 816)) begin
-                    axi_rdata <= key_hat_words[key_rd_idx];
+                    axi_rdata <= key_hat_cols[key_rd_idx / 12][(key_rd_idx % 12)*32 +: 32];
                 end else if (axi_araddr < 13'h0100) begin
                     case (axi_araddr[7:2])
                         6'h00: axi_rdata <= reg_ctrl;
@@ -310,16 +303,24 @@ module cvqkd_alice_axi_wrapper #(
     // =========================================================================
     wire        ram_x_en;
     wire [13:0] ram_x_addr;
-    wire [127:0] ram_x_data = ram_x[ram_x_addr];
-    wire [255:0] ram_m_data = ram_m[ram_x_addr];
-    wire [31:0]  ram_k_data = (reg_k_mode == 32'd0) ? reg_k_factor : ram_k[ram_x_addr];
+    reg [127:0] ram_x_data;
+    reg [255:0] ram_m_data;
+    reg [31:0]  ram_k_data;
+
+    always @(posedge aclk) begin
+        if (ram_x_en) begin
+            ram_x_data <= ram_x[ram_x_addr];
+            ram_m_data <= ram_m[ram_x_addr];
+            ram_k_data <= (reg_k_mode == 32'd0) ? reg_k_factor : ram_k[ram_x_addr];
+        end
+    end
 
     // Conexión del Síndrome Objetivo hacia el core
     reg         target_syn_we_sig;
     reg [5:0]   target_syn_addr_sig;
     reg [383:0] target_syn_data_sig;
 
-    // Extracción de clave desde el LDPC hacia key_hat_words
+    // Extracción de clave desde el LDPC hacia key_hat_cols
     reg         key_read_en_sig;
     reg [6:0]   key_read_addr_sig;
     wire [383:0] key_read_data_sig;
@@ -388,20 +389,7 @@ module cvqkd_alice_axi_wrapper #(
                 ST_LOAD_SYN: begin
                     target_syn_we_sig   <= 1'b1;
                     target_syn_addr_sig <= syn_load_cnt;
-                    target_syn_data_sig <= {
-                        target_syn_words[syn_load_cnt * 12 + 11],
-                        target_syn_words[syn_load_cnt * 12 + 10],
-                        target_syn_words[syn_load_cnt * 12 + 9],
-                        target_syn_words[syn_load_cnt * 12 + 8],
-                        target_syn_words[syn_load_cnt * 12 + 7],
-                        target_syn_words[syn_load_cnt * 12 + 6],
-                        target_syn_words[syn_load_cnt * 12 + 5],
-                        target_syn_words[syn_load_cnt * 12 + 4],
-                        target_syn_words[syn_load_cnt * 12 + 3],
-                        target_syn_words[syn_load_cnt * 12 + 2],
-                        target_syn_words[syn_load_cnt * 12 + 1],
-                        target_syn_words[syn_load_cnt * 12 + 0]
-                    };
+                    target_syn_data_sig <= target_syn_rows[syn_load_cnt];
 
                     if (syn_load_cnt == 6'd45) begin
                         if (start_ldpc_pulse) state <= ST_RUN_LDPC;
@@ -449,10 +437,7 @@ module cvqkd_alice_axi_wrapper #(
                     key_read_addr_sig <= key_ext_col;
 
                     if (key_ext_valid) begin
-                        // Guardamos las 12 palabras de 32 bits de la columna anterior
-                        for (int w = 0; w < 12; w++) begin
-                            key_hat_words[((key_ext_col - 1) * 12) + w] <= key_read_data_sig[(w * 32) +: 32];
-                        end
+                        key_hat_cols[key_ext_col - 1] <= key_read_data_sig;
                     end
 
                     if (key_ext_col == 7'd68) begin

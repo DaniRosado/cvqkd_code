@@ -308,7 +308,7 @@
         <spirit:parameters>
           <spirit:parameter>
             <spirit:name>viewChecksum</spirit:name>
-            <spirit:value>cdae57e1</spirit:value>
+            <spirit:value>b4da4ef0</spirit:value>
           </spirit:parameter>
         </spirit:parameters>
       </spirit:view>
@@ -324,7 +324,7 @@
         <spirit:parameters>
           <spirit:parameter>
             <spirit:name>viewChecksum</spirit:name>
-            <spirit:value>cdae57e1</spirit:value>
+            <spirit:value>b4da4ef0</spirit:value>
           </spirit:parameter>
         </spirit:parameters>
       </spirit:view>
@@ -332,14 +332,14 @@
         <spirit:name>xilinx_testbench</spirit:name>
         <spirit:displayName>Test Bench</spirit:displayName>
         <spirit:envIdentifier>:vivado.xilinx.com:simulation.testbench</spirit:envIdentifier>
-        <spirit:modelName>tb_ldpc_decoder_top</spirit:modelName>
+        <spirit:modelName>tb_alice_post_processing_core</spirit:modelName>
         <spirit:fileSetRef>
           <spirit:localName>xilinx_testbench_view_fileset</spirit:localName>
         </spirit:fileSetRef>
         <spirit:parameters>
           <spirit:parameter>
             <spirit:name>viewChecksum</spirit:name>
-            <spirit:value>f3b1c7a9</spirit:value>
+            <spirit:value>34e8ea47</spirit:value>
           </spirit:parameter>
         </spirit:parameters>
       </spirit:view>
@@ -994,7 +994,7 @@
         <spirit:userFileType>USED_IN_simulation</spirit:userFileType>
       </spirit:file>
       <spirit:file>
-        <spirit:name>src/tb_ldpc_decoder_top.sv</spirit:name>
+        <spirit:name>src/tb_alice_post_processing_core.sv</spirit:name>
         <spirit:fileType>systemVerilogSource</spirit:fileType>
         <spirit:userFileType>IMPORTED_FILE</spirit:userFileType>
         <spirit:userFileType>USED_IN_implementation</spirit:userFileType>
@@ -1047,25 +1047,12 @@
   <spirit:vendorExtensions>
     <xilinx:coreExtensions>
       <xilinx:supportedFamilies>
-        <xilinx:family xilinx:lifeCycle="Production">virtex7</xilinx:family>
-        <xilinx:family xilinx:lifeCycle="Production">qvirtex7</xilinx:family>
-        <xilinx:family xilinx:lifeCycle="Production">kintex7</xilinx:family>
-        <xilinx:family xilinx:lifeCycle="Production">kintex7l</xilinx:family>
-        <xilinx:family xilinx:lifeCycle="Production">qkintex7</xilinx:family>
-        <xilinx:family xilinx:lifeCycle="Production">qkintex7l</xilinx:family>
-        <xilinx:family xilinx:lifeCycle="Production">akintex7</xilinx:family>
+        <xilinx:family xilinx:lifeCycle="Production">zynq</xilinx:family>
         <xilinx:family xilinx:lifeCycle="Production">artix7</xilinx:family>
         <xilinx:family xilinx:lifeCycle="Production">artix7l</xilinx:family>
         <xilinx:family xilinx:lifeCycle="Production">aartix7</xilinx:family>
         <xilinx:family xilinx:lifeCycle="Production">qartix7</xilinx:family>
-        <xilinx:family xilinx:lifeCycle="Production">zynq</xilinx:family>
-        <xilinx:family xilinx:lifeCycle="Production">qzynq</xilinx:family>
-        <xilinx:family xilinx:lifeCycle="Production">azynq</xilinx:family>
-        <xilinx:family xilinx:lifeCycle="Production">spartan7</xilinx:family>
-        <xilinx:family xilinx:lifeCycle="Production">aspartan7</xilinx:family>
-        <xilinx:family xilinx:lifeCycle="Production">virtexu</xilinx:family>
-        <xilinx:family xilinx:lifeCycle="Production">zynquplus</xilinx:family>
-        <xilinx:family xilinx:lifeCycle="Production">kintexu</xilinx:family>
+        <xilinx:family xilinx:lifeCycle="Production">kintex7</xilinx:family>
       </xilinx:supportedFamilies>
       <xilinx:taxonomies>
         <xilinx:taxonomy>/UserIP</xilinx:taxonomy>
@@ -1073,13 +1060,13 @@
       <xilinx:displayName>cvqkd_alice_axi_wrapper_v1_0</xilinx:displayName>
       <xilinx:definitionSource>package_project</xilinx:definitionSource>
       <xilinx:coreRevision>2</xilinx:coreRevision>
-      <xilinx:coreCreationDateTime>2026-09-22T10:27:42Z</xilinx:coreCreationDateTime>
+      <xilinx:coreCreationDateTime>2026-09-22T19:03:11Z</xilinx:coreCreationDateTime>
     </xilinx:coreExtensions>
     <xilinx:packagingInfo>
       <xilinx:xilinxVersion>2025.2</xilinx:xilinxVersion>
       <xilinx:checksum xilinx:scope="busInterfaces" xilinx:value="8da0b20b"/>
       <xilinx:checksum xilinx:scope="memoryMaps" xilinx:value="edb04ba1"/>
-      <xilinx:checksum xilinx:scope="fileGroups" xilinx:value="9c4a4f1a"/>
+      <xilinx:checksum xilinx:scope="fileGroups" xilinx:value="d38a32c7"/>
       <xilinx:checksum xilinx:scope="ports" xilinx:value="8585ad34"/>
       <xilinx:checksum xilinx:scope="hdlParameters" xilinx:value="741abdde"/>
       <xilinx:checksum xilinx:scope="parameters" xilinx:value="a01bbf1d"/>

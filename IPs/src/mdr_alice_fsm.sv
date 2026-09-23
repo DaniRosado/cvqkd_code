@@ -14,7 +14,7 @@ module mdr_alice_fsm #(
     output logic        done
 );
 
-    typedef enum logic [1:0] {IDLE, FEED_BLOCK, WAIT_MAC, DONE_STATE} state_t;
+    typedef enum logic [1:0] {IDLE, READ_RAM, WAIT_MAC, DONE_STATE} state_t;
     state_t state, next_state;
 
     logic [13:0] block_cnt, block_cnt_next; // Cuenta por qué bloque de datos vamos
@@ -47,29 +47,30 @@ module mdr_alice_fsm #(
             IDLE: begin
                 block_cnt_next = '0;
                 wait_cnt_next  = '0;
-                if (start) next_state = FEED_BLOCK;
+                if (start) begin
+                    ram_read_en = 1'b1;
+                    next_state  = READ_RAM;
+                end
             end
 
-            FEED_BLOCK: begin
-                // Disparamos la lectura de memoria y avisamos al Datapath
-                ram_read_en   = 1'b1;
-                dp_valid_in   = 1'b1; 
-                wait_cnt_next = 3'd1; // Iniciamos el contador de espera
+            READ_RAM: begin
+                // En este ciclo la BRAM síncrona presenta el dato estable a la salida
+                dp_valid_in   = 1'b1;
+                wait_cnt_next = 3'd1;
                 next_state    = WAIT_MAC;
             end
 
             WAIT_MAC: begin
-                // Mantenemos la lectura y el valid apagados mientras el Datapath trabaja
                 wait_cnt_next = wait_cnt + 1;
                 
-                // El Datapath tarda 8 ciclos totales. (1 del FEED_BLOCK + 7 aquí)
+                // En el ciclo 7 (penúltimo), preparamos la lectura del siguiente bloque si no es el último
                 if (wait_cnt == 3'd7) begin
-                    block_cnt_next = block_cnt + 1;
-                    
                     if (block_cnt == TOTAL_BLOCKS - 1) begin
-                        next_state = DONE_STATE; // Si era el último, terminamos
+                        next_state = DONE_STATE;
                     end else begin
-                        next_state = FEED_BLOCK; // Si no, inyectamos el siguiente
+                        block_cnt_next = block_cnt + 1;
+                        ram_read_en    = 1'b1;
+                        next_state     = READ_RAM;
                     end
                 end
             end
@@ -81,7 +82,7 @@ module mdr_alice_fsm #(
         endcase
     end
 
-    // El puntero de la memoria RAM es directamente la cuenta de bloques
-    assign ram_read_addr = block_cnt;
+    // El puntero de lectura hacia la BRAM pre-direcciona el siguiente bloque en el último ciclo de WAIT_MAC
+    assign ram_read_addr = (state == WAIT_MAC && wait_cnt == 3'd7 && block_cnt != TOTAL_BLOCKS - 1) ? (block_cnt + 14'd1) : block_cnt;
 
 endmodule

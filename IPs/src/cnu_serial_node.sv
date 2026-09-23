@@ -70,22 +70,9 @@ module cnu_serial_node (
         end
     end
 
-    // ==========================================
-    // Lógica Combinacional: Scaled Min-Sum (x 0.75)
-    // ==========================================
-    // Multiplicar por 0.75 es lo mismo que: Valor - (Valor / 4)
-    // En binario, dividir por 4 es hacer un shift a la derecha de 2 bits (>> 2).
-    
-    logic [6:0] scaled_min1, scaled_min2;
-    
-    always_comb begin
-        scaled_min1 = reg_min1 - (reg_min1 >> 2);
-        scaled_min2 = reg_min2 - (reg_min2 >> 2);
-    end
-
-    // Asignación a las salidas
-    assign min1_out       = scaled_min1;
-    assign min2_out       = scaled_min2;
+    // Asignación directa a las salidas (el escalado x0.75 se realiza tras la selección en el Datapath)
+    assign min1_out       = reg_min1;
+    assign min2_out       = reg_min2;
     assign min1_col_out   = reg_min1_col;
     assign total_sign_out = reg_total_sign;
 

@@ -13,6 +13,7 @@ module ldpc_layer_datapath #(
     input  logic       start_row,
     input  logic [6:0] col_idx_in,
     input  logic [8:0] shift_val,
+    input  logic       is_pass1,
     
     // --- Interfaces con las BRAM ---
     input  logic [BUS_WIDTH-1:0] p_read_data_flat,
@@ -107,20 +108,31 @@ module ldpc_layer_datapath #(
     end
 
     // ==========================================
-    // FASE 2: Barrel Shifter Directo
+    // FASE 2: ROTACIÓN DE SIGNO L_q (1 bit por Z, Pasada 1)
     // ==========================================
-    logic [W-1:0] L_q_shifted_comb [0:Z-1];
-    logic [W-1:0] L_q_shifted_reg  [0:Z-1]; 
-    
-    barrel_shifter #(.Z(Z), .W(W)) shifter_direct (
-        .data_in    (L_q_reg),
+    // Para reconstruir R_new en Pasada 1, solo se necesita el signo rotado de L_q.
+    // Un shifter de 384x1 bits consume apenas ~1.7k LUTs (en lugar de 15.5k de un shifter de 8 bits).
+    logic [0:0] L_q_sign         [0:Z-1];
+    logic [0:0] L_q_sign_shifted [0:Z-1];
+    logic       L_q_sign_reg     [0:Z-1];
+
+    always_comb begin
+        for (int i = 0; i < Z; i++) begin
+            L_q_sign[i] = L_q_reg[i][7];
+        end
+    end
+
+    barrel_shifter #(.Z(Z), .W(1)) shifter_lq_sign (
+        .data_in    (L_q_sign),
         .shift_val  (shift_pipe[1]), // Sincronizado al Ciclo 2
-        .dir_inverse(1'b1), // desplazamos hacia la izquierda dir_inverse = 1
-        .data_out   (L_q_shifted_comb)
+        .dir_inverse(1'b1),          // Izquierda
+        .data_out   (L_q_sign_shifted)
     );
 
     always_ff @(posedge clk) begin
-        L_q_shifted_reg <= L_q_shifted_comb;
+        for (int i = 0; i < Z; i++) begin
+            L_q_sign_reg[i] <= L_q_sign_shifted[i][0];
+        end
     end
 
     // ==========================================
@@ -130,7 +142,8 @@ module ldpc_layer_datapath #(
     logic [6:0] min2     [0:Z-1];
     logic [6:0] min1_col [0:Z-1];
     logic       tot_sign [0:Z-1];
-    
+    logic [W-1:0] L_q_shifted_reg [0:Z-1];
+
     generate
         for (genvar i = 0; i < Z; i++) begin : gen_cnu
             cnu_serial_node cnu_inst (
@@ -149,19 +162,91 @@ module ldpc_layer_datapath #(
     endgenerate
 
     // ==========================================
-    // ACUMULADOR DE SÍNDROME (Hard-decision sobre L_write)
+    // FASE 4: Reconstrucción (R_new en dominio CNU)
     // ==========================================
-    // Durante la Pasada 1, L_write[i][7] contiene el signo del LLR actualizado
-    // en el dominio VNU. Rotamos al dominio CNU y acumulamos XOR por posición z.
-    // El syndrome checker lee syn_accum al final de cada fila (row_done).
-    logic [Z-1:0] syn_accum;
-    logic [W-1:0] L_write_shifted [0:Z-1];
+    // Selección del mínimo primero y un único escalado x0.75, ahorrando 384 restadores de 7 bits
+    logic [W-1:0] R_new_cnu_order [0:Z-1];
+    
+    always_comb begin
+        for (int i = 0; i < Z; i++) begin
+            logic msg_sign;
+            logic [6:0] raw_min;
+            logic [6:0] scaled_min;
 
-    barrel_shifter #(.Z(Z), .W(W)) shifter_syndrome (
-        .data_in    (L_write),
+            msg_sign = tot_sign[i] ^ L_q_sign_reg[i] ^ target_syn_row[i];
+            
+            if (col_pipe[2] == min1_col[i]) begin
+                raw_min = min2[i];
+            end else begin
+                raw_min = min1[i];
+            end
+
+            scaled_min = raw_min - (raw_min >> 2);
+            R_new_cnu_order[i] = {msg_sign, scaled_min};
+        end
+    end
+
+    // ==========================================
+    // FASE 2 y 5: BARREL SHIFTER COMPARTIDO (Directo 8b en Pasada 0, Inverso 8b en Pasada 1)
+    // ==========================================
+    // Como en Pasada 0 solo se rota L_q hacia la CNU y en Pasada 1 solo se rota R_new
+    // hacia la VNU (mientras que el signo de L_q se rota concurrentemente en 1 bit con shifter_lq_sign),
+    // el shifter de 8 bits se multiplexa limpiamente, ahorrando más de 15.000 LUTs.
+    logic [W-1:0] bs_in   [0:Z-1];
+    logic [8:0]   bs_shift;
+    logic         bs_dir;
+    logic [W-1:0] bs_out  [0:Z-1];
+
+    always_comb begin
+        if (is_pass1 == 1'b0) begin
+            // Pasada 0: VNU -> CNU (Rotación Directa a la izquierda, shift_pipe[1])
+            bs_in    = L_q_reg;
+            bs_shift = shift_pipe[1];
+            bs_dir   = 1'b1;
+        end else begin
+            // Pasada 1: CNU -> VNU (Rotación Inversa a la derecha, shift_pipe[2])
+            bs_in    = R_new_cnu_order;
+            bs_shift = shift_pipe[2];
+            bs_dir   = 1'b0;
+        end
+    end
+
+    barrel_shifter #(.Z(Z), .W(W)) shared_shifter (
+        .data_in    (bs_in),
+        .shift_val  (bs_shift),
+        .dir_inverse(bs_dir),
+        .data_out   (bs_out)
+    );
+
+    // En Pasada 0, capturamos la salida para alimentar el array de CNUs
+    always_ff @(posedge clk) begin
+        if (!is_pass1) begin
+            L_q_shifted_reg <= bs_out;
+        end
+    end
+
+    // En Pasada 1, la salida alimenta R_new hacia VNU y R_BRAM
+    assign R_new = bs_out;
+
+    // ==========================================
+    // ACUMULADOR DE SÍNDROME (Hard-decision sobre L_write, W=1)
+    // ==========================================
+    // Rotamos únicamente el bit de signo (384 x 1 bit) en lugar de 384 x 8 bits
+    logic [Z-1:0] syn_accum;
+    logic [0:0]   L_write_sign         [0:Z-1];
+    logic [0:0]   L_write_sign_shifted [0:Z-1];
+
+    always_comb begin
+        for (int i = 0; i < Z; i++) begin
+            L_write_sign[i] = L_write[i][7];
+        end
+    end
+
+    barrel_shifter #(.Z(Z), .W(1)) shifter_syndrome (
+        .data_in    (L_write_sign),
         .shift_val  (shift_pipe[2]),
         .dir_inverse(1'b1),
-        .data_out   (L_write_shifted)
+        .data_out   (L_write_sign_shifted)
     );
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -169,47 +254,17 @@ module ldpc_layer_datapath #(
             syn_accum <= '0;
         end else if (syn_valid) begin
             if (syn_start_row) begin
-                // Primer dato de la fila: cargamos directamente (reset + load)
                 for (int i = 0; i < Z; i++) begin
-                    syn_accum[i] <= L_write_shifted[i][7];
+                    syn_accum[i] <= L_write_sign_shifted[i][0];
                 end
             end else begin
-                // Datos siguientes: acumulamos XOR
                 for (int i = 0; i < Z; i++) begin
-                    syn_accum[i] <= syn_accum[i] ^ L_write_shifted[i][7];
+                    syn_accum[i] <= syn_accum[i] ^ L_write_sign_shifted[i][0];
                 end
             end
         end
     end
 
     assign cn_signs_out = syn_accum;
-
-    // ==========================================
-    // FASE 4: Reconstrucción (R_new)
-    // ==========================================
-    logic [W-1:0] R_new_cnu_order [0:Z-1];
-    
-    always_comb begin
-        for (int i = 0; i < Z; i++) begin
-            logic msg_sign;
-            msg_sign = tot_sign[i] ^ L_q_shifted_reg[i][7] ^ target_syn_row[i];
-            
-            if (col_pipe[2] == min1_col[i]) begin
-                R_new_cnu_order[i] = {msg_sign, min2[i]};
-            end else begin
-                R_new_cnu_order[i] = {msg_sign, min1[i]};
-            end
-        end
-    end
-
-    // ==========================================
-    // FASE 5: Barrel Shifter Inverso
-    // ==========================================
-    barrel_shifter #(.Z(Z), .W(W)) shifter_inverso (
-        .data_in    (R_new_cnu_order),
-        .shift_val  (shift_pipe[2]), // Sincronizado al Ciclo 3
-        .dir_inverse(1'b0), // desplazamos hacia la derecha dir_inverse = 0
-        .data_out   (R_new)
-    );
 
 endmodule

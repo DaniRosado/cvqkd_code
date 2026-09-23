@@ -45,6 +45,7 @@ module ldpc_decoder_top #(
     logic       fsm_dp_start_row;
     logic [6:0] fsm_dp_col_idx;
     logic [8:0] fsm_dp_shift;
+    logic       fsm_dp_pass_flag;
     
     // Cables Memorias <-> Datapath
     logic [BUS_WIDTH-1:0] p_read_data, r_read_data;
@@ -155,7 +156,8 @@ module ldpc_decoder_top #(
         
         // Salidas Finales
         .decoding_done    (decoding_done),
-        .decoding_success (decoding_success)
+        .decoding_success (decoding_success),
+        .pass_flag_out    (fsm_dp_pass_flag)
     );
 
     // ==========================================
@@ -191,6 +193,7 @@ module ldpc_decoder_top #(
         .start_row         (fsm_dp_start_row),
         .col_idx_in        (fsm_dp_col_idx),
         .shift_val         (fsm_dp_shift),
+        .is_pass1          (fsm_dp_pass_flag),
 
         // Datos de lectura
         .p_read_data_flat  (p_read_data),

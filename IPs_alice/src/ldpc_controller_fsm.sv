@@ -27,7 +27,8 @@ module ldpc_controller_fsm #(
     input  logic       is_converged,
     
     output logic       decoding_done,
-    output logic       decoding_success
+    output logic       decoding_success,
+    output logic       pass_flag_out
 );
 
     typedef enum logic [2:0] {
@@ -83,6 +84,7 @@ module ldpc_controller_fsm #(
     // La CNU solo lee datos nuevos (y se resetea) en la Pasada 0
     assign datapath_valid_in  = valid_read_cycle & ~pass_flag;
     assign datapath_start_row = (edge_counter == 0) && valid_read_cycle && ~pass_flag;
+    assign pass_flag_out      = pass_flag;
 
     // Solo habilitamos la escritura en memoria en la Pasada 1
     assign p_write_en   = valid_pipe[PIPELINE_DEPTH-1] & pass_flag;
