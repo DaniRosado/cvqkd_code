@@ -5,10 +5,9 @@
 // Proyecto:     CV-QKD Hardware Accelerator - Subsistema Alice
 // Descripción:  Wrapper AXI4-Lite y AXI4-Stream que encapsula el subsistema
 //               completo de post-procesamiento de Alice (MDR + LDPC Decoder).
-//               Permite al procesador ARM (Zynq PS):
-//               - Inyectar coordenadas X y mensaje m mediante AXI DMA (MM2S).
-//               - Configurar factor K y escribir el síndrome objetivo de Bob.
-//               - Leer la clave secreta reconciliada b_hat directamente por AXI-Lite.
+//               Optimizado con Block RAMs síncronas de 32 bits para
+//               el Síndrome de Bob y la Clave final b_hat, eliminando 43.776
+//               flip-flops y la congestión crítica de multiplexado global.
 // ============================================================================
 
 module cvqkd_alice_axi_wrapper #(
@@ -99,9 +98,15 @@ module cvqkd_alice_axi_wrapper #(
     // =========================================================================
     // ram_x: 3.264 bloques x 128 bits (16 bytes = 4 palabras de 32b)
     (* ram_style = "block" *) reg [127:0] ram_x [0:TOTAL_BLOCKS-1];
+    initial begin
+        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/alice_mdr_inputs.txt", ram_x);
+    end
     
     // ram_m: 3.264 bloques x 256 bits (32 bytes = 8 palabras de 32b)
     (* ram_style = "block" *) reg [255:0] ram_m [0:TOTAL_BLOCKS-1];
+    initial begin
+        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_m_messages.txt", ram_m);
+    end
 
     // ram_k: 3.264 palabras de 32 bits (fallback inicializado desde archivo)
     (* ram_style = "block" *) reg [31:0]  ram_k [0:TOTAL_BLOCKS-1];
@@ -110,19 +115,19 @@ module cvqkd_alice_axi_wrapper #(
     end
 
     // =========================================================================
-    // MEMORIA DE SÍNDROME OBJETIVO DE BOB (46 filas x 384 bits = 552 palabras de 32b)
-    // Mapeada en AXI-Lite: 0x100 a 0x99C
+    // MEMORIA DE SÍNDROME OBJETIVO DE BOB (552 palabras x 32b = 46 filas x 384b)
+    // Mapeada en AXI-Lite: 0x100 a 0x99C (Mapeo directo a Block RAM de 32 bits)
     // =========================================================================
-    reg [383:0] target_syn_rows [0:45];
+    (* ram_style = "block" *) reg [31:0] syn_bram [0:551];
     initial begin
-        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_syndrome.txt", target_syn_rows);
+        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_syndrome_words.hex", syn_bram);
     end
 
     // =========================================================================
-    // MEMORIA DE CLAVE RECONCILIADA b_hat (68 columnas x 384 bits = 26.112 bits)
-    // Mapeada en AXI-Lite: 0xA00 a 0x16BC (Lectura por ARM)
+    // MEMORIA DE CLAVE RECONCILIADA b_hat (816 palabras x 32b = 68 cols x 384b)
+    // Mapeada en AXI-Lite: 0xA00 a 0x16BC (Lectura por MicroBlaze desde BRAM)
     // =========================================================================
-    reg [383:0] key_hat_cols [0:67];
+    (* ram_style = "block" *) reg [31:0] key_bram [0:815];
 
     // =========================================================================
     // HANDSHAKE AXI-LITE SLAVE
@@ -150,6 +155,15 @@ module cvqkd_alice_axi_wrapper #(
 
     wire is_key_rd = (axi_araddr >= 13'h0A00) && (axi_araddr < 13'h16C0);
     wire [9:0] key_rd_idx = (axi_araddr - 13'h0A00) >> 2;
+
+    // Escritura en syn_bram desde AXI-Lite
+    always @(posedge aclk) begin
+        if (axi_awready && s_axi_awvalid && axi_wready && s_axi_wvalid) begin
+            if (is_syn_wr && (syn_wr_idx < 552)) begin
+                syn_bram[syn_wr_idx] <= s_axi_wdata;
+            end
+        end
+    end
 
     always @(posedge aclk) begin
         if (!aresetn) begin
@@ -183,9 +197,7 @@ module cvqkd_alice_axi_wrapper #(
 
             // Write Execution
             if (axi_awready && s_axi_awvalid && axi_wready && s_axi_wvalid) begin
-                if (is_syn_wr && (syn_wr_idx < 552)) begin
-                    target_syn_rows[syn_wr_idx / 12][(syn_wr_idx % 12)*32 +: 32] <= s_axi_wdata;
-                end else if (axi_awaddr < 13'h0100) begin
+                if (axi_awaddr < 13'h0100) begin
                     case (axi_awaddr[7:2])
                         6'h00: begin // 0x00: REG_CTRL
                             reg_ctrl <= s_axi_wdata;
@@ -208,6 +220,31 @@ module cvqkd_alice_axi_wrapper #(
         end
     end
 
+    // FSM States
+    typedef enum logic [2:0] {
+        ST_IDLE,
+        ST_LOAD_SYN,
+        ST_RUN_MDR,
+        ST_WAIT_MDR,
+        ST_RUN_LDPC,
+        ST_WAIT_LDPC,
+        ST_EXTRACT_KEY,
+        ST_DONE
+    } top_state_t;
+
+    top_state_t state;
+
+    // Puerto de lectura síncrono para syn_bram y key_bram
+    reg [9:0]  syn_bram_load_addr;
+    wire [9:0] syn_bram_read_addr = (state == ST_LOAD_SYN) ? syn_bram_load_addr : syn_rd_idx;
+    reg [31:0] syn_bram_rdata;
+    reg [31:0] key_bram_rdata;
+
+    always @(posedge aclk) begin
+        syn_bram_rdata <= syn_bram[syn_bram_read_addr];
+        key_bram_rdata <= key_bram[key_rd_idx];
+    end
+
     // AXI-Lite Read Channel
     always @(posedge aclk) begin
         if (!aresetn) begin
@@ -226,9 +263,9 @@ module cvqkd_alice_axi_wrapper #(
             if (axi_arready && s_axi_arvalid && ~axi_rvalid) begin
                 axi_rvalid <= 1'b1;
                 if (is_syn_rd && (syn_rd_idx < 552)) begin
-                    axi_rdata <= target_syn_rows[syn_rd_idx / 12][(syn_rd_idx % 12)*32 +: 32];
+                    axi_rdata <= syn_bram_rdata;
                 end else if (is_key_rd && (key_rd_idx < 816)) begin
-                    axi_rdata <= key_hat_cols[key_rd_idx / 12][(key_rd_idx % 12)*32 +: 32];
+                    axi_rdata <= key_bram_rdata;
                 end else if (axi_araddr < 13'h0100) begin
                     case (axi_araddr[7:2])
                         6'h00: axi_rdata <= reg_ctrl;
@@ -254,7 +291,7 @@ module cvqkd_alice_axi_wrapper #(
     // =========================================================================
     reg [95:0] x_pack_reg;
     reg [1:0]  x_beat_cnt;
-    assign s_axis_x_tready = 1'b1; // Siempre listo para recibir
+    assign s_axis_x_tready = 1'b1;
 
     always @(posedge aclk) begin
         if (!aresetn || soft_reset) begin
@@ -320,29 +357,36 @@ module cvqkd_alice_axi_wrapper #(
     reg [5:0]   target_syn_addr_sig;
     reg [383:0] target_syn_data_sig;
 
-    // Extracción de clave desde el LDPC hacia key_hat_cols
+    // Extracción de clave desde el LDPC hacia key_bram
     reg         key_read_en_sig;
     reg [6:0]   key_read_addr_sig;
     wire [383:0] key_read_data_sig;
 
+    // Puerto de escritura de key_bram gobernado por el extractor
+    reg         key_bram_we;
+    reg [9:0]   key_bram_waddr;
+    reg [31:0]  key_bram_wdata;
+
+    always @(posedge aclk) begin
+        if (key_bram_we) begin
+            key_bram[key_bram_waddr] <= key_bram_wdata;
+        end
+    end
+
     // =========================================================================
     // FSM MAESTRA DE CONTROL Y EXTRACCIÓN DE CLAVE
     // =========================================================================
-    typedef enum logic [2:0] {
-        ST_IDLE,
-        ST_LOAD_SYN,
-        ST_RUN_MDR,
-        ST_WAIT_MDR,
-        ST_RUN_LDPC,
-        ST_WAIT_LDPC,
-        ST_EXTRACT_KEY,
-        ST_DONE
-    } top_state_t;
+    reg         run_ldpc_only;
 
-    top_state_t state;
-    reg [5:0]   syn_load_cnt;
-    reg [6:0]   key_ext_col;
-    reg         key_ext_valid;
+    // Registros para la carga de síndrome (552 palabras de 32b hacia 46 filas de 384b)
+    reg [9:0]   syn_load_cnt;
+    reg [351:0] syn_row_buf; // Buffer de las primeras 11 palabras (352 bits)
+
+    // Registros para la extracción de clave (68 columnas x 12 palabras de 32b hacia key_bram)
+    reg [6:0]   key_col_cnt;
+    reg [3:0]   key_word_cnt;
+    reg [383:0] key_col_buf;
+    reg         key_fetch_wait;
 
     always @(posedge aclk) begin
         if (!aresetn || soft_reset) begin
@@ -357,12 +401,21 @@ module cvqkd_alice_axi_wrapper #(
             target_syn_data_sig  <= '0;
             key_read_en_sig      <= 1'b0;
             key_read_addr_sig    <= '0;
+            key_bram_we          <= 1'b0;
+            key_bram_waddr       <= '0;
+            key_bram_wdata       <= '0;
+            syn_bram_load_addr   <= '0;
             syn_load_cnt         <= '0;
-            key_ext_col          <= '0;
-            key_ext_valid        <= 1'b0;
+            syn_row_buf          <= '0;
+            key_col_cnt          <= '0;
+            key_word_cnt         <= '0;
+            key_col_buf          <= '0;
+            key_fetch_wait       <= 1'b0;
+            run_ldpc_only        <= 1'b0;
         end else begin
             target_syn_we_sig <= 1'b0;
             key_read_en_sig   <= 1'b0;
+            key_bram_we       <= 1'b0;
 
             case (state)
                 ST_IDLE: begin
@@ -373,29 +426,53 @@ module cvqkd_alice_axi_wrapper #(
                         ldpc_success_latched <= 1'b0;
                         key_ready_latched    <= 1'b0;
                         core_busy            <= 1'b1;
-                        syn_load_cnt         <= '0;
+                        run_ldpc_only        <= 1'b0;
+                        syn_load_cnt         <= 10'd0;
+                        syn_bram_load_addr   <= 10'd0;
                         state                <= ST_LOAD_SYN;
                     end else if (start_ldpc_pulse) begin
                         ldpc_done_latched    <= 1'b0;
                         ldpc_success_latched <= 1'b0;
                         key_ready_latched    <= 1'b0;
                         core_busy            <= 1'b1;
-                        syn_load_cnt         <= '0;
+                        run_ldpc_only        <= 1'b1;
+                        syn_load_cnt         <= 10'd0;
+                        syn_bram_load_addr   <= 10'd0;
                         state                <= ST_LOAD_SYN;
                     end
                 end
 
-                // Carga las 46 filas de síndrome de Bob en el LDPC Decoder (46 ciclos)
+                // =============================================================
+                // Carga en serie las 46 filas de síndrome desde syn_bram (552 palabras)
+                // Cada fila de 384b se arma en 12 ciclos y se escribe en el LDPC
+                // =============================================================
                 ST_LOAD_SYN: begin
-                    target_syn_we_sig   <= 1'b1;
-                    target_syn_addr_sig <= syn_load_cnt;
-                    target_syn_data_sig <= target_syn_rows[syn_load_cnt];
+                    syn_load_cnt <= syn_load_cnt + 1;
+                    
+                    // La dirección de lectura de syn_bram se incrementa en cada ciclo
+                    if (syn_bram_load_addr < 10'd551) begin
+                        syn_bram_load_addr <= syn_bram_load_addr + 1;
+                    end
 
-                    if (syn_load_cnt == 6'd45) begin
-                        if (start_ldpc_pulse) state <= ST_RUN_LDPC;
-                        else                  state <= ST_RUN_MDR;
-                    end else begin
-                        syn_load_cnt <= syn_load_cnt + 1;
+                    // Los datos leídos de syn_bram llegan con 1 ciclo de latencia (syn_load_cnt >= 1)
+                    if (syn_load_cnt >= 10'd1) begin
+                        automatic logic [3:0] w_idx = (syn_load_cnt - 1) % 12;
+                        automatic logic [5:0] r_idx = (syn_load_cnt - 1) / 12;
+
+                        if (w_idx < 4'd11) begin
+                            syn_row_buf[(w_idx * 32) +: 32] <= syn_bram_rdata;
+                        end else begin
+                            // Palabra 11: Fila completa de 384 bits ensamblada
+                            target_syn_we_sig   <= 1'b1;
+                            target_syn_addr_sig <= r_idx;
+                            target_syn_data_sig <= {syn_bram_rdata, syn_row_buf};
+                        end
+                    end
+
+                    // Tras procesar las 552 palabras (553 ciclos de reloj)
+                    if (syn_load_cnt == 10'd552) begin
+                        if (run_ldpc_only) state <= ST_RUN_LDPC;
+                        else               state <= ST_RUN_MDR;
                     end
                 end
 
@@ -420,10 +497,11 @@ module cvqkd_alice_axi_wrapper #(
                         ldpc_done_latched    <= 1'b1;
                         ldpc_success_latched <= ldpc_success_sig;
                         if (ldpc_success_sig) begin
-                            key_ext_col       <= '0;
+                            key_col_cnt       <= 7'd0;
+                            key_word_cnt      <= 4'd0;
                             key_read_en_sig   <= 1'b1;
-                            key_read_addr_sig <= '0;
-                            key_ext_valid     <= 1'b0;
+                            key_read_addr_sig <= 7'd0;
+                            key_fetch_wait    <= 1'b1;
                             state             <= ST_EXTRACT_KEY;
                         end else begin
                             state <= ST_DONE;
@@ -431,22 +509,38 @@ module cvqkd_alice_axi_wrapper #(
                     end
                 end
 
-                // Extracción de las 68 columnas de la clave reconciliada desde L_BRAM
+                // =============================================================
+                // Extracción de las 68 columnas de clave desde L_BRAM a key_bram
+                // Cada columna de 384b se divide en 12 palabras de 32b y se guarda en BRAM
+                // =============================================================
                 ST_EXTRACT_KEY: begin
-                    key_read_en_sig   <= 1'b1;
-                    key_read_addr_sig <= key_ext_col;
-
-                    if (key_ext_valid) begin
-                        key_hat_cols[key_ext_col - 1] <= key_read_data_sig;
-                    end
-
-                    if (key_ext_col == 7'd68) begin
-                        key_ready_latched <= 1'b1;
-                        key_read_en_sig   <= 1'b0;
-                        state             <= ST_DONE;
+                    if (key_fetch_wait) begin
+                        // Ciclo de latencia de lectura de L_BRAM: el dato key_read_data_sig está listo
+                        key_col_buf    <= key_read_data_sig;
+                        key_fetch_wait <= 1'b0;
+                        key_word_cnt   <= 4'd0;
                     end else begin
-                        key_ext_col   <= key_ext_col + 1;
-                        key_ext_valid <= 1'b1;
+                        // Escribir la palabra actual de 32 bits en key_bram
+                        key_bram_we    <= 1'b1;
+                        key_bram_waddr <= (key_col_cnt * 12) + key_word_cnt;
+                        key_bram_wdata <= key_col_buf[(key_word_cnt * 32) +: 32];
+
+                        if (key_word_cnt == 4'd11) begin
+                            // Columna actual completada
+                            if (key_col_cnt == 7'd67) begin
+                                // Todas las 68 columnas extraídas (816 palabras en total)
+                                key_ready_latched <= 1'b1;
+                                state             <= ST_DONE;
+                            end else begin
+                                // Solicitar lectura de la siguiente columna
+                                key_col_cnt       <= key_col_cnt + 1;
+                                key_read_en_sig   <= 1'b1;
+                                key_read_addr_sig <= key_col_cnt + 1;
+                                key_fetch_wait    <= 1'b1;
+                            end
+                        end else begin
+                            key_word_cnt <= key_word_cnt + 1;
+                        end
                     end
                 end
 

@@ -1059,7 +1059,7 @@
       </xilinx:taxonomies>
       <xilinx:displayName>cvqkd_alice_axi_wrapper_v1_0</xilinx:displayName>
       <xilinx:definitionSource>package_project</xilinx:definitionSource>
-      <xilinx:coreRevision>2</xilinx:coreRevision>
+      <xilinx:coreRevision>3</xilinx:coreRevision>
       <xilinx:coreCreationDateTime>2026-09-22T19:03:11Z</xilinx:coreCreationDateTime>
     </xilinx:coreExtensions>
     <xilinx:packagingInfo>
