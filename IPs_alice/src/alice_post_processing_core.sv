@@ -23,6 +23,7 @@ module alice_post_processing_core #(
     output logic         mdr_done,       // El MDR ha terminado de procesar
     output logic         ldpc_done,      // El LDPC ha terminado
     output logic         ldpc_success,   // 1 = Clave corregida, 0 = Fallo
+    output logic [7:0]   iter_count,     // Iteraciones ejecutadas en decodificación
     
     // --- Interfaz de Entrada (ADC y Red) -> Hacia MDR ---
     output logic         ram_x_en,
@@ -147,6 +148,7 @@ module alice_post_processing_core #(
         .start_decoding   (start_ldpc),
         .decoding_done    (ldpc_done),
         .decoding_success (ldpc_success),
+        .iter_count       (iter_count),
         
         // Interfaz de Carga (Ahora sí, gobernada por el estado real)
         .load_mode        (~is_decoding), 

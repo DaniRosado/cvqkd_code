@@ -11,7 +11,7 @@
 // ============================================================================
 
 module cvqkd_alice_axi_wrapper #(
-    parameter int C_S_AXI_DATA_WIDTH = 32,
+    parameter int C_S_AXI_DATA_WIDTH = 32, 
     parameter int C_S_AXI_ADDR_WIDTH = 13, // 8 KB ventana (0x0000 - 0x1FFF)
     parameter int TOTAL_BLOCKS       = 3264,
     parameter int Z                  = 384,
@@ -84,14 +84,16 @@ module cvqkd_alice_axi_wrapper #(
     wire mdr_done_sig;
     wire ldpc_done_sig;
     wire ldpc_success_sig;
+    wire [7:0] iter_count_sig;
 
     reg  mdr_done_latched;
     reg  ldpc_done_latched;
     reg  ldpc_success_latched;
     reg  key_ready_latched;
     reg  core_busy;
+    reg [7:0] iter_count_latched;
 
-    wire [31:0] reg_status = {27'd0, core_busy, key_ready_latched, ldpc_success_latched, ldpc_done_latched, mdr_done_latched};
+    wire [31:0] reg_status = {16'd0, iter_count_latched, 3'd0, core_busy, key_ready_latched, ldpc_success_latched, ldpc_done_latched, mdr_done_latched};
 
     // =========================================================================
     // MEMORIAS BRAM DE ENTRADA (X, m, K)
@@ -400,6 +402,7 @@ module cvqkd_alice_axi_wrapper #(
             ldpc_success_latched <= 1'b0;
             key_ready_latched    <= 1'b0;
             core_busy            <= 1'b0;
+            iter_count_latched   <= 8'd0;
             target_syn_we_sig    <= 1'b0;
             target_syn_addr_sig  <= '0;
             target_syn_data_sig  <= '0;
@@ -425,6 +428,7 @@ module cvqkd_alice_axi_wrapper #(
                         ldpc_done_latched    <= 1'b0;
                         ldpc_success_latched <= 1'b0;
                         key_ready_latched    <= 1'b0;
+                        iter_count_latched   <= 8'd0;
                         core_busy            <= 1'b1;
                         run_ldpc_only        <= 1'b0;
                         syn_load_cnt         <= 10'd0;
@@ -434,6 +438,7 @@ module cvqkd_alice_axi_wrapper #(
                         ldpc_done_latched    <= 1'b0;
                         ldpc_success_latched <= 1'b0;
                         key_ready_latched    <= 1'b0;
+                        iter_count_latched   <= 8'd0;
                         core_busy            <= 1'b1;
                         run_ldpc_only        <= 1'b1;
                         syn_load_cnt         <= 10'd0;
@@ -496,6 +501,7 @@ module cvqkd_alice_axi_wrapper #(
                     if (ldpc_done_sig) begin
                         ldpc_done_latched    <= 1'b1;
                         ldpc_success_latched <= ldpc_success_sig;
+                        iter_count_latched   <= iter_count_sig;
                         if (ldpc_success_sig) begin
                             key_col_cnt    <= 7'd0;
                             key_word_cnt   <= 4'd0;
@@ -569,6 +575,7 @@ module cvqkd_alice_axi_wrapper #(
         .mdr_done         (mdr_done_sig),
         .ldpc_done        (ldpc_done_sig),
         .ldpc_success     (ldpc_success_sig),
+        .iter_count       (iter_count_sig),
         
         .ram_x_en         (ram_x_en),
         .ram_x_addr       (ram_x_addr),

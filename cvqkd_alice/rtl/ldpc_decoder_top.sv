@@ -13,6 +13,7 @@ module ldpc_decoder_top #(
     input  logic                 start_decoding,
     output logic                 decoding_done,
     output logic                 decoding_success, // 1 = Convergió, 0 = Falló tras Max Iter
+    output logic [7:0]           iter_count,
     
     // --- Interfaz de Carga (Loader) de LLRs Iniciales ---
     input  logic                 load_mode,        // 1 = Modo carga externa, 0 = Modo decodificación
@@ -55,6 +56,8 @@ module ldpc_decoder_top #(
     logic fsm_iter_start;
     logic fsm_row_done;
     logic is_converged;
+    logic is_first_iter_sig;
+    logic [7:0] fsm_iter_count;
     
     // ==========================================
     // 2. MULTIPLEXOR DE CARGA PARA L_BRAM
@@ -157,7 +160,9 @@ module ldpc_decoder_top #(
         // Salidas Finales
         .decoding_done    (decoding_done),
         .decoding_success (decoding_success),
-        .pass_flag_out    (fsm_dp_pass_flag)
+        .pass_flag_out    (fsm_dp_pass_flag),
+        .is_first_iter    (is_first_iter_sig),
+        .iter_count_out   (fsm_iter_count)
     );
 
     // ==========================================
@@ -194,6 +199,7 @@ module ldpc_decoder_top #(
         .col_idx_in        (fsm_dp_col_idx),
         .shift_val         (fsm_dp_shift),
         .is_pass1          (fsm_dp_pass_flag),
+        .is_first_iter     (is_first_iter_sig),
 
         // Datos de lectura
         .p_read_data_flat  (p_read_data),
@@ -225,5 +231,7 @@ module ldpc_decoder_top #(
         .target_syn   (target_syndrome_mem[current_row_idx]), // Síndrome de Alice para esta fila
         .is_converged (is_converged)
     );
+
+    assign iter_count = fsm_iter_count;
 
 endmodule

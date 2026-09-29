@@ -14,6 +14,7 @@ module ldpc_layer_datapath #(
     input  logic [6:0] col_idx_in,
     input  logic [8:0] shift_val,
     input  logic       is_pass1,
+    input  logic       is_first_iter,
     
     // --- Interfaces con las BRAM ---
     input  logic [BUS_WIDTH-1:0] p_read_data_flat,
@@ -41,7 +42,7 @@ module ldpc_layer_datapath #(
     always_comb begin
         for (int i = 0; i < Z; i++) begin
             L_read[i] = p_read_data_flat[i*W +: W];
-            R_old[i]  = r_read_data_flat[i*W +: W];
+            R_old[i]  = is_first_iter ? {W{1'b0}} : r_read_data_flat[i*W +: W];
             p_write_data_flat[i*W +: W] = L_write[i];
             r_write_data_flat[i*W +: W] = R_new[i];
         end
