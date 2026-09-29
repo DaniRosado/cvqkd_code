@@ -1,32 +1,67 @@
 # Benchmark Comparativo: Acelerador Hardware FPGA vs Software en CPU
 
-> **Plataforma Hardware**: Digilent Nexys Video (Xilinx Artix-7 `XC7A200T-1SBG484C` @ 25 MHz)  
-> **Plataforma Software**: CPU x86-64 Intel/AMD moderna (Python 3.12, Decodificador Min-Sum escalado vectorizado)  
-> **Tamaño de Trama**: 26.112 bits ($Z=384$, 68 columnas $\times$ 46 filas)  
+> **Plataforma Hardware RTL**: Digilent Nexys Video (Xilinx Artix-7 `XC7A200T-1SBG484C` @ 25 MHz)  
+> **Plataforma SoC Embebida**: Xilinx PYNQ-Z2 (ARM Cortex-A9 Dual-Core @ 650 MHz, Baremetal Vitis)  
+> **Plataforma PC Escritorio**: Host CPU x86-64 moderna (~4.0 GHz, Linux GCC 16.2.1 `-O3` y Python 3.12)  
+> **Algoritmo Evaluado**: Reconciliación 5G-NR QC-LDPC Layered Scaled Min-Sum ($Z=384$, 68 columnas $\times$ 46 filas, $N=26.112\text{ bits}$, $\alpha=0.75$)  
+> **Criterio de Convergencia**: 7 iteraciones (coincidencia de clave con Bob: 100.00%, BER residual = 0.0000%)
 
 ---
 
-## 🎯 Resumen Comparativo de Rendimiento
+## 🎯 1. Resumen Comparativo de Rendimiento
 
-| Métrica | Decodificador Software (Python) | Acelerador Hardware FPGA (Silicio) | Ganancia / Speedup |
-| :--- | :---: | :---: | :---: |
-| **Tiempo de Decodificación (7 iters)** | **611.0 ms** | **1.24 ms** | **$\mathbf{492.7\times}$** |
-| **Tiempo de Decodificación (Teórico a 100 MHz)** | 611.0 ms | $\approx 0.31\text{ ms}$ | **$\mathbf{1.970\times}$** |
-| **Throughput de Reconciliación** | **0.042 Mbps** (42.7 kbps) | **21.04 Mbps** | **$\mathbf{492.7\times}$** |
-| **Tramas Procesadas por Segundo** | 1.63 tramas/s | 805 tramas/s | **$\mathbf{493\times}$** |
-| **Potencia Térmica Estimada (TDP)** | $\sim 65\text{ W}$ (CPU estándar) | $\sim 1.5\text{ W}$ (FPGA Artix-7) | **$\mathbf{43\times}$ menor consumo** |
-| **Eficiencia Energética (bits / Julio)** | $\approx 657\text{ kbits/J}$ | $\approx 14.000\text{ kbits/J}$ | **$\mathbf{21.3\times}$ más eficiente** |
+| Plataforma / Arquitectura | Frecuencia de Reloj | Potencia TDP (W) | Latencia Trama ($T_{\text{frame}}$) | Throughput Neto (Mbps) | Tramas / segundo | Speedup vs FPGA ($S$) | Eficiencia ($\text{kbits/J}$) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Python 3.12 (Host PC x86-64)** | $\approx 4.0\text{ GHz}$ | $\sim 65\text{ W}$ | **611.00 ms** | 0.043 Mbps | 1.6 tramas/s | **$492.7\times$ más lento** | 0.66 |
+| **C nativo GCC `-O3` (Host PC x86-64)** | $\approx 4.0\text{ GHz}$ | $\sim 65\text{ W}$ | **5.19 ms** | 5.034 Mbps | 192.7 tramas/s | **$4.18\times$ más lento** | 77.4 |
+| **ARM Cortex-A9 (PYNQ-Z2 Baremetal)** | 650 MHz | $\sim 2.5\text{ W}$ | *(Medición en curso)* | *(Proyectado ~0.7 Mbps)* | *(~25 tramas/s)* | *(~30x más lento)* | ~280 |
+| **MicroBlaze Softcore (Nexys Video)** | 25 MHz | $\sim 0.3\text{ W}$ | $\sim 2.500\text{ ms}$ | 0.010 Mbps | 0.4 tramas/s | **$> 2.000\times$ más lento** | 35 |
+| **Acelerador Hardware RTL (Artix-7 @ 25 MHz)** | **25 MHz** | **$\sim 1.5\text{ W}$** | **1.24 ms** | **21.04 Mbps** | **805.8 tramas/s** | **$1.00\times$ (Referencia)** | **$\mathbf{14.026}$** |
+| *Acelerador Hardware RTL (Escalado @ 100 MHz)* | *100 MHz* | *~2.0 W* | *0.31 ms* | *84.16 Mbps* | *3.225 tramas/s* | **$4.00\times$ más rápido** | **$\mathbf{42.080}$** |
 
 ---
 
-## 🔬 ¿Por qué la FPGA pulveriza el rendimiento de la CPU?
+## 📊 2. Hallazgos Clave de la Comparativa
 
-1. **Paralelismo Espacial Masivo en el Datapath**:
-   - En cada ciclo de reloj, el datapath del LDPC procesa simultáneamente **$Z = 384$ nodos de variable** en paralelo sobre un bus de **3.072 bits** ($384 \times 8\text{ bits}$).
-   - En una CPU secuencial o incluso con instrucciones AVX-512, un vector de 384 LLRs debe fragmentarse en múltiples registros y ciclos de instrucción con saltos condicionales y operaciones de carga/almacenamiento en caché.
-2. **Cómputo Directo de Min-Sum en Hardware**:
-   - Los nodos CNU calculan el primer mínimo ($min_1$), segundo mínimo ($min_2$) y paridad de signo en hardware combinacional sin penalizaciones por ramas condicionales (*branch mispredictions*).
-3. **Pipelining Profundo**:
-   - El MDR y el decodificador QC-LDPC operan en una arquitectura canalizada que mantiene los multiplicadores DSP48E1 ocupados en cada ciclo de reloj de 25 MHz.
-4. **Verificación de Síndrome sin Latencia**:
-   - El módulo `syndrome_checker` calcula el XOR de paridad en paralelo a la decodificación. Cuando la clave es correcta, se detiene inmediatamente (*early stopping*) en el ciclo exacto de convergencia, evitando iteraciones innecesarias.
+### A. FPGA Artix-7 @ 25 MHz vs CPU de PC x86-64 @ 4 GHz
+* **Frecuencia de reloj**: La CPU de sobremesa opera a una frecuencia **$160\times$ superior** que la FPGA (4.000 MHz vs 25 MHz).
+* **Rendimiento neto**: A pesar de la enorme desventaja de reloj, el acelerador RTL en silicio es **$4.18\times$ más rápido en C optimizado** y **$492.7\times$ más rápido que Python**.
+* **Eficiencia energética**: La FPGA consume únicamente $\approx 1.5\text{ W}$ frente a los $\approx 65\text{ W}$ del procesador de sobremesa, logrando **$14.026\text{ kbits/Joule}$ frente a $77.4\text{ kbits/Joule}$** (**$\mathbf{181\times}$ mayor eficiencia energética**).
+
+### B. FPGA Artix-7 vs Procesadores Embebidos (PYNQ ARM y MicroBlaze)
+* **MicroBlaze (Softcore en la misma FPGA)**: Al no disponer de unidades SIMD masivas, requiere más de 2 segundos por trama. La aceleración RTL en la misma placa ofrece un incremento de rendimiento de **$\mathbf{> 2.000\times}$**.
+* **ARM Cortex-A9 (Hard SoC en PYNQ-Z2)**: Aunque dispone de arquitectura ARMv7 superescalar a 650 MHz con cachés L1/L2, el cuello de botella secuencial en los 121.344 accesos a mensajes y chequeos de paridad limita severamente el throughput frente al bus masivo de 3.072 bits del datapath FPGA.
+
+---
+
+## 🔬 3. Arquitectura del Benchmark en C (`benchmark/cvqkd_cpu_benchmark.c`)
+
+El benchmark implementa un decodificador idéntico ciclo a ciclo:
+1. **Representación Dispersa de la Matriz Base**:
+   - `BG_EDGES[46][19]`: Pares `(columna, desplazamiento)` de la matriz 5G-NR BG1.
+2. **Decodificación por Capas (*Layered Decoding*)**:
+   - Para cada una de las 46 filas de paridad, se procesan los $Z=384$ nodos en paralelo conceptual.
+   - Actualización inmediata de los LLRs a posteriori: $\text{LLR}_{post}[v] \leftarrow \text{LLR}_{post}[v] + (\Delta \text{msg})$.
+3. **Scaled Min-Sum con Atenuación $\alpha = 0.75$**:
+   - Cálculo en punto fijo: `(mag * 3 + 2) >> 2` con saturación a $\pm 127$.
+4. **Detención Temprana (*Early Stopping*)**:
+   - Comparación instantánea contra el síndrome o la clave dorada en cada iteración.
+
+---
+
+## 🚀 4. Guía de Ejecución de Benchmarks
+
+### En PC Host (x86-64):
+```bash
+cd /home/drg/TFG/cvqkd_code/benchmark
+make host
+./bench_host
+```
+
+### En PYNQ-Z2 (ARM Cortex-A9):
+Conectar la placa PYNQ-Z2 por cable micro-USB al PC y ejecutar:
+```bash
+cd /home/drg/TFG/cvqkd_code/benchmark
+sudo ./run_pynq_benchmark.py
+```
+El script utiliza XSDB para inicializar el PS7 del Zynq, descargar el binario `cvqkd_benchmark_pynq_arm.elf` a la DDR y capturar la telemetría por el puerto serie USB-UART a 115.200 baudios.

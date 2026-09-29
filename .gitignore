@@ -42,3 +42,8 @@ Thumbs.db
 # Python
 __pycache__/
 *.pyc
+
+# Benchmark binaries
+benchmark/*.o
+benchmark/*.elf
+benchmark/bench_host
