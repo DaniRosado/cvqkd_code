@@ -47,3 +47,4 @@ __pycache__/
 benchmark/*.o
 benchmark/*.elf
 benchmark/bench_host
+benchmark/bench_bob_host
