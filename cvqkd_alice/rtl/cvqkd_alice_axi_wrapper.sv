@@ -11,7 +11,7 @@
 // ============================================================================
 
 module cvqkd_alice_axi_wrapper #(
-    parameter int C_S_AXI_DATA_WIDTH = 32,
+    parameter int C_S_AXI_DATA_WIDTH = 32, 
     parameter int C_S_AXI_ADDR_WIDTH = 13, // 8 KB ventana (0x0000 - 0x1FFF)
     parameter int TOTAL_BLOCKS       = 3264,
     parameter int Z                  = 384,
@@ -150,11 +150,13 @@ module cvqkd_alice_axi_wrapper #(
     wire is_syn_wr = (axi_awaddr >= 13'h0100) && (axi_awaddr < 13'h09A0);
     wire [9:0] syn_wr_idx = (axi_awaddr - 13'h0100) >> 2;
 
+    wire [12:0] rd_addr_mux = (~axi_arready && s_axi_arvalid) ? s_axi_araddr : axi_araddr;
+
     wire is_syn_rd = (axi_araddr >= 13'h0100) && (axi_araddr < 13'h09A0);
-    wire [9:0] syn_rd_idx = (axi_araddr - 13'h0100) >> 2;
+    wire [9:0] syn_rd_idx = (rd_addr_mux - 13'h0100) >> 2;
 
     wire is_key_rd = (axi_araddr >= 13'h0A00) && (axi_araddr < 13'h16C0);
-    wire [9:0] key_rd_idx = (axi_araddr - 13'h0A00) >> 2;
+    wire [9:0] key_rd_idx = (rd_addr_mux - 13'h0A00) >> 2;
 
     // Escritura en syn_bram desde AXI-Lite
     always @(posedge aclk) begin
@@ -358,8 +360,8 @@ module cvqkd_alice_axi_wrapper #(
     reg [383:0] target_syn_data_sig;
 
     // Extracción de clave desde el LDPC hacia key_bram
-    reg         key_read_en_sig;
-    reg [6:0]   key_read_addr_sig;
+    wire         key_read_en_sig;
+    wire [6:0]   key_read_addr_sig;
     wire [383:0] key_read_data_sig;
 
     // Puerto de escritura de key_bram gobernado por el extractor
@@ -385,8 +387,10 @@ module cvqkd_alice_axi_wrapper #(
     // Registros para la extracción de clave (68 columnas x 12 palabras de 32b hacia key_bram)
     reg [6:0]   key_col_cnt;
     reg [3:0]   key_word_cnt;
-    reg [383:0] key_col_buf;
     reg         key_fetch_wait;
+
+    assign key_read_en_sig   = (state == ST_EXTRACT_KEY);
+    assign key_read_addr_sig = key_col_cnt;
 
     always @(posedge aclk) begin
         if (!aresetn || soft_reset) begin
@@ -399,8 +403,6 @@ module cvqkd_alice_axi_wrapper #(
             target_syn_we_sig    <= 1'b0;
             target_syn_addr_sig  <= '0;
             target_syn_data_sig  <= '0;
-            key_read_en_sig      <= 1'b0;
-            key_read_addr_sig    <= '0;
             key_bram_we          <= 1'b0;
             key_bram_waddr       <= '0;
             key_bram_wdata       <= '0;
@@ -409,12 +411,10 @@ module cvqkd_alice_axi_wrapper #(
             syn_row_buf          <= '0;
             key_col_cnt          <= '0;
             key_word_cnt         <= '0;
-            key_col_buf          <= '0;
             key_fetch_wait       <= 1'b0;
             run_ldpc_only        <= 1'b0;
         end else begin
             target_syn_we_sig <= 1'b0;
-            key_read_en_sig   <= 1'b0;
             key_bram_we       <= 1'b0;
 
             case (state)
@@ -497,12 +497,10 @@ module cvqkd_alice_axi_wrapper #(
                         ldpc_done_latched    <= 1'b1;
                         ldpc_success_latched <= ldpc_success_sig;
                         if (ldpc_success_sig) begin
-                            key_col_cnt       <= 7'd0;
-                            key_word_cnt      <= 4'd0;
-                            key_read_en_sig   <= 1'b1;
-                            key_read_addr_sig <= 7'd0;
-                            key_fetch_wait    <= 1'b1;
-                            state             <= ST_EXTRACT_KEY;
+                            key_col_cnt    <= 7'd0;
+                            key_word_cnt   <= 4'd0;
+                            key_fetch_wait <= 1'b1;
+                            state          <= ST_EXTRACT_KEY;
                         end else begin
                             state <= ST_DONE;
                         end
@@ -515,15 +513,15 @@ module cvqkd_alice_axi_wrapper #(
                 // =============================================================
                 ST_EXTRACT_KEY: begin
                     if (key_fetch_wait) begin
-                        // Ciclo de latencia de lectura de L_BRAM: el dato key_read_data_sig está listo
-                        key_col_buf    <= key_read_data_sig;
+                        // Ciclo de latencia de lectura de L_BRAM: al final de este ciclo
+                        // L_BRAM registra mem[key_col_cnt] en key_read_data_sig
                         key_fetch_wait <= 1'b0;
                         key_word_cnt   <= 4'd0;
                     end else begin
-                        // Escribir la palabra actual de 32 bits en key_bram
+                        // Escribir la palabra actual de 32 bits directamente desde key_read_data_sig
                         key_bram_we    <= 1'b1;
                         key_bram_waddr <= (key_col_cnt * 12) + key_word_cnt;
-                        key_bram_wdata <= key_col_buf[(key_word_cnt * 32) +: 32];
+                        key_bram_wdata <= key_read_data_sig[(key_word_cnt * 32) +: 32];
 
                         if (key_word_cnt == 4'd11) begin
                             // Columna actual completada
@@ -533,10 +531,8 @@ module cvqkd_alice_axi_wrapper #(
                                 state             <= ST_DONE;
                             end else begin
                                 // Solicitar lectura de la siguiente columna
-                                key_col_cnt       <= key_col_cnt + 1;
-                                key_read_en_sig   <= 1'b1;
-                                key_read_addr_sig <= key_col_cnt + 1;
-                                key_fetch_wait    <= 1'b1;
+                                key_col_cnt    <= key_col_cnt + 1;
+                                key_fetch_wait <= 1'b1;
                             end
                         end else begin
                             key_word_cnt <= key_word_cnt + 1;
