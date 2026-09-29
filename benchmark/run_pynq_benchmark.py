@@ -39,19 +39,13 @@ def find_pynq_uart():
 def launch_xsdb():
     xsdb_cmd = f"""
 connect
-puts "=== CONECTADO A JTAG ==="
-targets
-# Seleccionar PS7
-targets -set -nocase -filter {{name =~ "*ps7_init*" || name =~ "*PS7*" || name =~ "*ARM*#0" || name =~ "*Cortex-A9*#0"}}
-catch {{rst -system}}
-after 1000
 targets -set -nocase -filter {{name =~ "*Cortex-A9*#0"}}
-catch {{rst -processor}}
+catch {{stop}}
 source {PS7_INIT_TCL}
 ps7_init
 ps7_post_config
 dow {ELF_PATH}
-puts "=== EJECUTANDO BENCHMARK EN ARM CORTEX-A9 ==="
+puts "=== INICIANDO BENCHMARK EN CORTEX-A9 ==="
 con
 exit
 """
@@ -69,25 +63,39 @@ exit
     print("[XSDB] Binario cargado y procesador iniciado con exito.")
     return True
 
-def read_uart(port, baud=115200, duration=15):
-    import serial
+def read_uart(port, baud=115200, duration=25):
+    import termios
     print(f"[UART] Conectando a {port} a {baud} baudios...")
+    baud_map = {115200: termios.B115200, 9600: termios.B9600, 57600: termios.B57600}
     try:
-        ser = serial.Serial(port, baud, timeout=1.0)
+        fd = os.open(port, os.O_RDWR | os.O_NOCTTY)
     except Exception as e:
         print(f"[UART ERROR] No se pudo abrir {port}: {e}")
         return
 
-    ser.reset_input_buffer()
+    attrs = termios.tcgetattr(fd)
+    attrs[0] = termios.IGNPAR
+    attrs[1] = 0
+    attrs[2] = termios.CS8 | termios.CREAD | termios.CLOCAL
+    attrs[3] = 0
+    b = baud_map.get(baud, termios.B115200)
+    attrs[4] = b
+    attrs[5] = b
+    attrs[6][termios.VMIN] = 0
+    attrs[6][termios.VTIME] = 10 # 1.0s timeout
+    termios.tcsetattr(fd, termios.TCSANOW, attrs)
+    termios.tcflush(fd, termios.TCIOFLUSH)
+    f = os.fdopen(fd, 'r', encoding='utf-8', errors='ignore')
+
     t_end = time.time() + duration
     print("[UART] Escuchando resultados de PYNQ-Z2:\n")
     while time.time() < t_end:
-        line = ser.readline().decode('utf-8', errors='replace')
+        line = f.readline().strip()
         if line:
-            print(f"[PYNQ-ARM] {line.strip()}")
+            print(f"[PYNQ-ARM] {line}")
             if "RESUMEN FINAL BENCHMARK" in line:
-                t_end = time.time() + 3.0 # Dar tiempo a que termine de volcar el resumen
-    ser.close()
+                t_end = time.time() + 3.0 # Dar tiempo al resumen
+    f.close()
 
 def main():
     print("========================================================================")

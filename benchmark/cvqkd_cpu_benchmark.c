@@ -64,6 +64,37 @@ static double get_time_us(void) {
 #endif
 }
 
+/* Helper para imprimir números con decimales compatible con xil_printf y printf */
+static void print_metric(const char *prefix, double val, const char *suffix, int decimals) {
+#if defined(IS_XILINX_BAREMETAL)
+    int mult = 1;
+    for (int k = 0; k < decimals; k++) mult *= 10;
+    int sign = (val < 0.0) ? -1 : 1;
+    double abs_val = val * (double)sign;
+    int int_part = (int)abs_val;
+    int frac_part = (int)((abs_val - (double)int_part) * (double)mult + 0.5);
+    if (frac_part >= mult) {
+        int_part += 1;
+        frac_part -= mult;
+    }
+    if (decimals == 1) {
+        PRINTF("%s%s%d.%01d%s", prefix, (sign < 0) ? "-" : "", int_part, frac_part, suffix);
+    } else if (decimals == 2) {
+        PRINTF("%s%s%d.%02d%s", prefix, (sign < 0) ? "-" : "", int_part, frac_part, suffix);
+    } else {
+        PRINTF("%s%s%d.%03d%s", prefix, (sign < 0) ? "-" : "", int_part, frac_part, suffix);
+    }
+#else
+    if (decimals == 1) {
+        printf("%s%.1f%s", prefix, val, suffix);
+    } else if (decimals == 2) {
+        printf("%s%.2f%s", prefix, val, suffix);
+    } else {
+        printf("%s%.3f%s", prefix, val, suffix);
+    }
+#endif
+}
+
 /* Desempaquetar síndrome y clave dorada */
 static void init_benchmark_vectors(void) {
     /* Desempaquetar síndrome: 552 palabras de 32 bits -> 46 filas x 384 bits */
@@ -171,8 +202,9 @@ static int decode_ldpc_layered(int max_iters, int verbose, int *out_iters, doubl
         }
 
         if (verbose) {
-            PRINTF("  [Iter %2d] Errores residuales de bit: %5d / 26112 (BER = %6.3f%%)\r\n",
-                   it, final_errors, (double)final_errors * 100.0 / (double)N_CODE_BITS);
+            double ber = (double)final_errors * 100.0 / (double)N_CODE_BITS;
+            PRINTF("  [Iter %2d] Errores residuales de bit: %5d / 26112 (BER = ", it, final_errors);
+            print_metric("", ber, "%)\r\n", 3);
         }
 
         /* Early stopping si el síndrome y la clave son correctos */
@@ -225,15 +257,15 @@ int main(void) {
     } else {
         PRINTF(">>> [RESULTADO] FALLO DE CONVERGENCIA tras %d iteraciones\r\n", iters);
     }
-    PRINTF(">>> Latencia CPU (1 trama):    %8.2f ms  (%8.1f us)\r\n", time_ms, time_us);
-    PRINTF(">>> Throughput Reconciliacion: %8.3f Mbps\r\n", throughput_mbps);
+    print_metric(">>> Latencia CPU (1 trama):    ", time_ms, " ms\r\n", 2);
+    print_metric(">>> Throughput Reconciliacion: ", throughput_mbps, " Mbps\r\n", 3);
     PRINTF("------------------------------------------------------------------------\r\n");
-    PRINTF(">>> Latencia FPGA Artix-7:     %8.2f ms  (Silicio @ 25 MHz)\r\n", FPGA_TIME_MS);
-    PRINTF(">>> Throughput FPGA Artix-7:   %8.2f Mbps\r\n", FPGA_THROUGHPUT_MBPS);
+    PRINTF(">>> Latencia FPGA Artix-7:     1.24 ms  (Silicio @ 25 MHz)\r\n");
+    print_metric(">>> Throughput FPGA Artix-7:   ", FPGA_THROUGHPUT_MBPS, " Mbps\r\n", 2);
     if (speedup >= 1.0) {
-        PRINTF(">>> SPEEDUP HARDWARE:          %8.1fx MAS RAPIDO EN FPGA QUE EN CPU!\r\n", speedup);
+        print_metric(">>> SPEEDUP HARDWARE:          ", speedup, "x MAS RAPIDO EN FPGA QUE EN CPU!\r\n", 1);
     } else {
-        PRINTF(">>> RATIO HARDWARE/CPU:        %8.2fx\r\n", 1.0 / speedup);
+        print_metric(">>> RATIO HARDWARE/CPU:        ", 1.0 / speedup, "x\r\n", 2);
     }
     PRINTF("------------------------------------------------------------------------\r\n\r\n");
 
@@ -262,10 +294,10 @@ int main(void) {
     PRINTF("   RESUMEN FINAL BENCHMARK ESTADISTICO (%d TRAMAS SOSTENIDAS)          \r\n", NUM_BENCH_FRAMES);
     PRINTF("========================================================================\r\n");
     PRINTF("  * Tasa de Exito:               %d / %d (100.00%%)\r\n", total_success, NUM_BENCH_FRAMES);
-    PRINTF("  * Latencia Media por Trama:    %8.2f ms\r\n", avg_time_ms);
-    PRINTF("  * Throughput Medio CPU:        %8.3f Mbps\r\n", avg_throughput_mbps);
-    PRINTF("  * Throughput FPGA Artix-7:     %8.2f Mbps\r\n", FPGA_THROUGHPUT_MBPS);
-    PRINTF("  * Factor de Aceleracion (S):   %8.1fx MAS RAPIDO EN FPGA\r\n", avg_speedup);
+    print_metric("  * Latencia Media por Trama:    ", avg_time_ms, " ms\r\n", 2);
+    print_metric("  * Throughput Medio CPU:        ", avg_throughput_mbps, " Mbps\r\n", 3);
+    PRINTF("  * Throughput FPGA Artix-7:     21.04 Mbps\r\n");
+    print_metric("  * Factor de Aceleracion (S):   ", avg_speedup, "x MAS RAPIDO EN FPGA\r\n", 1);
     PRINTF("========================================================================\r\n\r\n");
 
     return 0;
