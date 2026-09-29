@@ -23,15 +23,37 @@
 #if defined(PLATFORM_ARM_BAREMETAL) || (defined(__arm__) && !defined(__linux__))
     /* Vitis Baremetal en Zynq-7000 (ARM Cortex-A9) */
     #include "xparameters.h"
-    #include "xiltimer.h"
     #include "xil_printf.h"
+    #include "xil_io.h"
     #define IS_XILINX_BAREMETAL 1
     #define PRINTF xil_printf
+
+    #define GLOBAL_TMR_BASEADDR         0xF8F00200U
+    #define GTIMER_COUNTER_LOWER_OFFSET 0x00U
+    #define GTIMER_COUNTER_UPPER_OFFSET 0x04U
+    #define GTIMER_CONTROL_OFFSET       0x08U
+    #define GTIMER_FREQ_HZ              325000000.0
+
+    static inline void init_global_timer(void) {
+        Xil_Out32(GLOBAL_TMR_BASEADDR + GTIMER_CONTROL_OFFSET, 0x0);
+        Xil_Out32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET, 0x0);
+        Xil_Out32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_UPPER_OFFSET, 0x0);
+        Xil_Out32(GLOBAL_TMR_BASEADDR + GTIMER_CONTROL_OFFSET, 0x1);
+    }
+
+    static inline uint64_t read_global_timer(void) {
+        uint32_t high, low;
+        do {
+            high = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_UPPER_OFFSET);
+            low = Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_LOWER_OFFSET);
+        } while (Xil_In32(GLOBAL_TMR_BASEADDR + GTIMER_COUNTER_UPPER_OFFSET) != high);
+        return (((uint64_t)high) << 32) | low;
+    }
 #elif defined(PLATFORM_MB_BAREMETAL) || defined(__MICROBLAZE__)
     /* Vitis Baremetal en MicroBlaze */
     #include "xparameters.h"
-    #include "xiltimer.h"
     #include "xil_printf.h"
+    #include "xil_io.h"
     #define IS_XILINX_BAREMETAL 1
     #define PRINTF xil_printf
 #else
@@ -51,10 +73,9 @@ static uint8_t golden_bits[N_CODE_BITS];
 
 /* Función para obtener tiempo en microsegundos */
 static double get_time_us(void) {
-#if defined(IS_XILINX_BAREMETAL)
-    XTime t = 0;
-    XTime_GetTime(&t);
-    return (double)t * 1000000.0 / (double)COUNTS_PER_SECOND;
+#if defined(PLATFORM_ARM_BAREMETAL) || (defined(__arm__) && !defined(__linux__))
+    uint64_t t = read_global_timer();
+    return (double)t * 1000000.0 / GTIMER_FREQ_HZ;
 #elif defined(IS_POSIX)
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -97,6 +118,10 @@ static void print_metric(const char *prefix, double val, const char *suffix, int
 
 /* Desempaquetar síndrome y clave dorada */
 static void init_benchmark_vectors(void) {
+#if defined(PLATFORM_ARM_BAREMETAL) || (defined(__arm__) && !defined(__linux__))
+    init_global_timer();
+#endif
+
     /* Desempaquetar síndrome: 552 palabras de 32 bits -> 46 filas x 384 bits */
     for (int r = 0; r < BG_ROWS; r++) {
         for (int w = 0; w < 12; w++) {
@@ -236,6 +261,13 @@ int main(void) {
 
     init_benchmark_vectors();
 
+#if defined(PLATFORM_ARM_BAREMETAL) || (defined(__arm__) && !defined(__linux__))
+    uint64_t t0 = read_global_timer();
+    for (volatile int k = 0; k < 100000; k++);
+    uint64_t t1 = read_global_timer();
+    PRINTF("[TIMER TEST] Delta ticks = %u (Freq = 325 MHz)\r\n\r\n", (uint32_t)(t1 - t0));
+#endif
+
     /* FASE 1: Verificación funcional detallada paso a paso */
     PRINTF("[FASE 1] Ejecutando decodificacion detallada de 1 trama dorada...\r\n");
     int iters = 0;
@@ -243,12 +275,12 @@ int main(void) {
     int success = decode_ldpc_layered(15, 1, &iters, &time_us);
 
     double time_ms = time_us / 1000.0;
-    double throughput_mbps = (double)N_CODE_BITS / (time_ms * 1000.0);
+    double throughput_mbps = (time_ms > 0.0001) ? ((double)N_CODE_BITS / (time_ms * 1000.0)) : 0.0;
 
     /* Referencia de la FPGA Nexys Video Artix-7 @ 25 MHz (medida en silicio) */
     const double FPGA_TIME_MS = 1.241;
     const double FPGA_THROUGHPUT_MBPS = 21.04;
-    double speedup = time_ms / FPGA_TIME_MS;
+    double speedup = (time_ms > 0.0001) ? (time_ms / FPGA_TIME_MS) : 0.0;
 
     PRINTF("\r\n------------------------------------------------------------------------\r\n");
     if (success) {
@@ -264,7 +296,7 @@ int main(void) {
     print_metric(">>> Throughput FPGA Artix-7:   ", FPGA_THROUGHPUT_MBPS, " Mbps\r\n", 2);
     if (speedup >= 1.0) {
         print_metric(">>> SPEEDUP HARDWARE:          ", speedup, "x MAS RAPIDO EN FPGA QUE EN CPU!\r\n", 1);
-    } else {
+    } else if (speedup > 0.0001) {
         print_metric(">>> RATIO HARDWARE/CPU:        ", 1.0 / speedup, "x\r\n", 2);
     }
     PRINTF("------------------------------------------------------------------------\r\n\r\n");
@@ -287,8 +319,8 @@ int main(void) {
     }
 
     double avg_time_ms = (total_time_us / (double)NUM_BENCH_FRAMES) / 1000.0;
-    double avg_throughput_mbps = (double)N_CODE_BITS / (avg_time_ms * 1000.0);
-    double avg_speedup = avg_time_ms / FPGA_TIME_MS;
+    double avg_throughput_mbps = (avg_time_ms > 0.0001) ? ((double)N_CODE_BITS / (avg_time_ms * 1000.0)) : 0.0;
+    double avg_speedup = (avg_time_ms > 0.0001) ? (avg_time_ms / FPGA_TIME_MS) : 0.0;
 
     PRINTF("\r\n========================================================================\r\n");
     PRINTF("   RESUMEN FINAL BENCHMARK ESTADISTICO (%d TRAMAS SOSTENIDAS)          \r\n", NUM_BENCH_FRAMES);
