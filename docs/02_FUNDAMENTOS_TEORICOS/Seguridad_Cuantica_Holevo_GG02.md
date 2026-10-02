@@ -92,12 +92,18 @@ No existe aceptación "asintótica": una trama con $K_{\text{finite}} \le 0$ sie
 
 Con una sola trama ($n = 26\,112$ bits, $m = 13\,056$ muestras de estimación) la corrección de tamaño finito y el término $\log_2(1/\epsilon_{cor})$ superan a la clave: toda trama aislada se aborta. Por eso el firmware evalúa la seguridad **por bloques de $F$ tramas**: el acelerador procesa cada trama (MDR y síndrome), la CPU promedia $t = \sqrt{\texttt{T\_FINAL}}$ y $\text{Var}(y)$ de las $F$ tramas (cada una aporta las mismas muestras, así que es la estimación con todas las del bloque) y evalúa una vez con $m$, $n$ y $\text{leak}_{EC}$ multiplicados por $F$.
 
+Clave del bloque con los valores verdaderos del punto de trabajo ($T = 0{,}631$, $\xi = 0{,}01$):
+
 | $F$ (tramas) | $\ell$ (bits seguros del bloque) |
 |---|---|
 | 1 | 0 (ABORT) |
-| 40 | 3 434 |
-| 50 | 18 341 |
-| 100 | 63 769 |
-| 1000 | 1,08 M |
+| 50 | 0 (ABORT) |
+| 340 | 3 741 (umbral) |
+| 500 | 77 299 |
+| 1000 | 357 832 |
 
-Con $F = 50$ (valor del firmware) ya hay clave. Una ventana de ataque de 10 tramas dentro de un bloque eleva $\xi$ del bloque completo y lo aborta. `m_samples` y `n_key_bits` son `uint32_t`, lo que limita un bloque a unas 160 000 tramas.
+Cerca del umbral la fluctuación de la estimación decide: en simulación, con $F = 400$ se abortan un 30 % de los bloques sin ataque y con $F = 1000$ ninguno (clave mínima 225 000 bits en 20 semillas). El firmware usa $F = 1000$; una ventana de ataque de 10 tramas (1 % del bloque) basta para abortarlo. `m_samples` y `n_key_bits` son `uint32_t`, lo que limita un bloque a unas 160 000 tramas.
+
+**Las tramas del bloque deben ser independientes.** Repetir la misma trama $F$ veces estrecha el intervalo de confianza sin acercar la estimación al valor real, y la clave resultante no es válida. Por eso la fase II del firmware genera cada trama en el ARM (`synth_frame`): una realización nueva del modelo de `tb_generador_master.m` sin ruido de fase. El ataque se modela como interceptar y reenviar con heterodino ($\xi = 2$ SNU).
+
+**Suelo de ruido.** El ruido de disparo y el electrónico están calibrados, así que $\sigma^2 \ge 1 + v_{el}$. Una estimación por debajo es fluctuación estadística y se sube al suelo ($\xi = 0$) antes de calcular el peor caso. Esto solo puede reducir la clave.

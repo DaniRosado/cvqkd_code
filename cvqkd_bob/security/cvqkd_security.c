@@ -139,11 +139,14 @@ bool cvqkd_evaluate_frame_security(
     result->loss_db     = -10.0 * log10(T_est);
     result->distance_km = result->loss_db / params->fiber_alpha;
 
-    /* Varianza condicional sigma^2 = Var(B) - t^2*V_A = 1 + v_el + t^2*xi (en SNU) */
+    /* Varianza condicional sigma^2 = Var(B) - t^2*V_A = 1 + v_el + t^2*xi (en SNU).
+     * El ruido de disparo y el electrónico (calibrados) son un suelo físico: una
+     * estimación por debajo es fluctuación estadística y se sube al suelo (xi = 0),
+     * lo que solo puede reducir la clave. */
     double var_B  = (double)sigma_sq_hw / params->N0_adc_var;
     double sigma2 = var_B - t2 * V_A;
+    if (sigma2 < 1.0 + v_el) sigma2 = 1.0 + v_el;
     double xi = (sigma2 - 1.0 - v_el) / t2;
-    if (xi < 0.0) xi = 0.0; /* Sin ruido de exceso físico negativo */
     result->xi_snu = xi;
 
     /* 2. Peor caso de tamaño finito (Leverrier, Grosshans, Grangier, PRA 81, 062343, 2010)
@@ -152,13 +155,12 @@ bool cvqkd_evaluate_frame_security(
     double z = sqrt(2.0 * log(2.0 / params->epsilon_pe));
     double t_min      = t_hat - z * sqrt(sigma2 / (2.0 * m * V_A));
     double sigma2_max = sigma2 * (1.0 + z / sqrt(m));
-    if (sigma2 <= 0.0 || t_min <= 0.0) {
-        result->status_msg = "ESTIMACION INVALIDA: varianza o transmitancia fuera de rango. TRAMA ABORTADA.";
+    if (t_min <= 0.0) {
+        result->status_msg = "ESTIMACION INVALIDA: transmitancia fuera de rango. TRAMA ABORTADA.";
         return false;
     }
     double t2_min   = t_min * t_min;
     double xi_worst = (sigma2_max - 1.0 - v_el) / t2_min;
-    if (xi_worst < 0.0) xi_worst = 0.0;
 
     result->T_worst     = 2.0 * t2_min / eta;
     result->xi_worst    = xi_worst;

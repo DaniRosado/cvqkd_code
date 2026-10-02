@@ -50,13 +50,18 @@
 // PARÁMETROS DEL STREAMING Y SEGURIDAD
 // =============================================================================
 // La seguridad se evalúa por bloques de tramas: con una sola trama (26.112 bits) la
-// corrección de tamaño finito supera a la clave; a partir de ~40 tramas ya hay clave.
+// corrección de tamaño finito supera a la clave. En el punto de trabajo (10 km,
+// xi = 0,01) hace falta un bloque de al menos 340 tramas; con 1000 la fluctuación
+// estadística de la estimación ya no aborta bloques sin ataque.
 // (m_samples y n_key_bits son uint32_t: un bloque admite hasta ~160.000 tramas).
-#define FRAMES_PER_BLOCK    50
+#define FRAMES_PER_BLOCK    1000
 #define NUM_BLOCKS          3
 #define NUM_STREAM_FRAMES   (FRAMES_PER_BLOCK * NUM_BLOCKS)
-#define ATTACK_START_FRAME  61    // Ataque de Eva dentro del bloque 2 (tramas 61-70)
-#define ATTACK_END_FRAME    70
+#define ATTACK_START_FRAME  1101  // Ataque de Eva dentro del bloque 2 (tramas 1101-1110)
+#define ATTACK_END_FRAME    1110
+#define CH_LENGTH_KM        10.0  // Canal sintético de la fase II (premisas de MATLAB)
+#define CH_XI               0.01  // Ruido de exceso del canal (SNU)
+#define ATTACK_XI           2.0   // Interceptar y reenviar con heterodino: xi = 2 SNU
 
 // =============================================================================
 // TIMER GLOBAL DE HARDWARE (ARM Cortex-A9 SCU Global Timer @ 325 MHz)
@@ -312,6 +317,48 @@ static int bob_process_frame(bob_frame_hw_t *hw) {
     return XST_SUCCESS;
 }
 
+// Gaussiana N(0, 1) por el método polar de Marsaglia (genera dos por iteración)
+static double randn(void) {
+    static bool has_spare = false;
+    static double spare;
+    if (has_spare) { has_spare = false; return spare; }
+    double u, v, s;
+    do {
+        u = 2.0 * rand() / RAND_MAX - 1.0;
+        v = 2.0 * rand() / RAND_MAX - 1.0;
+        s = u * u + v * v;
+    } while (s >= 1.0 || s == 0.0);
+    double k = sqrt(-2.0 * log(s) / s);
+    spare = v * k;
+    has_spare = true;
+    return u * k;
+}
+
+// Canal sintético de la fase II: cada trama es una realización nueva del modelo de
+// tb_generador_master.m, sin ruido de fase. Un piloto (20000, 0) cada 16 símbolos,
+// datos x ~ N(0, V_A) y en cada cuadratura y = sqrt(T*eta/2)*x + z con
+// Var(z) = 1 + v_el + T*eta*xi/2, todo en cuentas de ADC (1 SNU = N0).
+// Rellena tx_adc_buf y, según la máscara, las muestras de sacrificio de Alice.
+static void synth_frame(const cvqkd_security_params_t *p, double T, double xi) {
+    const double t    = sqrt(T * p->eta / 2.0);
+    const double sd_x = sqrt(p->V_A * p->N0_adc_var);
+    const double sd_z = sqrt((1.0 + p->v_el + T * p->eta * xi / 2.0) * p->N0_adc_var);
+    int d = 0, j = 0;   // Índice de dato de Bob y de muestra de sacrificio
+    for (int k = 0; k < N_ADC_SAMPLES; k++) {
+        bool pilot = (k % 16 == 0);
+        int16_t xp = pilot ? 20000 : (int16_t)lround(sd_x * randn());
+        int16_t xq = pilot ? 0     : (int16_t)lround(sd_x * randn());
+        int16_t yp = (int16_t)lround(t * xp + sd_z * randn());
+        int16_t yq = (int16_t)lround(t * xq + sd_z * randn());
+        tx_adc_buf[k] = ((uint32_t)(uint16_t)yq << 16) | (uint16_t)yp;
+        if (!pilot && d < N_TOTAL_DATA_SYMBOLS) {
+            if ((tx_mask_buf[d >> 5] >> (d & 31)) & 1u)
+                tx_alice_buf[j++] = ((uint32_t)(uint16_t)xq << 16) | (uint16_t)xp;
+            d++;
+        }
+    }
+}
+
 // =============================================================================
 // PROGRAMA PRINCIPAL
 // =============================================================================
@@ -450,11 +497,12 @@ int main(void) {
     // =========================================================================
     // FASE II: STREAMING CONTINUO CON SEGURIDAD EVALUADA POR BLOQUES
     // =========================================================================
-    // Cada trama se procesa en el acelerador (MDR y síndrome por trama). La
-    // estimación de parámetros y la amplificación de privacidad se hacen sobre el
-    // bloque completo: todas las tramas aportan el mismo número de muestras, así
-    // que la media de t = Cov/V_A y de Var(B) por trama es la estimación con todas
-    // las muestras del bloque (se promedia t, no t^2, porque Cov es lineal).
+    // Cada trama es una realización nueva del canal (synth_frame) y se procesa en
+    // el acelerador (MDR y síndrome por trama). La estimación de parámetros y la
+    // amplificación de privacidad se hacen sobre el bloque completo: todas las
+    // tramas aportan el mismo número de muestras, así que la media de t = Cov/V_A
+    // y de Var(B) por trama es la estimación con todas las muestras del bloque
+    // (se promedia t, no t^2, porque Cov es lineal).
     cvqkd_security_params_t block_params = sec_params;
     block_params.m_samples    *= FRAMES_PER_BLOCK;
     block_params.n_key_bits   *= FRAMES_PER_BLOCK;
@@ -463,15 +511,17 @@ int main(void) {
     xil_printf("\r\n========================================================================\r\n");
     xil_printf("   FASE II: STREAMING CONTINUO (%d TRAMAS EN %d BLOQUES DE %d)\r\n",
                NUM_STREAM_FRAMES, NUM_BLOCKS, FRAMES_PER_BLOCK);
-    xil_printf("   - Canal nominal: L = 10 km, xi = 0.010 SNU\r\n");
-    xil_printf("   - Tramas %d a %d: INYECCION DE ATAQUE / INTRUSION DE EVA (bloque 2)\r\n",
+    xil_printf("   - Canal sintetico, trama nueva cada vez: L = 10 km, xi = 0.010 SNU\r\n");
+    xil_printf("   - Tramas %d a %d: Eva intercepta y reenvia (xi = 2 SNU, bloque 2)\r\n",
                ATTACK_START_FRAME, ATTACK_END_FRAME);
+    xil_printf("   - Se muestra una fila cada 100 tramas y las tramas atacadas (tarda unos minutos)\r\n");
     xil_printf("========================================================================\r\n");
 
     uint32_t pass_blocks = 0;
     uint32_t attack_blocks = 0, attack_blocks_aborted = 0;
     uint64_t total_secure_bits = 0;
-    uint64_t total_stream_cycles = 0;   // Solo procesado: excluye los printf por UART
+    uint64_t total_stream_cycles = 0;   // Solo el acelerador: excluye la síntesis y la UART
+    const double T_channel = pow(10.0, -sec_params.fiber_alpha * CH_LENGTH_KM / 10.0);
 
     for (int block = 1; block <= NUM_BLOCKS; block++) {
         double sum_t = 0.0, sum_var = 0.0;
@@ -485,21 +535,8 @@ int main(void) {
             bool is_attack_frame = (frame >= ATTACK_START_FRAME && frame <= ATTACK_END_FRAME);
             block_has_attack |= is_attack_frame;
 
-            // 1. Inyección de datos según escenario
-            if (is_attack_frame) {
-                // Ataque de Eva: Ruido de exceso inducido en las muestras ópticas del heterodino
-                for (int i = 0; i < N_ADC_SAMPLES; i++) {
-                    int32_t p = (int16_t)(vec_bob_adc[i] & 0xFFFF);
-                    int32_t q = (int16_t)((vec_bob_adc[i] >> 16) & 0xFFFF);
-                    p += (rand() % 500) - 250;
-                    q += (rand() % 500) - 250;
-                    tx_adc_buf[i] = ((uint32_t)(uint16_t)q << 16) | (uint16_t)p;
-                }
-            } else {
-                for (int i = 0; i < N_ADC_SAMPLES; i++) {
-                    tx_adc_buf[i] = vec_bob_adc[i];
-                }
-            }
+            // 1. Trama nueva del canal (con el ruido de Eva en las tramas atacadas)
+            synth_frame(&sec_params, T_channel, is_attack_frame ? ATTACK_XI : CH_XI);
 
             // 2. Procesar la trama en el acelerador (reset, clave nueva, DMAs y espera)
             uint64_t t_frame_start = read_global_timer();
@@ -513,6 +550,7 @@ int main(void) {
             sum_t   += sqrt((double)f_hw.T_final / 65536.0);
             sum_var += (double)f_hw.sigma_sq;
 
+            if (frame % 100 != 0 && !is_attack_frame) continue;
             int t_dec = (int)(((int64_t)(abs(f_hw.T_final) & 0xFFFF) * 10000) / 65536);
             xil_printf(" %5d | %s |  0.%04d | %17d | %3d.%02d ms\r\n",
                        frame, is_attack_frame ? "ATAQUE" : "NORMAL", t_dec, f_hw.sigma_sq,
