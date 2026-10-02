@@ -522,7 +522,7 @@ int main(void) {
     xil_printf("  * Total Tramas Procesadas:     %d\r\n", NUM_STREAM_FRAMES);
     xil_printf("  * Tramas Seguras Autorizadas:  %d (%d%%)\r\n",
                pass_count, (pass_count * 100) / NUM_STREAM_FRAMES);
-    xil_printf("  * Tramas Abortadas por Ataque: %d (%d%%)\r\n",
+    xil_printf("  * Tramas Abortadas:           %d (%d%%)\r\n",
                abort_count, (abort_count * 100) / NUM_STREAM_FRAMES);
     xil_printf("  * Intrusiones Abortadas:       %u/%d tramas de ataque\r\n",
                attack_abort_count, ATTACK_END_FRAME - ATTACK_START_FRAME + 1);
