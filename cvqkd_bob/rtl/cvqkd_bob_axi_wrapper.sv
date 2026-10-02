@@ -90,35 +90,44 @@ module cvqkd_bob_axi_wrapper #(
     // =========================================================================
     // 0x00: Control Register (bit 0: soft_reset, bit 1: enable)
     // 0x04: calib_VarA (Q16.16)
-    // 0x08: Status Register (bit 0: done_est, bit 1: syndrome_done)
+    // 0x08: Status Register (sticky hasta soft_reset)
+    //         bit 0: done_est      - estimación de parámetros terminada
+    //         bit 1: syndrome_done - síndrome LDPC calculado
+    //         bit 2: key_ready     - hay clave cargada y sin consumir
+    //         bit 3: data_loss     - se perdió algún dato: la trama no es válida
     // 0x0C: T_final_out
     // 0x10: T_sqrt_out
     // 0x14: sigma_sq_out
     // 0x18: sigma_out
     // 0x1C: num_samples_out
-    
+
     reg [31:0] reg_ctrl;
     reg [31:0] reg_calib_vara;
     wire [31:0] reg_status;
-    
+
     wire signed [31:0] T_final_out;
     wire signed [31:0] T_sqrt_out;
     wire signed [31:0] sigma_sq_out;
     wire signed [31:0] sigma_out;
     wire [31:0]        num_samples_out;
-    wire               done_est;
+    wire               done_est_pulse;
     wire               syndrome_done_pulse;
+    wire               data_loss;
+    reg                reg_done_est;
     reg                reg_syndrome_done;
+    reg                key_ready;
 
     always @(posedge aclk) begin
         if (!aresetn || reg_ctrl[0]) begin
+            reg_done_est      <= 1'b0;
             reg_syndrome_done <= 1'b0;
-        end else if (syndrome_done_pulse) begin
-            reg_syndrome_done <= 1'b1;
+        end else begin
+            if (done_est_pulse)      reg_done_est      <= 1'b1;
+            if (syndrome_done_pulse) reg_syndrome_done <= 1'b1;
         end
     end
 
-    assign reg_status = {30'd0, reg_syndrome_done, done_est};
+    assign reg_status = {28'd0, data_loss, key_ready, reg_syndrome_done, reg_done_est};
 
     // --- Logica AXI4-Lite Slave Handshake ---
     reg axi_awready;
@@ -144,15 +153,22 @@ module cvqkd_bob_axi_wrapper #(
     // MEMORIA DE CLAVE SECRETA (816 palabras de 32 bits = 3.264 B = 26.112 bits)
     // Mapeada en AXI-Lite en el rango 0x100 - 0xDC0
     // =========================================================================
-    (* ram_style = "distributed" *) reg [31:0] key_ram [0:815];
+    localparam integer KEY_WORDS = 816;           // 1 byte por bloque MDR 8D
+    localparam integer KEY_BYTES = KEY_WORDS * 4; // 3.264 bloques por trama
+
+    (* ram_style = "distributed" *) reg [31:0] key_ram [0:KEY_WORDS-1];
     reg [11:0] trng_blk_cnt;
     wire       trng_req;
 
-    wire is_key_wr = (axi_awaddr >= 12'h100) && (axi_awaddr < (12'h100 + 12'd3264));
+    wire is_key_wr = (axi_awaddr >= 12'h100) && (axi_awaddr < (12'h100 + KEY_BYTES));
     wire [9:0] key_wr_idx = (axi_awaddr - 12'h100) >> 2;
 
-    wire is_key_rd = (axi_araddr >= 12'h100) && (axi_araddr < (12'h100 + 12'd3264));
+    wire is_key_rd = (axi_araddr >= 12'h100) && (axi_araddr < (12'h100 + KEY_BYTES));
     wire [9:0] key_rd_idx = (axi_araddr - 12'h100) >> 2;
+
+    // La CPU carga la clave en orden: escribir la última palabra la marca como lista
+    wire axi_wr_fire  = axi_awready && s_axi_awvalid && axi_wready && s_axi_wvalid;
+    wire key_load_done = axi_wr_fire && is_key_wr && (key_wr_idx == KEY_WORDS - 1);
 
     // AXI-Lite Write Channel
     always @(posedge aclk) begin
@@ -180,7 +196,7 @@ module cvqkd_bob_axi_wrapper #(
             end
 
             // Write Operation
-            if (axi_awready && s_axi_awvalid && axi_wready && s_axi_wvalid) begin
+            if (axi_wr_fire) begin
                 if (is_key_wr) begin
                     key_ram[key_wr_idx] <= s_axi_wdata;
                 end else if (axi_awaddr < 12'h20) begin
@@ -193,7 +209,7 @@ module cvqkd_bob_axi_wrapper #(
             end
 
             // Handshake B
-            if (axi_awready && s_axi_awvalid && axi_wready && s_axi_wvalid && ~axi_bvalid) begin
+            if (axi_wr_fire && ~axi_bvalid) begin
                 axi_bvalid <= 1'b1;
             end else if (s_axi_bready && axi_bvalid) begin
                 axi_bvalid <= 1'b0;
@@ -295,17 +311,21 @@ module cvqkd_bob_axi_wrapper #(
     // EXTRACCIÓN SECUENCIAL DE LA CLAVE SECRETA PARA EL MDR Y SÍNDROME
     // =========================================================================
     // Avanza 1 byte de clave con cada pulso de 'trng_req' emitido por el acumulador
-    // (exactamente 1 vez por bloque 8D, total: 3.264 bloques = 3.264 bytes)
+    // (exactamente 1 vez por bloque 8D, total: 3.264 bloques = 3.264 bytes).
+    // Cada byte se usa una sola vez: al consumir el último, key_ready cae y la
+    // reconciliación se bloquea hasta que la CPU cargue una clave nueva. El soft
+    // reset también descarta la clave: secuencia por trama = reset -> clave -> datos.
     // =========================================================================
     always @(posedge aclk) begin
         if (!aresetn || reg_ctrl[0]) begin
+            key_ready    <= 1'b0;
             trng_blk_cnt <= 12'd0;
-        end else if (trng_req) begin
-            if (trng_blk_cnt == 12'd3263) begin
-                trng_blk_cnt <= 12'd0;
-            end else begin
-                trng_blk_cnt <= trng_blk_cnt + 1'b1;
-            end
+        end else if (key_load_done) begin
+            key_ready    <= 1'b1;
+            trng_blk_cnt <= 12'd0;
+        end else if (trng_req && key_ready) begin
+            if (trng_blk_cnt == KEY_BYTES - 1) key_ready <= 1'b0;
+            trng_blk_cnt <= trng_blk_cnt + 1'b1;
         end
     end
 
@@ -341,7 +361,8 @@ module cvqkd_bob_axi_wrapper #(
         // Clave secreta inyectada desde la memoria interna AXI-Lite
         .trng_data              (trng_data_out),
         .trng_req               (trng_req),
-        
+        .key_enable             (key_ready),
+
         // Registros AXI4-Lite
         .calib_VarA             (reg_calib_vara),
         .T_final_out            (T_final_out),
@@ -349,8 +370,9 @@ module cvqkd_bob_axi_wrapper #(
         .sigma_sq_out           (sigma_sq_out),
         .sigma_out              (sigma_out),
         .num_samples_out        (num_samples_out),
-        .done_est               (done_est),
+        .done_est               (done_est_pulse),
         .syndrome_done          (syndrome_done_pulse),
+        .data_loss              (data_loss),
         
         // Salida AXI-Stream MDR
         .m_axis_mdr_tdata       (m_axis_mdr_tdata),

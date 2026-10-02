@@ -26,8 +26,9 @@ module param_estimator_top #(
     output logic signed [31:0] T_sqrt_out,
     output logic signed [31:0] sigma_sq_out,
     output logic signed [31:0] sigma_out,
-    output logic [31:0]        num_samples_out
-    
+    output logic [31:0]        num_samples_out,
+
+    output logic               overflow   // Sticky: muestra de Bob perdida (FIFO llena)
 );
 
     // =================================================================
@@ -57,33 +58,43 @@ module param_estimator_top #(
     // =================================================================
     // 2. MICRO-CONTROLADOR DE FLUJO
     // =================================================================
-    logic [14:0] muestras_procesadas;
-    logic        mac_enable, mac_clear, start_math, working, math_done;
+    // Ciclos desde que una muestra entra en los MAC hasta que está en el acumulador
+    localparam int MAC_LATENCY = 3;
 
-    assign read_fifos = (!bob_empty && !alice_empty) && (muestras_procesadas < NUM_SAMPLES) && !start_math;
+    logic [$clog2(NUM_SAMPLES+1)-1:0] muestras_procesadas;
+    logic                   mac_enable, mac_clear, start_math, started, math_done;
+    logic [MAC_LATENCY-1:0] last_sample_pipe;
 
+    assign read_fifos = (!bob_empty && !alice_empty) && (muestras_procesadas < NUM_SAMPLES);
+
+    // La unidad matemática arranca cuando la última muestra ya está acumulada
+    assign start_math = last_sample_pipe[MAC_LATENCY-1];
+
+    // Una única estimación por trama: 'start' (primer bit de máscara) la arranca y
+    // no se vuelve a lanzar hasta el siguiente reset, para que los resultados se
+    // mantengan estables mientras la CPU los lee.
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             mac_enable          <= 1'b0;
             mac_clear           <= 1'b1;
             muestras_procesadas <= '0;
-            start_math          <= 1'b0;
-            working             <= 1'b0;
+            last_sample_pipe    <= '0;
+            started             <= 1'b0;
+            overflow            <= 1'b0;
         end else begin
             mac_clear <= 1'b0;
-            if (start & !working) begin
+            if (bob_stream_valid && bob_full) overflow <= 1'b1;
+
+            last_sample_pipe <= {last_sample_pipe[MAC_LATENCY-2:0],
+                                 mac_enable && (muestras_procesadas == NUM_SAMPLES - 1)};
+
+            if (start && !started) begin
                 mac_clear           <= 1'b1;
                 muestras_procesadas <= '0;
-                start_math          <= 1'b0;
-                working             <= 1'b1;
+                started             <= 1'b1;
             end else begin
                 mac_enable <= read_fifos;
                 if (mac_enable) muestras_procesadas <= muestras_procesadas + 1'b1;
-                
-                if (mac_enable && (muestras_procesadas == NUM_SAMPLES - 1)) start_math <= 1'b1;
-                else start_math <= 1'b0;
-                
-                if (done) working <= 1'b0; 
             end
         end
     end
@@ -108,7 +119,9 @@ module param_estimator_top #(
     mac_variance var_Q_inst (.clk(clk), .rst(~rst_n), .clear(mac_clear), .enable(mac_enable), .data_in(bob_q), .sum_sq(var_Q_sum_sq), .sum_val(var_Q_sum_val));
     mac_covariance cov_Q_inst (.clk(clk), .rst(~rst_n), .clear(mac_clear), .enable(mac_enable), .data_bob(bob_q), .data_alice(alice_q), .sum_cov(cov_Q_sum_cov), .sum_val_bob(ignore_cov_bob_q), .sum_val_alice(cov_Q_sum_alice));
 
-    LLR_math_unit math_unit_inst (
+    LLR_math_unit #(
+        .N_SAMPLES(NUM_SAMPLES)
+    ) math_unit_inst (
         .clk(clk), .rst(~rst_n), .start_calc(start_math),
         .sum_sq_P_B(var_P_sum_sq), .sum_P_B(var_P_sum_val), .sum_cov_P(cov_P_sum_cov), .sum_P_A(cov_P_sum_alice),
         .sum_sq_Q_B(var_Q_sum_sq), .sum_Q_B(var_Q_sum_val), .sum_cov_Q(cov_Q_sum_cov), .sum_Q_A(cov_Q_sum_alice),

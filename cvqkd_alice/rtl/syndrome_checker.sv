@@ -9,13 +9,14 @@ module syndrome_checker #(
     // --- Control desde la FSM ---
     input  logic         iter_start,   // Pulso en el ciclo 0 de cada iteración completa
     input  logic         row_done,     // Pulso cuando la FASE 3 (CNU) termina una fila
+    input  logic         hd_changed,   // Algún bit duro cambió en esta iteración
     
     // --- Datos ---
     input  logic [Z-1:0] cn_signs,     // Los 384 bits 'total_sign_out' directos de los CNUs
     input  logic [Z-1:0] target_syn,   // El síndrome que mandó Alice para esta fila
     
     // --- Salida ---
-    output logic         is_converged  // Vale 1 si todas las filas procesadas hasta ahora están OK
+    output logic         is_converged  // 1 si todas las filas están OK y ningún bit duro cambió
 );
 
     logic [Z-1:0] row_errors;
@@ -34,11 +35,10 @@ module syndrome_checker #(
         end else if (iter_start) begin
             // Al empezar una nueva iteración de la matriz, asumimos que funcionará
             is_converged <= 1'b1; 
-        end else if (row_done) begin
-            // Si la fila actual tiene errores, manchamos el resultado de toda la iteración
-            if (!row_ok) begin
-                is_converged <= 1'b0;
-            end
+        end else if ((row_done && !row_ok) || hd_changed) begin
+            // Una fila con errores o un bit duro que cambia (puede invalidar filas ya
+            // comprobadas) manchan el resultado de toda la iteración
+            is_converged <= 1'b0;
         end
     end
 

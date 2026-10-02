@@ -394,6 +394,23 @@ module cvqkd_alice_axi_wrapper #(
     assign key_read_en_sig   = (state == ST_EXTRACT_KEY);
     assign key_read_addr_sig = key_col_cnt;
 
+    // auto_run arranca UNA vez por trama: en el flanco de "trama completa recibida",
+    // no mientras los contadores sigan llenos (eso relanzaba el MDR sin fin).
+    wire rx_frame_full = (reg_x_blocks_rx == TOTAL_BLOCKS) && (reg_m_blocks_rx == TOTAL_BLOCKS);
+    reg  rx_frame_full_d;
+    reg  auto_start_pending;
+
+    always @(posedge aclk) begin
+        if (!aresetn || soft_reset) begin
+            rx_frame_full_d    <= 1'b0;
+            auto_start_pending <= 1'b0;
+        end else begin
+            rx_frame_full_d <= rx_frame_full;
+            if (auto_run && rx_frame_full && !rx_frame_full_d) auto_start_pending <= 1'b1;
+            else if (state == ST_IDLE)                          auto_start_pending <= 1'b0;
+        end
+    end
+
     always @(posedge aclk) begin
         if (!aresetn || soft_reset) begin
             state                <= ST_IDLE;
@@ -423,7 +440,7 @@ module cvqkd_alice_axi_wrapper #(
             case (state)
                 ST_IDLE: begin
                     core_busy <= 1'b0;
-                    if (start_mdr_pulse || (auto_run && (reg_x_blocks_rx == TOTAL_BLOCKS) && (reg_m_blocks_rx == TOTAL_BLOCKS))) begin
+                    if (start_mdr_pulse || auto_start_pending) begin
                         mdr_done_latched     <= 1'b0;
                         ldpc_done_latched    <= 1'b0;
                         ldpc_success_latched <= 1'b0;

@@ -66,7 +66,7 @@ module alice_post_processing_core #(
         .clk             (clk),
         .rst_n           (rst_n),
         .start           (start_mdr),
-        .done            (mdr_done),
+        .done            (),   // Llega antes de que el pipeline vacíe: ver 'mdr_done' abajo
         
         .ram_x_en        (ram_x_en),
         .ram_x_addr      (ram_x_addr),
@@ -118,6 +118,16 @@ module alice_post_processing_core #(
                 end
             end
         end
+    end
+
+    // El MDR termina varios ciclos antes de que su pipeline vacíe. Si el LDPC
+    // arrancase con su 'done', la última columna llegaría con la L_BRAM ya en
+    // modo decodificación y se perdería: avisamos cuando está escrita de verdad.
+    localparam int N_COLS = (TOTAL_BLOCKS * 8) / Z; // 68 columnas del base graph
+
+    always_ff @(posedge clk) begin
+        if (!rst_n) mdr_done <= 1'b0;
+        else        mdr_done <= ldpc_load_en && (ldpc_load_addr == N_COLS - 1);
     end
 
     // =====================================================================

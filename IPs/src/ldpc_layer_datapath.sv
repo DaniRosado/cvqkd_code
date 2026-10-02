@@ -2,7 +2,8 @@
 
 module ldpc_layer_datapath #(
     parameter int Z = 384,
-    parameter int W = 8,
+    parameter int W = 8,             // Mensajes R y L_q (signo-magnitud)
+    parameter int WL = 10,           // LLR a posteriori en L_BRAM (signo-magnitud)
     parameter int BUS_WIDTH = Z * W
 )(
     input  logic clk,
@@ -17,9 +18,9 @@ module ldpc_layer_datapath #(
     input  logic       is_first_iter,
     
     // --- Interfaces con las BRAM ---
-    input  logic [BUS_WIDTH-1:0] p_read_data_flat,
+    input  logic [Z*WL-1:0]      p_read_data_flat,
     input  logic [BUS_WIDTH-1:0] r_read_data_flat,
-    output logic [BUS_WIDTH-1:0] p_write_data_flat,
+    output logic [Z*WL-1:0]      p_write_data_flat,
     output logic [BUS_WIDTH-1:0] r_write_data_flat,
     
     // --- Síndrome ---
@@ -28,22 +29,23 @@ module ldpc_layer_datapath #(
 
     // --- Control del acumulador de síndrome (Pasada 1) ---
     input  logic                 syn_valid,
-    input  logic                 syn_start_row
+    input  logic                 syn_start_row,
+    output logic                 hd_changed     // 1 ciclo tras una escritura que cambió algún bit duro
 );
 
     // ==========================================
     // 0. Desempaquetado de Buses
     // ==========================================
-    logic [W-1:0] L_read [0:Z-1];
-    logic [W-1:0] R_old  [0:Z-1];
-    logic [W-1:0] L_write[0:Z-1];
+    logic [WL-1:0] L_read [0:Z-1];
+    logic [W-1:0]  R_old  [0:Z-1];
+    logic [WL-1:0] L_write[0:Z-1];
     logic [W-1:0] R_new  [0:Z-1];
     
     always_comb begin
         for (int i = 0; i < Z; i++) begin
-            L_read[i] = p_read_data_flat[i*W +: W];
+            L_read[i] = p_read_data_flat[i*WL +: WL];
             R_old[i]  = is_first_iter ? {W{1'b0}} : r_read_data_flat[i*W +: W];
-            p_write_data_flat[i*W +: W] = L_write[i];
+            p_write_data_flat[i*WL +: WL] = L_write[i];
             r_write_data_flat[i*W +: W] = R_new[i];
         end
     end
@@ -86,26 +88,32 @@ module ldpc_layer_datapath #(
     // ==========================================
     // FASE 1: VNU 
     // ==========================================
-    logic [W-1:0] L_q_comb [0:Z-1];
-    logic [W-1:0] L_q_reg  [0:Z-1]; 
-    logic [W-1:0] L_q_reg2 [0:Z-1];
+    // L_q (W bits, saturado) alimenta la CNU; L_q_full (exacto) se retrasa 2 ciclos
+    // para calcular L_write = L_q + R_new sin perder la confianza acumulada.
+    logic [W-1:0]       L_q_comb      [0:Z-1];
+    logic [W-1:0]       L_q_reg       [0:Z-1];
+    logic signed [WL:0] L_q_full_comb [0:Z-1];
+    logic signed [WL:0] L_q_full_reg  [0:Z-1];
+    logic signed [WL:0] L_q_full_reg2 [0:Z-1];
 
     generate
         for (genvar i = 0; i < Z; i++) begin : gen_vnu_fase1
-            vnu_node vnu_inst (
-                .L_read     (L_read[i]),
-                .R_old      (R_old[i]),
-                .L_q        (L_q_comb[i]),
-                .L_q_delayed(L_q_reg2[i]),
-                .R_new      (R_new[i]),
-                .L_write    (L_write[i])
+            vnu_node #(.W(W), .WL(WL)) vnu_inst (
+                .L_read          (L_read[i]),
+                .R_old           (R_old[i]),
+                .L_q             (L_q_comb[i]),
+                .L_q_full        (L_q_full_comb[i]),
+                .L_q_full_delayed(L_q_full_reg2[i]),
+                .R_new           (R_new[i]),
+                .L_write         (L_write[i])
             );
         end
     endgenerate
 
     always_ff @(posedge clk) begin
-        L_q_reg  <= L_q_comb;
-        L_q_reg2 <= L_q_reg; 
+        L_q_reg       <= L_q_comb;
+        L_q_full_reg  <= L_q_full_comb;
+        L_q_full_reg2 <= L_q_full_reg;
     end
 
     // ==========================================
@@ -119,7 +127,7 @@ module ldpc_layer_datapath #(
 
     always_comb begin
         for (int i = 0; i < Z; i++) begin
-            L_q_sign[i] = L_q_reg[i][7];
+            L_q_sign[i] = L_q_reg[i][W-1];
         end
     end
 
@@ -239,7 +247,7 @@ module ldpc_layer_datapath #(
 
     always_comb begin
         for (int i = 0; i < Z; i++) begin
-            L_write_sign[i] = L_write[i][7];
+            L_write_sign[i] = L_write[i][WL-1];
         end
     end
 
@@ -267,5 +275,29 @@ module ldpc_layer_datapath #(
     end
 
     assign cn_signs_out = syn_accum;
+
+    // ==========================================
+    // DETECTOR DE CAMBIOS EN LA DECISIÓN DURA
+    // ==========================================
+    // El síndrome de cada fila se evalúa justo después de actualizarla, pero capas
+    // posteriores pueden volver a cambiar el signo de variables compartidas. Si en
+    // una iteración no cambia ningún signo, las comprobaciones hechas sobre la marcha
+    // equivalen al síndrome de la decisión final. El signo previo (L_read) se retrasa
+    // 2 ciclos para alinearlo con L_write (mismo retardo que L_q_full_reg2).
+    logic [Z-1:0] L_read_sign_d1, L_read_sign_d2, L_write_sign_vec;
+
+    always_comb begin
+        for (int i = 0; i < Z; i++) L_write_sign_vec[i] = L_write[i][WL-1];
+    end
+
+    always_ff @(posedge clk) begin
+        for (int i = 0; i < Z; i++) L_read_sign_d1[i] <= L_read[i][WL-1];
+        L_read_sign_d2 <= L_read_sign_d1;
+    end
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) hd_changed <= 1'b0;
+        else        hd_changed <= syn_valid && (L_write_sign_vec != L_read_sign_d2);
+    end
 
 endmodule

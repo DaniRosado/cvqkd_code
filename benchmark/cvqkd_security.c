@@ -47,20 +47,23 @@ void cvqkd_security_init_defaults(cvqkd_security_params_t *params) {
     params->V_A         = 4.0;       /* 4.0 SNU de modulación gaussiana en Alice */
     params->eta         = 0.60;      /* 60% de eficiencia cuántica en homodino de Bob */
     params->v_el        = 0.10;      /* 0.10 SNU de ruido electrónico en Bob (calibración física) */
-    params->beta        = 0.95;      /* 95% de eficiencia de reconciliación LDPC */
     params->fiber_alpha = 0.20;      /* 0.20 dB/km de atenuación en fibra SMF-28 */
     params->rep_rate_hz = 1.0e9;     /* Láser a 1.0 Gbaud (1 GHz) */
     params->N0_adc_var  = 10000.0;   /* 10.000 cuentas de varianza ADC = 1 SNU */
     params->m_samples   = 13056;     /* 13.056 muestras sacrificadas (50% de la trama) */
     params->n_key_bits  = 26112;     /* 26.112 bits útiles por trama */
-    params->epsilon_pe  = 1.0e-10;   /* Cota de fallo de estimación estadística */
+    params->leak_ec_bits = 46 * 384; /* Síndrome LDPC BG1 (Z = 384) enviado a Alice */
+    params->epsilon_pe  = 1.0e-10;
+    params->epsilon_sm  = 1.0e-10;
+    params->epsilon_pa  = 1.0e-10;
+    params->epsilon_cor = 1.0e-10;
 }
 
 /*
  * Función auxiliar interna para calcular Holevo chi(B; E) dados T y xi
  */
 static void compute_holevo_and_mutual(
-    double T, double xi, double V_A, double eta, double v_el, double beta,
+    double T, double xi, double V_A, double eta, double v_el,
     double *out_IAB, double *out_chiBE, double *out_snr
 ) {
     double V = V_A + 1.0;
@@ -110,7 +113,6 @@ static void compute_holevo_and_mutual(
     *out_IAB   = I_AB;
     *out_chiBE = chi_BE;
     *out_snr   = snr;
-    (void)beta;
 }
 
 /*
@@ -123,96 +125,90 @@ bool cvqkd_evaluate_frame_security(
     cvqkd_security_result_t *result
 ) {
     if (!params || !result) return false;
+    *result = (cvqkd_security_result_t){ .status_msg = "" };
 
-    /* 1. Conversión de registros hardware a unidades físicas */
-    /* En el hardware (LLR_math_unit.sv), T_final es en realidad (T * eta) en Q16.16 */
-    double T_eta_est = (double)T_q16 / 65536.0;
-    if (T_eta_est < 1.0e-5) T_eta_est = 1.0e-5;
-    if (T_eta_est > params->eta) T_eta_est = params->eta;
+    const double V_A  = params->V_A;
+    const double eta  = params->eta;
+    const double v_el = params->v_el;
+    const double m    = (double)params->m_samples;
+    const double n    = (double)params->n_key_bits;
 
-    double T_est = T_eta_est / params->eta;
-    if (T_est > 1.0) T_est = 1.0;
+    /* 1. Estimadores puntuales a partir de los registros hardware */
+    /* T_FINAL (LLR_math_unit.sv) es T*eta en Q16.16; el estimador natural es t = sqrt(T*eta) */
+    double T_eta = (double)T_q16 / 65536.0;
+    if (T_eta < 1.0e-5) T_eta = 1.0e-5;
+    if (T_eta > eta)    T_eta = eta;
+    double t_hat = sqrt(T_eta);
 
-    result->T = T_est;
-    result->loss_db = -10.0 * log10(T_est);
+    double T_est = T_eta / eta;
+    result->T           = T_est;
+    result->loss_db     = -10.0 * log10(T_est);
     result->distance_km = result->loss_db / params->fiber_alpha;
 
-    /* Varianza total observada en SNU (sigma_sq_hw / N0) */
-    double var_B_snu = (double)sigma_sq_hw / params->N0_adc_var;
-
-    /* Varianza esperada del canal puro: Var_B_pure = T*eta*V_A + 1 + v_el */
-    double var_B_expected = (T_eta_est * params->V_A) + 1.0 + params->v_el;
-
-    /* Ruido de exceso xi en SNU: Var_B = Var_B_pure + T*eta*xi */
-    double xi = (var_B_snu - var_B_expected) / T_eta_est;
+    /* Varianza condicional sigma^2 = Var(B) - T*eta*V_A = 1 + v_el + T*eta*xi (en SNU) */
+    double var_B  = (double)sigma_sq_hw / params->N0_adc_var;
+    double sigma2 = var_B - T_eta * V_A;
+    double xi = (sigma2 - 1.0 - v_el) / T_eta;
     if (xi < 0.0) xi = 0.0; /* Sin ruido de exceso físico negativo */
     result->xi_snu = xi;
 
-    /* 2. Cómputo Asintótico */
-    double I_AB = 0.0, chi_BE = 0.0, snr = 0.0;
-    compute_holevo_and_mutual(
-        T_est, xi, params->V_A, params->eta, params->v_el, params->beta,
-        &I_AB, &chi_BE, &snr
-    );
+    /* 2. Peor caso de tamaño finito (Leverrier, Grosshans, Grangier, PRA 81, 062343, 2010) */
+    /* z = sqrt(2 ln(2/eps_PE)) es una cota superior de z_{eps_PE/2} (6.89 para 1e-10) */
+    double z = sqrt(2.0 * log(2.0 / params->epsilon_pe));
+    double t_min      = t_hat - z * sqrt(sigma2 / (m * V_A));
+    double sigma2_max = sigma2 * (1.0 + z * sqrt(2.0 / m));
+    if (sigma2 <= 0.0 || t_min <= 0.0) {
+        result->status_msg = "ESTIMACION INVALIDA: varianza o transmitancia fuera de rango. TRAMA ABORTADA.";
+        return false;
+    }
+    double T_eta_min = t_min * t_min;
+    double xi_worst  = (sigma2_max - 1.0 - v_el) / T_eta_min;
+    if (xi_worst < 0.0) xi_worst = 0.0;
 
-    result->snr_linear     = snr;
-    result->snr_db         = 10.0 * log10(snr);
-    result->I_AB           = I_AB;
-    result->chi_BE         = chi_BE;
-    result->K_asymp        = params->beta * I_AB - chi_BE;
+    result->T_worst     = T_eta_min / eta;
+    result->xi_worst    = xi_worst;
+    result->delta_pe_T  = T_est - result->T_worst;
+    result->delta_pe_xi = xi_worst - xi;
+
+    /* 3. Información accesible a cada parte */
+    double I_AB = 0.0, chi_BE = 0.0, snr = 0.0;
+    compute_holevo_and_mutual(T_est, xi, V_A, eta, v_el, &I_AB, &chi_BE, &snr);
+    double I_AB_worst = 0.0, chi_BE_worst = 0.0, snr_worst = 0.0;
+    compute_holevo_and_mutual(result->T_worst, xi_worst, V_A, eta, v_el,
+                              &I_AB_worst, &chi_BE_worst, &snr_worst);
+
+    /* beta*I(A;B) = H(U) - leak_EC/n. En MDR los bits u de Bob son uniformes: H(U) = 1 bit/símbolo */
+    double rate_ec = 1.0 - (double)params->leak_ec_bits / n;
+
+    result->snr_linear = snr;
+    result->snr_db     = 10.0 * log10(snr);
+    result->I_AB       = I_AB;
+    result->beta_eff   = rate_ec / I_AB;
+    result->chi_BE     = chi_BE;
+    result->K_asymp    = rate_ec - chi_BE;
     if (result->K_asymp < 0.0) result->K_asymp = 0.0;
     result->skr_asymp_mbps = (params->rep_rate_hz * result->K_asymp) / 1.0e6;
 
-    /* 3. Análisis de Tamaño Finito (Finite-Size Effects) */
-    /* Para epsilon_pe = 1e-10, z_eps = sqrt(2 * ln(2 / 1e-10)) = 6.47 */
-    double z_eps = sqrt(2.0 * log(2.0 / params->epsilon_pe));
-    double m = (double)params->m_samples;
+    /* Delta(n) = 7 sqrt(log2(2/eps_sm)/n) + (2/n) log2(1/eps_PA) */
+    result->delta_n  = 7.0 * sqrt(log2(2.0 / params->epsilon_sm) / n)
+                     + (2.0 / n) * log2(1.0 / params->epsilon_pa);
+    result->K_finite = rate_ec - chi_BE_worst - result->delta_n;
+    result->skr_finite_mbps = (result->K_finite > 0.0)
+                            ? (params->rep_rate_hz * result->K_finite) / 1.0e6 : 0.0;
 
-    /* Margen de confianza en transmitancia y ruido */
-    double delta_T = z_eps * sqrt(2.0 * var_B_snu / (m * params->V_A));
-    double delta_xi = z_eps * (sqrt(2.0) / sqrt(m)) * (var_B_snu / T_eta_est);
+    /* 4. Veredicto y longitud de la amplificación de privacidad.
+     * Además de la fuga del síndrome se descuentan los bits del hash de verificación. */
+    double pa_bits = floor(n * result->K_finite - ceil(log2(1.0 / params->epsilon_cor)));
 
-    result->delta_pe_T  = delta_T;
-    result->delta_pe_xi = delta_xi;
-
-    double T_worst = T_est - delta_T;
-    if (T_worst < 1.0e-5) T_worst = 1.0e-5;
-    double xi_worst = xi + delta_xi;
-
-    result->T_worst  = T_worst;
-    result->xi_worst = xi_worst;
-
-    /* Evaluar peor caso con fluctuaciones estadísticas */
-    double I_AB_worst = 0.0, chi_BE_worst = 0.0, snr_worst = 0.0;
-    compute_holevo_and_mutual(
-        T_worst, xi_worst, params->V_A, params->eta, params->v_el, params->beta,
-        &I_AB_worst, &chi_BE_worst, &snr_worst
-    );
-
-    /* Corrección de Asymptotic Equipartition Property (AEP) para tamaño finito */
-    double delta_AEP = 7.0 * sqrt(log(2.0 / params->epsilon_pe) / (double)params->n_key_bits);
-    double K_finite = params->beta * I_AB_worst - chi_BE_worst - delta_AEP;
-    if (K_finite < 0.0) K_finite = 0.0;
-
-    result->K_finite        = K_finite;
-    result->skr_finite_mbps = (params->rep_rate_hz * K_finite) / 1.0e6;
-
-    /* 4. Veredicto de Seguridad y Parámetros de Amplificación de Privacidad */
-    if (result->K_finite > 0.0001) {
-        result->is_secure = true;
-        result->status_msg = "CANAL SEGURO: Cota de Holevo respetada (K_finite > 0). Clave autorizada.";
-        result->pa_output_bits = (uint32_t)floor((double)params->n_key_bits * K_finite);
-        result->pa_rate = (double)result->pa_output_bits / (double)params->n_key_bits;
-    } else if (result->K_asymp > 0.0001) {
-        result->is_secure = true;
-        result->status_msg = "CANAL SEGURO (ASINTOTICO): Seguro asintoticamente, margen finito estrecho.";
-        result->pa_output_bits = (uint32_t)floor((double)params->n_key_bits * result->K_asymp * 0.5);
-        result->pa_rate = (double)result->pa_output_bits / (double)params->n_key_bits;
+    if (result->beta_eff >= 1.0) {
+        result->status_msg = "TASA LDPC > I(A;B): la reconciliacion no puede converger. TRAMA ABORTADA.";
+    } else if (pa_bits <= 0.0) {
+        result->status_msg = "ALERTA DE INTRUSION: K_finite <= 0 (Holevo + tamano finito). TRAMA ABORTADA.";
     } else {
-        result->is_secure = false;
-        result->status_msg = "ALERTA DE INTRUSION: Ruido de canal excede la Cota de Holevo. TRAMA ABORTADA.";
-        result->pa_output_bits = 0;
-        result->pa_rate = 0.0;
+        result->is_secure      = true;
+        result->status_msg     = "CANAL SEGURO: K_finite > 0. Clave autorizada.";
+        result->pa_output_bits = (uint32_t)pa_bits;
+        result->pa_rate        = pa_bits / n;
     }
 
     return result->is_secure;
@@ -270,7 +266,8 @@ void cvqkd_print_security_report(const cvqkd_security_result_t *res) {
     print_float_val("  * SNR Homodino:                ", res->snr_linear, "", 3);
     print_float_val(" (", res->snr_db, " dB)\r\n", 2);
     PRINTF("  ----------------------------------------------------------------------\r\n");
-    print_float_val("  * Informacion Mutua I(A; B):   ", res->I_AB, " bits/simbolo\r\n", 4);
+    print_float_val("  * Informacion Mutua I(A; B):   ", res->I_AB, " bits/simbolo", 4);
+    print_float_val(" (beta real: ", res->beta_eff * 100.0, "%)\r\n", 1);
     print_float_val("  * Cota de Holevo chi(B; E):    ", res->chi_BE, " bits/simbolo (Max Eva)\r\n", 4);
     print_float_val("  * Tasa de Clave Asintotica:    ", res->K_asymp, " bits/simbolo", 4);
     print_float_val(" (", res->skr_asymp_mbps, " Mbps @ 1 Gbaud)\r\n", 2);

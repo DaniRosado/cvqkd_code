@@ -2,7 +2,8 @@
 
 module ldpc_decoder_top #(
     parameter int Z = 384,
-    parameter int W = 8,
+    parameter int W = 8,              // Mensajes R y LLRs de carga (signo-magnitud)
+    parameter int WL = 10,            // LLR a posteriori en L_BRAM (2 bits más que W)
     parameter int BUS_WIDTH = Z * W,
     parameter int PIPELINE_DEPTH = 3 // Ajustado a los 3 registros que pusimos en el Datapath
 )(
@@ -49,12 +50,13 @@ module ldpc_decoder_top #(
     logic       fsm_dp_pass_flag;
     
     // Cables Memorias <-> Datapath
-    logic [BUS_WIDTH-1:0] p_read_data, r_read_data;
-    logic [BUS_WIDTH-1:0] dp_p_write_data, dp_r_write_data;
+    logic [Z*WL-1:0]      p_read_data, dp_p_write_data;
+    logic [BUS_WIDTH-1:0] r_read_data, dp_r_write_data;
     
     // Cables FSM <-> Syndrome Checker
     logic fsm_iter_start;
     logic fsm_row_done;
+    logic hd_changed;
     logic is_converged;
     logic is_first_iter_sig;
     logic [7:0] fsm_iter_count;
@@ -65,13 +67,22 @@ module ldpc_decoder_top #(
     // Cuando load_mode es 1, el exterior toma el control del puerto de escritura
     logic       mux_p_write_en;
     logic [6:0] mux_p_write_addr;
-    logic [BUS_WIDTH-1:0] mux_p_write_data;
+    logic [Z*WL-1:0]      mux_p_write_data;
+    logic [Z*WL-1:0]      load_write_data_wide;
+
+    // Los LLRs de canal llegan en W bits: se amplían al formato del posterior
+    always_comb begin
+        for (int v = 0; v < Z; v++) begin
+            load_write_data_wide[v*WL +: WL] = {load_write_data[v*W + W-1],
+                                                (WL-1)'(load_write_data[v*W +: W-1])};
+        end
+    end
     
     always_comb begin
         if (load_mode) begin
             mux_p_write_en   = load_write_en;
             mux_p_write_addr = load_write_addr;
-            mux_p_write_data = load_write_data;
+            mux_p_write_data = load_write_data_wide;
         end else begin
             mux_p_write_en   = fsm_p_write_en;
             mux_p_write_addr = fsm_p_write_addr;
@@ -87,7 +98,7 @@ module ldpc_decoder_top #(
     // Extracción directa de los bits duros (signo de cada LLR posterior en L_BRAM)
     always_comb begin
         for (int v = 0; v < Z; v++) begin
-            key_read_data[v] = p_read_data[(v*W) + (W-1)];
+            key_read_data[v] = p_read_data[(v*WL) + (WL-1)];
         end
     end
 
@@ -95,7 +106,7 @@ module ldpc_decoder_top #(
     // 3. INSTANCIACIÓN DE MEMORIAS
     // ==========================================
     
-    L_BRAM #(.Z(Z), .W(W)) u_L_BRAM (
+    L_BRAM #(.Z(Z), .W(WL)) u_L_BRAM (
         .clk       (clk),
         .read_addr (mux_p_read_addr),
         .read_data (p_read_data),
@@ -189,7 +200,7 @@ module ldpc_decoder_top #(
     // Pulso cuando p_write_en sube (primera escritura de la fila)
     assign syn_start_row = fsm_p_write_en & ~p_write_en_prev;
 
-    ldpc_layer_datapath #(.Z(Z), .W(W)) u_DATAPATH (
+    ldpc_layer_datapath #(.Z(Z), .W(W), .WL(WL)) u_DATAPATH (
         .clk               (clk),
         .rst_n             (rst_n),
 
@@ -215,7 +226,8 @@ module ldpc_decoder_top #(
 
         // Control del acumulador de síndrome (Pasada 1)
         .syn_valid         (fsm_p_write_en),
-        .syn_start_row     (syn_start_row)
+        .syn_start_row     (syn_start_row),
+        .hd_changed        (hd_changed)
     );
 
     // ==========================================
@@ -227,6 +239,7 @@ module ldpc_decoder_top #(
         .rst_n        (rst_n),
         .iter_start   (fsm_iter_start),
         .row_done     (fsm_row_done),
+        .hd_changed   (hd_changed),
         .cn_signs     (cn_total_signs),
         .target_syn   (target_syndrome_mem[current_row_idx]), // Síndrome de Alice para esta fila
         .is_converged (is_converged)

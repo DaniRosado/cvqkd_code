@@ -2,8 +2,8 @@
 
 module LLR_math_unit #(
     parameter signed [63:0] N_SAMPLES = 64'sd13056,
-    // (2^48) / (2 * 26112^2) = 206408.84 -> 206409
-    parameter signed [63:0] INV_2N2   = 64'sd825635 
+    // round(2^48 / (2 * N^2)) = 825635 para N = 13056 (se deriva de N_SAMPLES)
+    parameter signed [63:0] INV_2N2   = ((64'sd1 <<< 48) + N_SAMPLES * N_SAMPLES) / (2 * N_SAMPLES * N_SAMPLES)
 )(
     input  logic        clk,
     input  logic        rst,
@@ -61,8 +61,10 @@ module LLR_math_unit #(
             pipe_v2 <= 1'b0;
         end else begin
             pipe_v2 <= pipe_v1;
-            num_cov_AB <= (N_SAMPLES * (sum_cov_P  + sum_cov_Q))  - (cross_P_AB + cross_Q_AB);
-            num_var_B  <= (N_SAMPLES * (sum_sq_P_B + sum_sq_Q_B)) - (sq_sum_P_B + sq_sum_Q_B);
+            if (pipe_v1) begin
+                num_cov_AB <= (N_SAMPLES * (sum_cov_P  + sum_cov_Q))  - (cross_P_AB + cross_Q_AB);
+                num_var_B  <= (N_SAMPLES * (sum_sq_P_B + sum_sq_Q_B)) - (sq_sum_P_B + sq_sum_Q_B);
+            end
         end
     end
 
@@ -79,8 +81,11 @@ module LLR_math_unit #(
             pipe_v3 <= 1'b0;
         end else begin
             pipe_v3 <= pipe_v2;
-            cov_AB_pure <= ($signed(128'(num_cov_AB)) * INV_2N2) >>> 48;       // estamos multiplicando diviendo entre (2*N^2)
-            var_B_pure  <= ($signed(128'(num_var_B))  * INV_2N2) >>> 48;
+            // Solo se actualizan con un cálculo nuevo: sigma_sq queda estable para la CPU
+            if (pipe_v2) begin
+                cov_AB_pure <= ($signed(128'(num_cov_AB)) * INV_2N2) >>> 48;   // Dividir entre (2*N^2)
+                var_B_pure  <= ($signed(128'(num_var_B))  * INV_2N2) >>> 48;
+            end
         end
     end
 

@@ -48,6 +48,7 @@ module ldpc_decoder_top #(
     // Cables FSM <-> Syndrome Checker
     logic fsm_iter_start;
     logic fsm_row_done;
+    logic hd_changed;
     logic is_converged;
     
     // ==========================================
@@ -162,7 +163,7 @@ module ldpc_decoder_top #(
     // Pulso cuando p_write_en sube (primera escritura de la fila)
     assign syn_start_row = fsm_p_write_en & ~p_write_en_prev;
 
-    ldpc_layer_datapath #(.Z(Z), .W(W)) u_DATAPATH (
+    ldpc_layer_datapath #(.Z(Z), .W(W), .WL(W)) u_DATAPATH (
         .clk               (clk),
         .rst_n             (rst_n),
 
@@ -186,7 +187,8 @@ module ldpc_decoder_top #(
 
         // Control del acumulador de síndrome (Pasada 1)
         .syn_valid         (fsm_p_write_en),
-        .syn_start_row     (syn_start_row)
+        .syn_start_row     (syn_start_row),
+        .hd_changed        (hd_changed)
     );
 
     // ==========================================
@@ -198,6 +200,7 @@ module ldpc_decoder_top #(
         .rst_n        (rst_n),
         .iter_start   (fsm_iter_start),
         .row_done     (fsm_row_done),
+        .hd_changed   (hd_changed),
         .cn_signs     (cn_total_signs),
         .target_syn   (target_syndrome_mem[current_row_idx]), // Síndrome de Alice para esta fila
         .is_converged (is_converged)

@@ -134,7 +134,18 @@ module cvqkd_bob_dsp_top #(
     );
 
 
-    assign p_out = cordic2_dout_tdata[17:0];
-    assign q_out = cordic2_dout_tdata[41:24];
+    // La rotación puede llevar una componente hasta sqrt(2) veces la entrada:
+    // saturamos los 18 bits del CORDIC a ADC_WIDTH en lugar de truncar (evita
+    // que valores grandes den la vuelta y cambien de signo).
+    function automatic logic signed [ADC_WIDTH-1:0] saturate(input logic signed [DSP_WIDTH-1:0] x);
+        localparam logic signed [DSP_WIDTH-1:0] MAX_VAL =  (1 <<< (ADC_WIDTH-1)) - 1;
+        localparam logic signed [DSP_WIDTH-1:0] MIN_VAL = -(1 <<< (ADC_WIDTH-1));
+        if (x > MAX_VAL)      return MAX_VAL[ADC_WIDTH-1:0];
+        else if (x < MIN_VAL) return MIN_VAL[ADC_WIDTH-1:0];
+        else                  return x[ADC_WIDTH-1:0];
+    endfunction
+
+    assign p_out = saturate(cordic2_dout_tdata[17:0]);
+    assign q_out = saturate(cordic2_dout_tdata[41:24]);
 
 endmodule

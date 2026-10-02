@@ -24,13 +24,16 @@ typedef struct {
     double V_A;          /* Varianza de modulación de Alice en SNU (típico: 4.0 a 5.0) */
     double eta;          /* Eficiencia cuántica de los fotodiodos de Bob (típico: 0.60) */
     double v_el;         /* Ruido electrónico del detector homodino en SNU (típico: 0.05) */
-    double beta;         /* Eficiencia de reconciliación LDPC (típico: 0.95 = 95%) */
     double fiber_alpha;  /* Atenuación de la fibra óptica en dB/km (típico: 0.20 dB/km) */
     double rep_rate_hz;  /* Frecuencia de repetición del láser en Hz (típico: 1.0e9 = 1 Gbaud) */
     double N0_adc_var;   /* Varianza ADC correspondiente a 1 SNU (Shot Noise Unit) */
-    uint32_t m_samples;  /* Muestras sacrificadas para estimación de parámetros (13.056) */
-    uint32_t n_key_bits; /* Bits brutos de clave por trama (26.112) */
-    double epsilon_pe;   /* Parámetro de seguridad para fluctuaciones estadísticas (1e-10) */
+    uint32_t m_samples;    /* Muestras sacrificadas para estimación de parámetros (13.056) */
+    uint32_t n_key_bits;   /* Bits brutos de clave por trama (26.112) */
+    uint32_t leak_ec_bits; /* Bits revelados en la corrección de errores (síndrome: 46 x 384 = 17.664) */
+    double epsilon_pe;   /* Fallo de la estimación de parámetros (1e-10) */
+    double epsilon_sm;   /* Suavizado de la entropía min (1e-10) */
+    double epsilon_pa;   /* Fallo de la amplificación de privacidad (1e-10) */
+    double epsilon_cor;  /* Fallo de la verificación de clave por hash (1e-10) */
 } cvqkd_security_params_t;
 
 /* Resultados de la evaluación de seguridad en tiempo real */
@@ -45,16 +48,18 @@ typedef struct {
 
     /* Magnitudes de teoría de la información cuántica */
     double I_AB;              /* Información mutua Alice-Bob: I(A;B) [bits/símbolo] */
+    double beta_eff;          /* Eficiencia real de reconciliación: (1 - leak_ec/n) / I(A;B) */
     double chi_BE;            /* Cota de Holevo sobre la información de Eva: chi(B;E) [bits/símbolo] */
     double K_asymp;           /* Tasa de clave secreta asintótica [bits/símbolo] */
     double skr_asymp_mbps;    /* Tasa de clave neta a la tasa de repetición del láser [Mbps] */
 
     /* Análisis de tamaño finito (Finite-Size Effects) */
-    double delta_pe_T;        /* Margen de incertidumbre estadística en transmitancia */
-    double delta_pe_xi;       /* Margen de incertidumbre estadística en ruido */
+    double delta_pe_T;        /* Margen de incertidumbre estadística en transmitancia (T - T_worst) */
+    double delta_pe_xi;       /* Margen de incertidumbre estadística en ruido (xi_worst - xi) */
     double T_worst;           /* Peor caso de transmitancia */
     double xi_worst;          /* Peor caso de exceso de ruido */
-    double K_finite;          /* Tasa de clave secreta con tamaño finito [bits/símbolo] */
+    double delta_n;           /* Corrección de tamaño finito Delta(n) [bits/símbolo] */
+    double K_finite;          /* Tasa de clave secreta con tamaño finito [bits/símbolo] (puede ser < 0) */
     double skr_finite_mbps;   /* Tasa neta de clave con tamaño finito [Mbps] */
 
     /* Amplificación de Privacidad (Privacy Amplification) */

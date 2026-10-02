@@ -81,3 +81,63 @@ module sync_fifo #(
     end
 
 endmodule
+
+// =============================================================================
+// Buffer de salida AXI4-Stream sobre sync_fifo
+// - Respeta m_tready: el dato se mantiene estable hasta el handshake.
+// - 'overflow' (sticky) avisa si llegó un dato con la FIFO llena (dato perdido).
+// - Rendimiento: 1 beat cada 2 ciclos, de sobra para MDR (1/8) y síndrome.
+// =============================================================================
+module axis_out_fifo #(
+    parameter DATA_WIDTH = 256,
+    parameter DEPTH      = 64   // Potencia de 2
+)(
+    input  logic                  clk,
+    input  logic                  rst,
+
+    input  logic                  s_valid,
+    input  logic [DATA_WIDTH-1:0] s_data,
+    input  logic                  s_last,
+
+    output logic [DATA_WIDTH-1:0] m_tdata,
+    output logic                  m_tvalid,
+    input  logic                  m_tready,
+    output logic                  m_tlast,
+
+    output logic                  overflow
+);
+
+    logic re, rd_pending, empty, full;
+
+    sync_fifo #(
+        .DATA_WIDTH(DATA_WIDTH + 1),
+        .DEPTH(DEPTH)
+    ) fifo_inst (
+        .clk(clk),
+        .rst(rst),
+        .we(s_valid),
+        .din({s_last, s_data}),
+        .re(re),
+        .dout({m_tlast, m_tdata}),
+        .empty(empty),
+        .full(full)
+    );
+
+    // sync_fifo entrega el dato un ciclo después de 're': solo pedimos uno nuevo
+    // cuando la salida está libre o se consume en este mismo ciclo.
+    assign re = !empty && !rd_pending && (!m_tvalid || m_tready);
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            rd_pending <= 1'b0;
+            m_tvalid   <= 1'b0;
+            overflow   <= 1'b0;
+        end else begin
+            rd_pending <= re;
+            if (rd_pending)    m_tvalid <= 1'b1;
+            else if (m_tready) m_tvalid <= 1'b0;
+            if (s_valid && full) overflow <= 1'b1;
+        end
+    end
+
+endmodule
