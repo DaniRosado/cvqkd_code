@@ -89,13 +89,13 @@ module cvqkd_bob_axi_wrapper #(
     // REGISTROS INTERNOS AXI4-LITE
     // =========================================================================
     // 0x00: Control Register (bit 0: soft_reset, bit 1: enable)
-    // 0x04: calib_VarA (Q16.16)
+    // 0x04: calib_VarA (V_A * N0 en cuentas ADC)
     // 0x08: Status Register (sticky hasta soft_reset)
     //         bit 0: done_est      - estimación de parámetros terminada
     //         bit 1: syndrome_done - síndrome LDPC calculado
     //         bit 2: key_ready     - hay clave cargada y sin consumir
     //         bit 3: data_loss     - se perdió algún dato: la trama no es válida
-    // 0x0C: T_final_out
+    // 0x0C: T_final_out = (Cov/V_A)^2 = T*eta/2 (heterodino, Q16.16)
     // 0x10: T_sqrt_out
     // 0x14: sigma_sq_out
     // 0x18: sigma_out
@@ -178,7 +178,7 @@ module cvqkd_bob_axi_wrapper #(
             axi_bvalid     <= 1'b0;
             axi_awaddr     <= {C_S_AXI_ADDR_WIDTH{1'b0}};
             reg_ctrl       <= 32'd2; // enable activo por defecto
-            reg_calib_vara <= 32'd40000; // Calibracion nominal de Alice
+            reg_calib_vara <= 32'd50000; // V_A = 5 SNU x N0 = 10000 cuentas
         end else begin
             // Handshake AW
             if (~axi_awready && s_axi_awvalid && s_axi_wvalid) begin

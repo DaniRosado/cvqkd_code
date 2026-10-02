@@ -1,106 +1,91 @@
-# Evaluación de Seguridad Cuántica en CV-QKD: Protocolo GG02 y Cota de Holevo
+# Evaluación de Seguridad Cuántica en CV-QKD: Protocolo GG02 Heterodino y Cota de Holevo
 
 > **Módulo Software**: `cvqkd_security.c` / `cvqkd_security.h`  
 > **Arquitectura**: ARM Cortex-A9 MPCore @ 650 MHz (PYNQ-Z2)  
-> **Marco Teórico**: Grosshans-Grangier 2002 (GG02) con Reconciliación Inversa y Ataques Colectivos Asintóticos / Finitos  
+> **Marco Teórico**: GG02 sin conmutación (detección heterodina), reconciliación inversa, ataques colectivos, tamaño finito según Leverrier et al. (PRA 81, 062343, 2010)
 
 ---
 
-## 1. Fundamentos del Protocolo GG02
+## 1. Modelo del Sistema
 
-En el protocolo de Distribución Cuántica de Claves en Variables Continuas (CV-QKD) propuesto por Grosshans y Grangier (2002):
-1. **Alice** modula estados coherentes $|x_A + i p_A\rangle$ según una distribución gaussiana bivariada centrada en cero con varianza de modulación $V_A$ en unidades de ruido de disparo (*Shot Noise Units*, SNU):
-   $$\text{Var}(x_A) = \text{Var}(p_A) = V_A$$
-   La varianza total del estado emitido por Alice es $V = V_A + 1$.
+1. **Alice** modula estados coherentes con una distribución gaussiana de varianza $V_A$ por cuadratura, en unidades de ruido de disparo (SNU). La varianza total del estado emitido es $V = V_A + 1$.
 
-2. **El Canal Cuántico** introduce:
-   - Una transmitancia óptica $T \in [0, 1]$, correspondiente a una atenuación de fibra $\alpha = 0.20\text{ dB/km}$:
-     $$T = 10^{-\frac{\alpha \cdot L}{10}}$$
-   - Un ruido de exceso $\xi$ (en SNU), introducido por imperfecciones físicas o por las operaciones de interceptación del espía (Eva).
-   - El ruido total referido al canal es:
-     $$\chi_{\text{line}} = \frac{1}{T} - 1 + \xi$$
+2. **El canal** tiene transmitancia $T = 10^{-\alpha L / 10}$ ($\alpha = 0.2$ dB/km) y ruido de exceso $\xi$ referido a su entrada:
+   $$\chi_{\text{line}} = \frac{1}{T} - 1 + \xi$$
 
-3. **Bob** mide las cuadraturas mediante un detector homodino balanceado caracterizado por:
-   - Eficiencia cuántica de detección $\eta$ (típicamente $60\% = 0.60$).
-   - Ruido electrónico $v_{el}$ en SNU (típicamente $0.10\text{ SNU}$).
-   - Ruido referido al detector homodino:
-     $$\chi_{\text{hom}} = \frac{1 - \eta + v_{el}}{\eta}$$
-   - Ruido total referido a la entrada del canal:
-     $$\chi_{\text{tot}} = \chi_{\text{line}} + \frac{\chi_{\text{hom}}}{T}$$
+3. **Bob** mide **las dos cuadraturas a la vez** con un receptor heterodino (híbrido de 90° y dos detectores balanceados). Se modela con:
+   - Eficiencia del receptor $\eta$ (sin contar el reparto 50:50 propio del heterodino).
+   - Ruido electrónico $v_{el}$ de cada detector, en SNU de ese detector.
+   - Calibración: 1 SNU = varianza de vacío de cada detector con solo el oscilador local ($N_0$ cuentas de ADC).
+   - Ruido del detector referido a su entrada y ruido total referido a la entrada del canal:
+     $$\chi_{\text{het}} = \frac{2 - \eta + 2 v_{el}}{\eta}, \qquad \chi_{\text{tot}} = \chi_{\text{line}} + \frac{\chi_{\text{het}}}{T}$$
+
+Cada cuadratura medida por Bob es $y = t\,x + z$ con $t^2 = T\eta/2$ y $\text{Var}(z) = \sigma^2 = 1 + v_{el} + t^2 \xi$.
+
+**Punto de trabajo** (coherente con el generador de MATLAB): bobina de 10 km ($T = 0.631$), $\eta = 0.6$, $v_{el} = 0.1$ SNU, $\xi = 0.01$ SNU y $V_A = 5$ SNU. Con el código LDPC BG1 de tasa $22/68$ esto da un SNR por cuadratura de 0.86 y $\beta \approx 0.72$, suficiente para que el decodificador converja con margen.
 
 ---
 
-## 2. Información Mutua de Shannon $I(A; B)$
+## 2. Estimación de Parámetros en Hardware
 
-La relación señal a ruido (SNR) en el detector homodino de Bob es:
-$$\text{SNR} = \frac{T \eta V_A}{1 + v_{el} + T \eta \xi}$$
+El estimador de Bob (`LLR_math_unit.sv`) usa las $m$ muestras sacrificadas de P y Q ($2m$ muestras reales):
+$$\texttt{T\_FINAL} = \left(\frac{\text{Cov}(x, y)}{V_A}\right)^2 = t^2 = \frac{T\eta}{2}, \qquad \texttt{SIGMA\_SQ} = \text{Var}(y)$$
 
-Bajo reconciliación inversa (donde Bob define la clave secreta y Alice intenta reconciliarla), la información mutua entre Alice y Bob viene dada por la capacidad de Shannon del canal AWGN:
-$$I(A; B) = \frac{1}{2} \log_2(1 + \text{SNR})$$
-
----
-
-## 3. Cota de Holevo $\chi(B; E)$ bajo Ataques Colectivos
-
-Bajo los teoremas de seguridad de Renner y Leverrier, los **ataques colectivos** representan la estrategia óptima de espionaje en el límite asintótico y de tamaño finito: Eva interactúa individualmente con cada pulso cuántico y retiene su memoria cuántica hasta el final del protocolo clásico.
-
-La información máxima que Eva puede extraer sobre la medida de Bob está acotada superiormente por la **Cota de Holevo**:
-$$\chi(B; E) = S(\rho_E) - \int p(y_B) S(\rho_E^{y_B}) \, dy_B$$
-
-Dado que el sistema global formado por Alice, Bob y Eva es un estado puro ($\rho_{ABE}$ es puro), la entropía de Eva coincide con la entropía del estado bipartito de Alice y Bob:
-$$S(\rho_E) = S(\rho_{AB})$$
-$$S(\rho_E^{y_B}) = S(\rho_A^{y_B})$$
-
-### 3.1. Entropía de Von Neumann para Estados Gaussianos Bosónicos
-Para un modo con autovalor simpléctico $\lambda \ge 1$:
-$$S = g\left(\frac{\lambda - 1}{2}\right)$$
-donde la función entrópica bosónica $g(x)$ está definida por:
-$$g(x) = (x + 1) \log_2(x + 1) - x \log_2(x)$$
-
-### 3.2. Autovalores Simplécticos de la Matriz de Covarianza $\Gamma_{AB}$
-La matriz de covarianza antes de la detección homodina tiene dos invariantes simplécticos:
-$$\Delta = V^2 (1 - 2T) + 2T + T^2 (V + \chi_{\text{line}})^2$$
-$$D = T^2 (V \chi_{\text{line}} + 1)^2$$
-
-Los autovalores simplécticos $\lambda_{1,2}$ son:
-$$\lambda_{1,2}^2 = \frac{1}{2} \left( \Delta \pm \sqrt{\Delta^2 - 4D} \right)$$
-
-### 3.3. Autovalores Simplécticos Condicionales tras la Medida de Bob
-Tras la medida de una cuadratura por el detector homodino de Bob, el estado condicional restante tiene autovalores simplécticos $\lambda_{3,4}$:
-$$C = \frac{\Delta \chi_{\text{hom}} + V \sqrt{D} + T(V + \chi_{\text{line}})}{T(V + \chi_{\text{tot}})}$$
-$$E = \frac{\sqrt{D}(V + \chi_{\text{hom}}\sqrt{D})}{T(V + \chi_{\text{tot}})}$$
-$$\lambda_{3,4}^2 = \frac{1}{2} \left( C \pm \sqrt{C^2 - 4E} \right)$$
-
-Finalmente, la cota de Holevo es:
-$$\chi(B; E) = g\left(\frac{\lambda_1 - 1}{2}\right) + g\left(\frac{\lambda_2 - 1}{2}\right) - g\left(\frac{\lambda_3 - 1}{2}\right) - g\left(\frac{\lambda_4 - 1}{2}\right)$$
+En la CPU: $\sigma^2 = \text{Var}(y) - t^2 V_A$ y $\xi = (\sigma^2 - 1 - v_{el}) / t^2$.
 
 ---
 
-## 4. Tasa de Clave Secreta (*Secret Key Rate* - SKR)
+## 3. Información Mutua $I(A; B)$
 
-### 4.1. Límite Asintótico
-Con una eficiencia de reconciliación LDPC $\beta = 0.95$ (95% de la capacidad de Shannon):
-$$K_{\text{asymp}} = \beta I(A; B) - \chi(B; E) \quad [\text{bits / símbolo}]$$
+Por cuadratura (dimensión), con $\text{SNR} = \dfrac{T \eta V_A}{2 + 2 v_{el} + T \eta \xi}$:
+$$I(A; B) = \frac{1}{2} \log_2(1 + \text{SNR}) \quad [\text{bits/dimensión}]$$
 
-A una tasa de repetición del transmisor láser $R_{\text{rep}} = 1.0\text{ GHz}$:
-$$\text{SKR}_{\text{asymp}} = R_{\text{rep}} \cdot K_{\text{asymp}} \quad [\text{Mbps}]$$
-
-### 4.2. Corrección por Efectos de Tamaño Finito (Finite-Size Effects)
-Cuando se sacrifican $m = 13.056$ muestras para estimar $T$ y $\xi$, existe una incertidumbre estadística acotada por el parámetro de fallo $\epsilon_{\text{PE}} = 10^{-10}$ ($z_{\epsilon} = \sqrt{2 \ln(2/\epsilon_{\text{PE}})} \approx 6.47$ desviaciones estándar).
-Los parámetros en el peor caso son:
-$$T_{\text{worst}} = T - \Delta T_{\text{PE}}$$
-$$\xi_{\text{worst}} = \xi + \Delta \xi_{\text{PE}}$$
-
-La tasa finita corregida incorpora la penalización por la propiedad de equipartición asintótica (AEP):
-$$K_{\text{finite}} = \beta I(A; B)_{\text{worst}} - \chi(B; E)_{\text{worst}} - \Delta_{\text{AEP}}$$
+Cada pulso aporta 2 dimensiones; el MDR 8D agrupa 4 pulsos.
 
 ---
 
-## 5. Política de Seguridad y Defensa Activa
+## 4. Cota de Holevo $\chi(B; E)$
 
-En la aplicación de streaming de Bob, el procesador evalúa $K$ en cada trama:
+Para un modo con autovalor simpléctico $\lambda$, $S = g\left(\frac{\lambda - 1}{2}\right)$ con $g(x) = (x + 1) \log_2(x + 1) - x \log_2 x$.
 
-$$\text{Veredicto} = \begin{cases} 
-\mathbf{PASS} & \text{si } K > 0 \implies \text{Canal seguro, se autorizan } \lfloor n \cdot K \rfloor \text{ bits para Alice.} \\
-\mathbf{ABORT} & \text{si } K \le 0 \implies \text{Alerta de intrusión de Eva, trama destruida inmediatamente.}
-\end{cases}$$
+**Antes de la detección** ($S(E) = S(AB)$):
+$$A = V^2 (1 - 2T) + 2T + T^2 (V + \chi_{\text{line}})^2, \qquad B = T^2 (V \chi_{\text{line}} + 1)^2$$
+$$\lambda_{1,2}^2 = \tfrac{1}{2} \left( A \pm \sqrt{A^2 - 4B} \right)$$
+
+**Tras la medida heterodina de Bob** (detector de confianza, Lodewyck et al., PRA 76, 042305, 2007):
+$$C = \frac{A \chi_{\text{het}}^2 + B + 1 + 2\chi_{\text{het}}\left(V\sqrt{B} + T(V + \chi_{\text{line}})\right) + 2T(V^2 - 1)}{T^2 (V + \chi_{\text{tot}})^2}, \qquad D = \left(\frac{V + \sqrt{B}\,\chi_{\text{het}}}{T(V + \chi_{\text{tot}})}\right)^2$$
+$$\lambda_{3,4}^2 = \tfrac{1}{2} \left( C \pm \sqrt{C^2 - 4D} \right), \qquad \lambda_5 = 1$$
+
+Por pulso, $\chi = \sum_{i=1,2} g\!\left(\frac{\lambda_i - 1}{2}\right) - \sum_{i=3,4} g\!\left(\frac{\lambda_i - 1}{2}\right)$; el código la reparte entre las 2 dimensiones del pulso. La expresión cerrada se ha validado frente a un cálculo gaussiano numérico independiente (error < $10^{-13}$).
+
+---
+
+## 5. Tasa de Clave Secreta
+
+La información que la reconciliación deja a Alice y Bob se calcula con la **fuga real** del síndrome LDPC (no con una $\beta$ supuesta). En MDR los bits de Bob son uniformes ($H(U) = 1$ bit/dimensión):
+$$\beta I(A;B) = 1 - \frac{\text{leak}_{EC}}{n} = 1 - \frac{46 \cdot 384}{26112} = 0.3235$$
+
+**Asintótica**: $K_{\infty} = \beta I(A;B) - \chi(B;E)$ [bits/dimensión]; $\text{SKR} = 2 R_{\text{rep}} K$.
+
+**Tamaño finito** (Leverrier 2010), con $z = \sqrt{2 \ln(2/\epsilon_{PE})} \approx 6.89$ para $\epsilon_{PE} = 10^{-10}$:
+$$t_{\min} = t - z\sqrt{\frac{\sigma^2}{2m V_A}}, \qquad \sigma^2_{\max} = \sigma^2\left(1 + \frac{z}{\sqrt{m}}\right)$$
+$$T_{\min} = \frac{2 t_{\min}^2}{\eta}, \qquad \xi_{\max} = \frac{\sigma^2_{\max} - 1 - v_{el}}{t_{\min}^2}$$
+$$\Delta(n) = (2 \dim \mathcal{H}_X + 3)\sqrt{\frac{\log_2(2/\bar\epsilon)}{n}} + \frac{2}{n}\log_2\frac{1}{\epsilon_{PA}}, \qquad \dim \mathcal{H}_X = 2$$
+$$K_{\text{finite}} = \beta I(A;B) - \chi(B;E)\big|_{T_{\min}, \xi_{\max}} - \Delta(n)$$
+
+Longitud de la amplificación de privacidad (descontando también el hash de verificación):
+$$\ell = \left\lfloor n K_{\text{finite}} - \log_2(1/\epsilon_{cor}) \right\rfloor$$
+
+---
+
+## 6. Política de Seguridad
+
+| Condición | Veredicto |
+|---|---|
+| $1 - \text{leak}_{EC}/n \ge I(A;B)$ | ABORT: la reconciliación no puede converger |
+| $\ell \le 0$ | ABORT: Holevo + tamaño finito no dejan clave |
+| $\ell > 0$ | PASS: se extraen $\ell$ bits con amplificación de privacidad |
+
+No existe aceptación "asintótica": una trama con $K_{\text{finite}} \le 0$ siempre se aborta.
+
+> **Nota**: con bloques de $n = 26\,112$ bits, $\Delta(n) \approx 0.25$ bits/dimensión supera la clave asintótica del punto de trabajo ($\approx 0.03$). Para obtener clave con seguridad de tamaño finito hay que acumular estimación y amplificación de privacidad sobre muchas tramas ($n \gtrsim 10^8$).

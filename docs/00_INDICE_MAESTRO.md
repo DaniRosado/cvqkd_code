@@ -34,7 +34,7 @@ A fecha **29 de septiembre de 2026**, los subsistemas hardware de **Alice (Nexys
 - [[01_ARQUITECTURA_HARDWARE/Mapa_Registros_AXI_Bob|Mapa de Registros AXI-Lite de Bob]]: Mapa de direcciones (`0x40000000`), registros de control, estimadores analíticos y BRAM de clave (816 palabras).
 
 ### [[02_FUNDAMENTOS_TEORICOS/]]
-- [[02_FUNDAMENTOS_TEORICOS/Protocolo_GG02_Gaussian|Protocolo GG02 y Modulación Coherente]]: Modulación Gaussiana $V_A$, ruido cuántico de disparo (SNU), exceso de ruido $\xi$, y detección homodina.
+- [[02_FUNDAMENTOS_TEORICOS/Protocolo_GG02_Gaussian|Protocolo GG02 y Modulación Coherente]]: Modulación Gaussiana $V_A$, ruido cuántico de disparo (SNU), exceso de ruido $\xi$, y detección heterodina.
 - [[02_FUNDAMENTOS_TEORICOS/Seguridad_Cuantica_Holevo_GG02|Evaluación de Seguridad Cuántica y Cota de Holevo]]: Teoría de información cuántica bajo ataques colectivos, autovalores simplécticos y tasa de clave secreta.
 - [[02_FUNDAMENTOS_TEORICOS/Reconciliacion_MDR_8D|Reconciliación Multidimensional (MDR 8D)]]: Álgebras de Clifford, matrices ortogonales de Hurwitz-Radon, cálculo de LLRs y factor SNR $K$.
 - [[02_FUNDAMENTOS_TEORICOS/Decodificador_QC_LDPC_5G|Decodificador QC-LDPC 5G-NR]]: Base Graph 1 ($46 \times 68$), tamaño de elevación $Z=384$, algoritmo Layered Min-Sum y anulación en iteración cero.

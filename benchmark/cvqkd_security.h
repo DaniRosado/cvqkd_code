@@ -4,7 +4,8 @@
  *
  *  Descripción:
  *  Definiciones y estructuras para la evaluación estricta de la seguridad
- *  cuántica bajo ataques colectivos (Protocolo GG02 con reconciliación inversa).
+ *  cuántica bajo ataques colectivos (GG02 sin conmutación: detección heterodina
+ *  de P y Q, reconciliación inversa).
  *  Calcula la Cota de Holevo chi(B; E), información mutua I(A; B),
  *  Secret Key Rate (SKR) asintótico y de tamaño finito en la CPU de Bob (Zynq).
  ******************************************************************************/
@@ -21,14 +22,14 @@ extern "C" {
 
 /* Parámetros físicos y de calibración del sistema CV-QKD */
 typedef struct {
-    double V_A;          /* Varianza de modulación de Alice en SNU (típico: 4.0 a 5.0) */
-    double eta;          /* Eficiencia cuántica de los fotodiodos de Bob (típico: 0.60) */
-    double v_el;         /* Ruido electrónico del detector homodino en SNU (típico: 0.05) */
+    double V_A;          /* Varianza de modulación de Alice en SNU */
+    double eta;          /* Eficiencia del receptor de Bob (sin el 50:50 del heterodino) */
+    double v_el;         /* Ruido electrónico de cada detector, en SNU de ese detector */
     double fiber_alpha;  /* Atenuación de la fibra óptica en dB/km (típico: 0.20 dB/km) */
     double rep_rate_hz;  /* Frecuencia de repetición del láser en Hz (típico: 1.0e9 = 1 Gbaud) */
-    double N0_adc_var;   /* Varianza ADC correspondiente a 1 SNU (Shot Noise Unit) */
-    uint32_t m_samples;    /* Muestras sacrificadas para estimación de parámetros (13.056) */
-    uint32_t n_key_bits;   /* Bits brutos de clave por trama (26.112) */
+    double N0_adc_var;   /* Varianza ADC de vacío de cada detector (solo LO) = 1 SNU */
+    uint32_t m_samples;    /* Pulsos sacrificados para estimación de parámetros (13.056) */
+    uint32_t n_key_bits;   /* Bits brutos de clave por trama (26.112 = 2 por pulso) */
     uint32_t leak_ec_bits; /* Bits revelados en la corrección de errores (síndrome: 46 x 384 = 17.664) */
     double epsilon_pe;   /* Fallo de la estimación de parámetros (1e-10) */
     double epsilon_sm;   /* Suavizado de la entropía min (1e-10) */
@@ -47,10 +48,10 @@ typedef struct {
     double snr_db;            /* Relación señal a ruido en dB */
 
     /* Magnitudes de teoría de la información cuántica */
-    double I_AB;              /* Información mutua Alice-Bob: I(A;B) [bits/símbolo] */
+    double I_AB;              /* Información mutua Alice-Bob: I(A;B) [bits/dimensión] */
     double beta_eff;          /* Eficiencia real de reconciliación: (1 - leak_ec/n) / I(A;B) */
-    double chi_BE;            /* Cota de Holevo sobre la información de Eva: chi(B;E) [bits/símbolo] */
-    double K_asymp;           /* Tasa de clave secreta asintótica [bits/símbolo] */
+    double chi_BE;            /* Cota de Holevo sobre la información de Eva: chi(B;E) [bits/dimensión] */
+    double K_asymp;           /* Tasa de clave secreta asintótica [bits/dimensión] */
     double skr_asymp_mbps;    /* Tasa de clave neta a la tasa de repetición del láser [Mbps] */
 
     /* Análisis de tamaño finito (Finite-Size Effects) */
@@ -58,8 +59,8 @@ typedef struct {
     double delta_pe_xi;       /* Margen de incertidumbre estadística en ruido (xi_worst - xi) */
     double T_worst;           /* Peor caso de transmitancia */
     double xi_worst;          /* Peor caso de exceso de ruido */
-    double delta_n;           /* Corrección de tamaño finito Delta(n) [bits/símbolo] */
-    double K_finite;          /* Tasa de clave secreta con tamaño finito [bits/símbolo] (puede ser < 0) */
+    double delta_n;           /* Corrección de tamaño finito Delta(n) [bits/dimensión] */
+    double K_finite;          /* Tasa de clave secreta con tamaño finito [bits/dimensión] (puede ser < 0) */
     double skr_finite_mbps;   /* Tasa neta de clave con tamaño finito [Mbps] */
 
     /* Amplificación de Privacidad (Privacy Amplification) */
@@ -79,7 +80,7 @@ double cvqkd_von_neumann_entropy(double x);
 
 /*
  * Evalúa la seguridad de una trama a partir de los registros de hardware de Bob:
- *   - T_q16: Registro BOB_REG_T_FINAL en formato punto fijo Q16.16
+ *   - T_q16: Registro BOB_REG_T_FINAL = (Cov/V_A)^2 = T*eta/2 en Q16.16
  *   - sigma_sq_hw: Registro BOB_REG_SIGMA_SQ (varianza en unidades de ADC)
  */
 bool cvqkd_evaluate_frame_security(

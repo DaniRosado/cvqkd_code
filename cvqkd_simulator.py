@@ -39,22 +39,24 @@ def g_entropy(x):
     return (x + 1.0) * math.log2(x + 1.0) - x * math.log2(x)
 
 
-def compute_skr_metrics(L_km, V_A=4.0, xi=0.01, eta=0.6, v_el=0.05, alpha=0.2, beta=0.95, rep_rate=1e9):
+def compute_skr_metrics(L_km, V_A=5.0, xi=0.01, eta=0.6, v_el=0.1, alpha=0.2, beta=0.72, rep_rate=1e9):
     """
     Computes asymptotic Secret Key Rate (SKR) under collective attacks using
-    reverse reconciliation and realistic trusted detector model (Fossier et al. 2009).
-    
+    reverse reconciliation, heterodyne detection (Bob measures P and Q) and the
+    trusted detector model (Lodewyck et al. 2007). Rates are per dimension
+    (quadrature); every pulse carries 2 dimensions.
+
     Returns:
-        dict with T, snr, I_AB, chi_BE, K_asymp (bits/sym), and skr_bps (bits/sec).
+        dict with T, snr, I_AB, chi_BE, K_asymp (bits/dim), and skr_bps (bits/sec).
     """
     T = 10.0 ** (-alpha * L_km / 10.0)
     V = V_A + 1.0
     chi_line = 1.0 / T - 1.0 + xi
-    chi_hom = (1.0 - eta + v_el) / eta
-    chi_tot = chi_line + chi_hom / T
+    chi_het = (2.0 - eta + 2.0 * v_el) / eta
+    chi_tot = chi_line + chi_het / T
 
-    # Shannon mutual information for homodyne detection
-    snr = T * eta * V_A / (1.0 + v_el + T * eta * xi)
+    # Shannon mutual information per quadrature (each one gets T*eta/2 of the signal)
+    snr = T * eta * V_A / (2.0 + 2.0 * v_el + T * eta * xi)
     I_AB = 0.5 * math.log2(1.0 + snr)
 
     # Symplectic eigenvalues of Gamma_AB before detection
@@ -64,21 +66,23 @@ def compute_skr_metrics(L_km, V_A=4.0, xi=0.01, eta=0.6, v_el=0.05, alpha=0.2, b
     l1 = math.sqrt(max(1.0, 0.5 * (A + math.sqrt(disc1))))
     l2 = math.sqrt(max(1.0, 0.5 * (A - math.sqrt(disc1))))
 
-    # Conditional symplectic eigenvalues after Bob's homodyne measurement
+    # Conditional symplectic eigenvalues after Bob's heterodyne measurement
     sqrt_B = math.sqrt(B)
     denom = T * (V + chi_tot)
-    C = (A * chi_hom + V * sqrt_B + T * (V + chi_line)) / denom
-    D = sqrt_B * (V + chi_hom * sqrt_B) / denom
+    C = (A * chi_het**2 + B + 1.0 + 2.0 * chi_het * (V * sqrt_B + T * (V + chi_line))
+         + 2.0 * T * (V**2 - 1.0)) / denom**2
+    D = ((V + sqrt_B * chi_het) / denom)**2
     disc2 = max(0.0, C**2 - 4.0 * D)
     l3 = math.sqrt(max(1.0, 0.5 * (C + math.sqrt(disc2))))
     l4 = math.sqrt(max(1.0, 0.5 * (C - math.sqrt(disc2))))
 
-    # Holevo bound: chi(B; E) = S(E) - S(E|y_B)
-    chi_BE = g_entropy((l1 - 1.0) / 2.0) + g_entropy((l2 - 1.0) / 2.0) - g_entropy((l3 - 1.0) / 2.0) - g_entropy((l4 - 1.0) / 2.0)
+    # Holevo bound: chi(B; E) = S(E) - S(E|y_B), split between the 2 quadratures
+    chi_BE = 0.5 * (g_entropy((l1 - 1.0) / 2.0) + g_entropy((l2 - 1.0) / 2.0)
+                    - g_entropy((l3 - 1.0) / 2.0) - g_entropy((l4 - 1.0) / 2.0))
 
-    # Asymptotic secret key rate per symbol
+    # Asymptotic secret key rate per dimension (2 dimensions per pulse)
     K_asymp = max(0.0, beta * I_AB - chi_BE)
-    skr_bps = rep_rate * K_asymp
+    skr_bps = 2.0 * rep_rate * K_asymp
 
     return {
         "distance_km": L_km,
@@ -94,13 +98,13 @@ def compute_skr_metrics(L_km, V_A=4.0, xi=0.01, eta=0.6, v_el=0.05, alpha=0.2, b
     }
 
 
-def print_skr_table(V_A=4.0, xi=0.01, eta=0.6, v_el=0.05, alpha=0.2, beta=0.95, rep_rate=1e9):
+def print_skr_table(V_A=5.0, xi=0.01, eta=0.6, v_el=0.1, alpha=0.2, beta=0.72, rep_rate=1e9):
     """Prints a formatted table of SKR vs fiber distance."""
     print("\n" + "=" * 92)
     print("       CV-QKD SECRET KEY RATE (SKR) VS FIBRE DISTANCE (COLLECTIVE ATTACKS)       ")
     print(f"       V_A = {V_A:.1f} SNU | xi = {xi:.3f} SNU | eta = {eta:.2f} | v_el = {v_el:.2f} | beta = {beta*100:.0f}% | Laser = {rep_rate/1e9:.1f} Gbaud")
     print("=" * 92)
-    print(f" {'Dist (km)':^9} | {'T (trans)':^9} | {'Loss (dB)':^9} | {'SNR (dB)':^9} | {'I(A;B)':^8} | {'chi(B;E)':^9} | {'K (b/sym)':^9} | {'SKR @ 1 Gbaud':^14}")
+    print(f" {'Dist (km)':^9} | {'T (trans)':^9} | {'Loss (dB)':^9} | {'SNR (dB)':^9} | {'I(A;B)':^8} | {'chi(B;E)':^9} | {'K (b/dim)':^9} | {'SKR @ 1 Gbaud':^14}")
     print("-" * 92)
 
     distances = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60]
@@ -206,7 +210,7 @@ def compute_qc_ldpc_syndrome(bg, key_bits_flat, Z=384):
 class CVQKDChannelSimulator:
     """End-to-end physical simulator for fiber-based CV-QKD."""
 
-    def __init__(self, distance_km=25.0, V_A=4.0, xi=0.01, eta=0.6, v_el=0.05,
+    def __init__(self, distance_km=10.0, V_A=5.0, xi=0.01, eta=0.6, v_el=0.1,
                  alpha=0.2, rep_rate=1e9, seed=None):
         self.distance_km = distance_km
         self.V_A = V_A
@@ -270,10 +274,12 @@ class CVQKDChannelSimulator:
         # 3. Optical Fiber Channel (Attenuation + AWGN + Phase Rotation)
         print("  [3/6] Fiber propagating (loss = {:.2f} dB, excess noise xi = {:.3f} SNU)...".format(
             self.alpha * self.distance_km, self.xi))
-        Ruido_Total_snu = 1.0 + self.v_el + (self.T * self.eta * self.xi)
+        # Heterodyne receiver: each quadrature gets sqrt(T*eta/2) of the signal
+        # and noise 1 + v_el + T*eta*xi/2 (SNU of each detector)
+        Ruido_Total_snu = 1.0 + self.v_el + (self.T * self.eta * self.xi / 2.0)
         Ruido_Total_adc = Ruido_Total_snu * self.N0_adc_var
         sigma_noise = math.sqrt(Ruido_Total_adc)
-        atten = math.sqrt(self.T * self.eta)
+        atten = math.sqrt(self.T * self.eta / 2.0)
 
         P_B_rx = [0.0] * self.N_FIBER
         Q_B_rx = [0.0] * self.N_FIBER
@@ -346,7 +352,7 @@ class CVQKDChannelSimulator:
         cov_Q = sum((Q_A_sac[k]) * (Q_B_sac[k] - mean_QB) for k in range(N_SAMPLES)) / float(N_SAMPLES)
         cov_AB_float = 0.5 * (cov_P + cov_Q)
 
-        T_eta_est = (cov_AB_float / VarA_adc)**2
+        T_eta_est = 2.0 * (cov_AB_float / VarA_adc)**2   # (Cov/V_A)^2 = T*eta/2 in heterodyne
         sigma_ideal = math.sqrt(max(1.0, var_B_float))
         inv_sigma2 = 2.0 / (sigma_ideal**2 + 1e-12)
 
@@ -664,20 +670,20 @@ def main():
     parser = argparse.ArgumentParser(
         description="CV-QKD End-to-End Channel Simulator & FPGA Test Vector Generator"
     )
-    parser.add_argument("--distance", "-d", type=float, default=25.0,
-                        help="Fiber distance in km (default: 25.0 km)")
-    parser.add_argument("--va", type=float, default=4.0,
-                        help="Alice modulation variance in SNU (default: 4.0)")
+    parser.add_argument("--distance", "-d", type=float, default=10.0,
+                        help="Fiber distance in km (default: 10.0 km)")
+    parser.add_argument("--va", type=float, default=5.0,
+                        help="Alice modulation variance in SNU (default: 5.0)")
     parser.add_argument("--excess-noise", "-xi", type=float, default=0.01,
                         help="Channel excess noise in SNU (default: 0.01)")
     parser.add_argument("--eta", type=float, default=0.6,
                         help="Photodiode quantum efficiency (default: 0.6)")
-    parser.add_argument("--v-elec", type=float, default=0.05,
-                        help="Detector electronic noise in SNU (default: 0.05)")
+    parser.add_argument("--v-elec", type=float, default=0.1,
+                        help="Electronic noise of each detector in SNU (default: 0.1)")
     parser.add_argument("--rep-rate", "-r", type=float, default=1e9,
                         help="Laser repetition rate in Hz (default: 1e9 = 1 Gbaud)")
-    parser.add_argument("--beta", type=float, default=0.95,
-                        help="Reconciliation efficiency (default: 0.95)")
+    parser.add_argument("--beta", type=float, default=0.72,
+                        help="Reconciliation efficiency (default: 0.72, LDPC rate 22/68 at the 10 km point)")
     parser.add_argument("--attenuation", "-a", type=float, default=0.2,
                         help="Fiber attenuation in dB/km (default: 0.2)")
     parser.add_argument("--seed", type=int, default=42,

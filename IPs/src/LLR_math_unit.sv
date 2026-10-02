@@ -17,8 +17,8 @@ module LLR_math_unit #(
     input  logic signed [31:0] calib_VarA,
     
     // Salidas para el cálculo de LLR
-    output logic signed [31:0] T_final,     // Transmitancia T (Q16.16)
-    output logic signed [31:0] T_sqrt,      // Raíz cuadrada de T (Q16.16)
+    output logic signed [31:0] T_final,     // (Cov/V_A)^2 = T*eta/2 en heterodino (Q16.16)
+    output logic signed [31:0] T_sqrt,      // Cov/V_A = sqrt(T*eta/2) (Q16.16)
     output logic signed [31:0] sigma_sq,    // Varianza sigma^2 (Q16.16)
     output logic signed [31:0] sigma,       // Desviación estándar sigma (Q16.16)
     output logic               data_ready
@@ -121,10 +121,10 @@ module LLR_math_unit #(
     assign sigma = sqrt_sigma_raw << 16;
 
     // 3. Obtener T (Transmitancia) elevando Sqrt(T) al cuadrado
-    // La salida del divisor en realidad es Sqrt(T*eta)
+    // La salida del divisor es Cov/V_A = sqrt(T*eta/2)
     assign T_sqrt = div_t_raw[31:0] << 1;
     
-    // Multiplicamos para obtener T*eta (Formato Q16.16)
+    // Multiplicamos para obtener T*eta/2 (Formato Q16.16)
     logic signed [63:0] t_sq_full;
     assign t_sq_full = $signed(T_sqrt) * $signed(T_sqrt);
     

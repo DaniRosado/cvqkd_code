@@ -8,7 +8,7 @@
 
 ## 🎯 Por qué Reconciliación en Dimensión 8
 
-En protocolos de CV-QKD basados en modulación Gaussiana (GG02), Alice modula estados coherentes continuos y Bob realiza detección homodina. Para convertir estas variables continuas gaussianas correlacionadas en una clave binaria secreta compartida a distancias largas ($>25\text{ km}$), la SNR del canal es típicamente muy baja ($\text{SNR} < 0\text{ dB}$).
+En protocolos de CV-QKD basados en modulación Gaussiana (GG02), Alice modula estados coherentes continuos y Bob realiza detección heterodina (mide P y Q a la vez). Para convertir estas variables continuas gaussianas correlacionadas en una clave binaria secreta compartida a distancias largas ($>25\text{ km}$), la SNR del canal es típicamente muy baja ($\text{SNR} < 0\text{ dB}$).
 
 La reconciliación multidimensional (MDR), introducida por Leverrier et al. (2008), mapea el canal gaussiano continuo a un **canal virtual BSC (Binary Symmetric Channel)** con ruido gaussiano añadido sin revelar información sobre la clave.
 

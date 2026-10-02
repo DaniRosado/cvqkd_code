@@ -10,7 +10,7 @@
 ## 1. Visión General del Subsistema de Bob
 
 A diferencia de Alice (cuyo rol principal es la decodificación intensiva de canal LDPC a partir de los datos recibidos), **Bob** es el extremo de **medida óptica y preparación cuántica**:
-1. Recibe los pulsos ópticos del detector homodino balanceado a través de interfaces analógicas de alta velocidad.
+1. Recibe los pulsos ópticos del receptor heterodino (dos detectores balanceados, P y Q) a través de interfaces analógicas de alta velocidad.
 2. Extrae y compensa el desfase de portadora utilizando pulsos piloto intercalados (interpolador CORDIC).
 3. Realiza la criba de sacrificio (50% de las muestras) para estimar analíticamente los parámetros del canal ($T$ y $\sigma^2$).
 4. Genera los bits aleatorios de clave mediante un TRNG/PRNG y realiza la proyección multidimensional 8D (MDR) y el cómputo de síndrome LDPC ($H \cdot b$).
@@ -72,7 +72,7 @@ La distribución óptima de tareas aprovecha la aceleración paralela masiva de 
 ### 3.1. Canales AXI DMA (High-Performance AXI_HP)
 El subsistema integra **tres controladores AXI DMA** independientes configurados en modo *Direct Register (Simple Transfer)*:
 1. **DMA 0 (`axi_dma_0` @ `0x40400000`)**:
-   - **MM2S**: Transmite los pulsos ópticos del ADC homodino ($27.857 \times 4\text{ B} = 111.428\text{ B}$) divididos en bloques de 16 KB (respetando el límite de 14 bits del DMA).
+   - **MM2S**: Transmite los pulsos ópticos del ADC del receptor heterodino ($27.857 \times 4\text{ B} = 111.428\text{ B}$) divididos en bloques de 16 KB (respetando el límite de 14 bits del DMA).
    - **S2MM**: Recibe los mensajes públicos de reconciliación MDR calculados por Bob.
 2. **DMA 1 (`axi_dma_1` @ `0x40410000`)**:
    - **MM2S**: Transmite las muestras de sacrificio reveladas por Alice ($13.056 \times 4\text{ B} = 52.224\text{ B}$).

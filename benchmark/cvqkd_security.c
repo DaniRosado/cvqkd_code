@@ -3,10 +3,11 @@
  *  Archivo: cvqkd_security.c
  *
  *  Descripción:
- *  Implementación rigurosa de la teoría de la información cuántica para CV-QKD:
+ *  Implementación rigurosa de la teoría de la información cuántica para CV-QKD
+ *  (GG02 sin conmutación: Bob mide P y Q a la vez con un receptor heterodino):
  *    - Información mutua Shannon I(A; B)
  *    - Autovalores simplécticos de matrices de covarianza de estados gaussianos
- *    - Cota de Holevo chi(B; E) bajo ataques colectivos
+ *    - Cota de Holevo chi(B; E) bajo ataques colectivos (detector de confianza)
  *    - Corrección de fluctuaciones estadísticas por tamaño finito (Leverrier et al.)
  *    - Cómputo de amplificación de privacidad y veredicto de seguridad PASS/ABORT
  ******************************************************************************/
@@ -44,14 +45,14 @@ double cvqkd_von_neumann_entropy(double x) {
 /* Configuración de parámetros nominales de canal y calibración */
 void cvqkd_security_init_defaults(cvqkd_security_params_t *params) {
     if (!params) return;
-    params->V_A         = 4.0;       /* 4.0 SNU de modulación gaussiana en Alice */
-    params->eta         = 0.60;      /* 60% de eficiencia cuántica en homodino de Bob */
-    params->v_el        = 0.10;      /* 0.10 SNU de ruido electrónico en Bob (calibración física) */
+    params->V_A         = 5.0;       /* SNU de modulación gaussiana en Alice */
+    params->eta         = 0.60;      /* Eficiencia del receptor (sin contar el 50:50 del heterodino) */
+    params->v_el        = 0.10;      /* Ruido electrónico de cada detector (SNU de ese detector) */
     params->fiber_alpha = 0.20;      /* 0.20 dB/km de atenuación en fibra SMF-28 */
     params->rep_rate_hz = 1.0e9;     /* Láser a 1.0 Gbaud (1 GHz) */
-    params->N0_adc_var  = 10000.0;   /* 10.000 cuentas de varianza ADC = 1 SNU */
-    params->m_samples   = 13056;     /* 13.056 muestras sacrificadas (50% de la trama) */
-    params->n_key_bits  = 26112;     /* 26.112 bits útiles por trama */
+    params->N0_adc_var  = 10000.0;   /* Varianza de vacío de cada detector (solo LO) = 1 SNU */
+    params->m_samples   = 13056;     /* Pulsos sacrificados (cada uno aporta P y Q) */
+    params->n_key_bits  = 26112;     /* Bits de clave por trama = 13.056 pulsos x 2 cuadraturas */
     params->leak_ec_bits = 46 * 384; /* Síndrome LDPC BG1 (Z = 384) enviado a Alice */
     params->epsilon_pe  = 1.0e-10;
     params->epsilon_sm  = 1.0e-10;
@@ -60,7 +61,9 @@ void cvqkd_security_init_defaults(cvqkd_security_params_t *params) {
 }
 
 /*
- * Función auxiliar interna para calcular Holevo chi(B; E) dados T y xi
+ * I(A;B) y cota de Holevo chi(B;E) por dimensión (cuadratura) para detección
+ * heterodina con ruido del detector de confianza y reconciliación inversa
+ * (Lodewyck et al., PRA 76, 042305, 2007). Cada pulso aporta 2 dimensiones.
  */
 static void compute_holevo_and_mutual(
     double T, double xi, double V_A, double eta, double v_el,
@@ -68,50 +71,40 @@ static void compute_holevo_and_mutual(
 ) {
     double V = V_A + 1.0;
     double chi_line = 1.0 / T - 1.0 + xi;
-    double chi_hom  = (1.0 - eta + v_el) / eta;
-    double chi_tot  = chi_line + chi_hom / T;
+    double chi_het  = (2.0 - eta + 2.0 * v_el) / eta;
+    double chi_tot  = chi_line + chi_het / T;
 
-    /* SNR e Información Mutua */
-    double snr = (T * eta * V_A) / (1.0 + v_el + T * eta * xi);
+    /* SNR por cuadratura: cada una recibe T*eta/2 de la señal */
+    double snr = (T * eta * V_A) / (2.0 + 2.0 * v_el + T * eta * xi);
     if (snr < 1.0e-9) snr = 1.0e-9;
-    double I_AB = 0.5 * (log(1.0 + snr) / M_LN2);
+    double I_AB = 0.5 * log2(1.0 + snr);
 
-    /* Autovalores simplécticos de Gamma_AB antes de la detección */
+    /* Autovalores simplécticos de Gamma_AB antes de la detección: S(E) */
     double A = (V * V) * (1.0 - 2.0 * T) + 2.0 * T + (T * T) * pow(V + chi_line, 2.0);
     double B = pow(T * (V * chi_line + 1.0), 2.0);
-    double disc1 = A * A - 4.0 * B;
-    if (disc1 < 0.0) disc1 = 0.0;
+    double sqrt_disc1 = sqrt(fmax(A * A - 4.0 * B, 0.0));
+    double l1 = sqrt(fmax(0.5 * (A + sqrt_disc1), 1.0));
+    double l2 = sqrt(fmax(0.5 * (A - sqrt_disc1), 1.0));
 
-    double sqrt_disc1 = sqrt(disc1);
-    double l1_sq = 0.5 * (A + sqrt_disc1);
-    double l2_sq = 0.5 * (A - sqrt_disc1);
-    double l1 = sqrt((l1_sq > 1.0) ? l1_sq : 1.0);
-    double l2 = sqrt((l2_sq > 1.0) ? l2_sq : 1.0);
-
-    /* Autovalores simplécticos condicionales tras la medida homodina de Bob */
+    /* Autovalores condicionales tras la medida heterodina de Bob: S(E | y_B) */
     double sqrt_B = sqrt(B);
-    double denom = T * (V + chi_tot);
-    double C = (A * chi_hom + V * sqrt_B + T * (V + chi_line)) / denom;
-    double D = sqrt_B * (V + chi_hom * sqrt_B) / denom;
-    double disc2 = C * C - 4.0 * D;
-    if (disc2 < 0.0) disc2 = 0.0;
+    double denom  = T * (V + chi_tot);
+    double C = (A * chi_het * chi_het + B + 1.0
+                + 2.0 * chi_het * (V * sqrt_B + T * (V + chi_line))
+                + 2.0 * T * (V * V - 1.0)) / (denom * denom);
+    double D = pow((V + sqrt_B * chi_het) / denom, 2.0);
+    double sqrt_disc2 = sqrt(fmax(C * C - 4.0 * D, 0.0));
+    double l3 = sqrt(fmax(0.5 * (C + sqrt_disc2), 1.0));
+    double l4 = sqrt(fmax(0.5 * (C - sqrt_disc2), 1.0));
 
-    double sqrt_disc2 = sqrt(disc2);
-    double l3_sq = 0.5 * (C + sqrt_disc2);
-    double l4_sq = 0.5 * (C - sqrt_disc2);
-    double l3 = sqrt((l3_sq > 1.0) ? l3_sq : 1.0);
-    double l4 = sqrt((l4_sq > 1.0) ? l4_sq : 1.0);
-
-    /* Cota de Holevo chi(B; E) = S(E) - S(E | y_B) */
-    double chi_BE = cvqkd_von_neumann_entropy((l1 - 1.0) * 0.5)
-                  + cvqkd_von_neumann_entropy((l2 - 1.0) * 0.5)
-                  - cvqkd_von_neumann_entropy((l3 - 1.0) * 0.5)
-                  - cvqkd_von_neumann_entropy((l4 - 1.0) * 0.5);
-
-    if (chi_BE < 0.0) chi_BE = 0.0;
+    /* chi(B; E) = S(E) - S(E | y_B), repartida entre las 2 cuadraturas del pulso */
+    double chi_BE = 0.5 * (cvqkd_von_neumann_entropy((l1 - 1.0) * 0.5)
+                         + cvqkd_von_neumann_entropy((l2 - 1.0) * 0.5)
+                         - cvqkd_von_neumann_entropy((l3 - 1.0) * 0.5)
+                         - cvqkd_von_neumann_entropy((l4 - 1.0) * 0.5));
 
     *out_IAB   = I_AB;
-    *out_chiBE = chi_BE;
+    *out_chiBE = fmax(chi_BE, 0.0);
     *out_snr   = snr;
 }
 
@@ -133,39 +126,41 @@ bool cvqkd_evaluate_frame_security(
     const double m    = (double)params->m_samples;
     const double n    = (double)params->n_key_bits;
 
-    /* 1. Estimadores puntuales a partir de los registros hardware */
-    /* T_FINAL (LLR_math_unit.sv) es T*eta en Q16.16; el estimador natural es t = sqrt(T*eta) */
-    double T_eta = (double)T_q16 / 65536.0;
-    if (T_eta < 1.0e-5) T_eta = 1.0e-5;
-    if (T_eta > eta)    T_eta = eta;
-    double t_hat = sqrt(T_eta);
+    /* 1. Estimadores puntuales a partir de los registros hardware.
+     * En heterodino cada cuadratura es y = t*x + z con t^2 = T*eta/2, y T_FINAL
+     * (LLR_math_unit.sv) es (Cov/V_A)^2 = t^2 en Q16.16. */
+    double t2 = (double)T_q16 / 65536.0;
+    if (t2 < 1.0e-5)      t2 = 1.0e-5;
+    if (t2 > 0.5 * eta)   t2 = 0.5 * eta;
+    double t_hat = sqrt(t2);
 
-    double T_est = T_eta / eta;
+    double T_est = 2.0 * t2 / eta;
     result->T           = T_est;
     result->loss_db     = -10.0 * log10(T_est);
     result->distance_km = result->loss_db / params->fiber_alpha;
 
-    /* Varianza condicional sigma^2 = Var(B) - T*eta*V_A = 1 + v_el + T*eta*xi (en SNU) */
+    /* Varianza condicional sigma^2 = Var(B) - t^2*V_A = 1 + v_el + t^2*xi (en SNU) */
     double var_B  = (double)sigma_sq_hw / params->N0_adc_var;
-    double sigma2 = var_B - T_eta * V_A;
-    double xi = (sigma2 - 1.0 - v_el) / T_eta;
+    double sigma2 = var_B - t2 * V_A;
+    double xi = (sigma2 - 1.0 - v_el) / t2;
     if (xi < 0.0) xi = 0.0; /* Sin ruido de exceso físico negativo */
     result->xi_snu = xi;
 
-    /* 2. Peor caso de tamaño finito (Leverrier, Grosshans, Grangier, PRA 81, 062343, 2010) */
-    /* z = sqrt(2 ln(2/eps_PE)) es una cota superior de z_{eps_PE/2} (6.89 para 1e-10) */
+    /* 2. Peor caso de tamaño finito (Leverrier, Grosshans, Grangier, PRA 81, 062343, 2010)
+     * con 2m muestras reales (P y Q de cada pulso sacrificado).
+     * z = sqrt(2 ln(2/eps_PE)) es una cota superior de z_{eps_PE/2} (6.89 para 1e-10) */
     double z = sqrt(2.0 * log(2.0 / params->epsilon_pe));
-    double t_min      = t_hat - z * sqrt(sigma2 / (m * V_A));
-    double sigma2_max = sigma2 * (1.0 + z * sqrt(2.0 / m));
+    double t_min      = t_hat - z * sqrt(sigma2 / (2.0 * m * V_A));
+    double sigma2_max = sigma2 * (1.0 + z / sqrt(m));
     if (sigma2 <= 0.0 || t_min <= 0.0) {
         result->status_msg = "ESTIMACION INVALIDA: varianza o transmitancia fuera de rango. TRAMA ABORTADA.";
         return false;
     }
-    double T_eta_min = t_min * t_min;
-    double xi_worst  = (sigma2_max - 1.0 - v_el) / T_eta_min;
+    double t2_min   = t_min * t_min;
+    double xi_worst = (sigma2_max - 1.0 - v_el) / t2_min;
     if (xi_worst < 0.0) xi_worst = 0.0;
 
-    result->T_worst     = T_eta_min / eta;
+    result->T_worst     = 2.0 * t2_min / eta;
     result->xi_worst    = xi_worst;
     result->delta_pe_T  = T_est - result->T_worst;
     result->delta_pe_xi = xi_worst - xi;
@@ -177,7 +172,7 @@ bool cvqkd_evaluate_frame_security(
     compute_holevo_and_mutual(result->T_worst, xi_worst, V_A, eta, v_el,
                               &I_AB_worst, &chi_BE_worst, &snr_worst);
 
-    /* beta*I(A;B) = H(U) - leak_EC/n. En MDR los bits u de Bob son uniformes: H(U) = 1 bit/símbolo */
+    /* beta*I(A;B) = H(U) - leak_EC/n. En MDR los bits u de Bob son uniformes: H(U) = 1 bit/dimensión */
     double rate_ec = 1.0 - (double)params->leak_ec_bits / n;
 
     result->snr_linear = snr;
@@ -187,14 +182,14 @@ bool cvqkd_evaluate_frame_security(
     result->chi_BE     = chi_BE;
     result->K_asymp    = rate_ec - chi_BE;
     if (result->K_asymp < 0.0) result->K_asymp = 0.0;
-    result->skr_asymp_mbps = (params->rep_rate_hz * result->K_asymp) / 1.0e6;
+    result->skr_asymp_mbps = (2.0 * params->rep_rate_hz * result->K_asymp) / 1.0e6; /* 2 dim/pulso */
 
-    /* Delta(n) = 7 sqrt(log2(2/eps_sm)/n) + (2/n) log2(1/eps_PA) */
+    /* Delta(n) = (2 dim H_X + 3) sqrt(log2(2/eps_sm)/n) + (2/n) log2(1/eps_PA), clave binaria: dim H_X = 2 */
     result->delta_n  = 7.0 * sqrt(log2(2.0 / params->epsilon_sm) / n)
                      + (2.0 / n) * log2(1.0 / params->epsilon_pa);
     result->K_finite = rate_ec - chi_BE_worst - result->delta_n;
     result->skr_finite_mbps = (result->K_finite > 0.0)
-                            ? (params->rep_rate_hz * result->K_finite) / 1.0e6 : 0.0;
+                            ? (2.0 * params->rep_rate_hz * result->K_finite) / 1.0e6 : 0.0;
 
     /* 4. Veredicto y longitud de la amplificación de privacidad.
      * Además de la fuga del síndrome se descuentan los bits del hash de verificación. */
@@ -263,15 +258,15 @@ void cvqkd_print_security_report(const cvqkd_security_result_t *res) {
     print_float_val("  (Atenuacion: ", res->loss_db, " dB", 2);
     print_float_val(" | Distancia: ", res->distance_km, " km)\r\n", 1);
     print_float_val("  * Ruido de Exceso (xi):        ", res->xi_snu, " SNU\r\n", 4);
-    print_float_val("  * SNR Homodino:                ", res->snr_linear, "", 3);
+    print_float_val("  * SNR por cuadratura:          ", res->snr_linear, "", 3);
     print_float_val(" (", res->snr_db, " dB)\r\n", 2);
     PRINTF("  ----------------------------------------------------------------------\r\n");
-    print_float_val("  * Informacion Mutua I(A; B):   ", res->I_AB, " bits/simbolo", 4);
+    print_float_val("  * Informacion Mutua I(A; B):   ", res->I_AB, " bits/dim", 4);
     print_float_val(" (beta real: ", res->beta_eff * 100.0, "%)\r\n", 1);
-    print_float_val("  * Cota de Holevo chi(B; E):    ", res->chi_BE, " bits/simbolo (Max Eva)\r\n", 4);
-    print_float_val("  * Tasa de Clave Asintotica:    ", res->K_asymp, " bits/simbolo", 4);
+    print_float_val("  * Cota de Holevo chi(B; E):    ", res->chi_BE, " bits/dim (Max Eva)\r\n", 4);
+    print_float_val("  * Tasa de Clave Asintotica:    ", res->K_asymp, " bits/dim", 4);
     print_float_val(" (", res->skr_asymp_mbps, " Mbps @ 1 Gbaud)\r\n", 2);
-    print_float_val("  * Tasa Clave (Tamano Finito):  ", res->K_finite, " bits/simbolo", 4);
+    print_float_val("  * Tasa Clave (Tamano Finito):  ", res->K_finite, " bits/dim", 4);
     print_float_val(" (", res->skr_finite_mbps, " Mbps)\r\n", 2);
     PRINTF("  * Bits tras Amplif. Privacidad: %u / 26112 bits ", res->pa_output_bits);
     print_float_val("(", res->pa_rate * 100.0, "%)\r\n", 1);

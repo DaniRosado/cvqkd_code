@@ -179,7 +179,7 @@ module tb_cvqkd_bob_axi_wrapper();
         // ---------------------------------------------------------------------
         $display("[FASE 1] Trama completa con backpressure en las salidas");
         soft_reset();
-        axi_write(REG_CALIB, 32'd40000);
+        axi_write(REG_CALIB, 32'd50000);
         axi_read(REG_STATUS, status);
         check(status[2] == 1'b0, "key_ready = 0 antes de cargar la clave");
         load_key();

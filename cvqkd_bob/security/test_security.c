@@ -11,19 +11,19 @@ int main(void) {
 
     cvqkd_security_result_t res;
 
-    /* Caso 1: Canal nominal seguro (L = 25 km, xi = 0.010 SNU) */
-    /* T_eta = 0.1900 (Q16.16: 0x30A3) -> T = 0.3162 */
-    /* Var_B = 0.1900*4 + 1.05 + 0.1900*0.010 = 1.8119 SNU -> sigma_sq = 18119 */
-    int32_t T_hw_nom = 0x000030A3;
-    int32_t sigma_sq_nom = 18119;
-    printf("\n--- CASO 1: CANAL NOMINAL OPTICO SEGURO (L = 25 km, xi = 0.010 SNU) ---\n");
+    /* Caso 1: Canal nominal (10 km, T = 0.631, xi = 0.010 SNU), heterodino */
+    /* t^2 = T*eta/2 = 0.1893 (Q16.16: 0x3075) */
+    /* Var_B = 1 + v_el + t^2*(V_A + xi) = 2.0483 SNU -> sigma_sq = 20483 */
+    int32_t T_hw_nom = 0x00003075;
+    int32_t sigma_sq_nom = 20483;
+    printf("\n--- CASO 1: CANAL NOMINAL (10 km, xi = 0.010 SNU) ---\n");
     cvqkd_evaluate_frame_security(&params, T_hw_nom, sigma_sq_nom, &res);
     cvqkd_print_security_report(&res);
 
-    /* Caso 2: Canal medido con vectores de MATLAB (T = 0x4424, sigma^2 = 0x5595) */
-    int32_t T_hw_matlab = 0x00004424;
-    int32_t sigma_sq_matlab = 0x00005595;
-    printf("\n--- CASO 2: VECTORES MATLAB HARDWARE (T = 0x4424, sigma^2 = 0x5595) ---\n");
+    /* Caso 2: Estimación hardware de los vectores de MATLAB (expected_llr_math.txt) */
+    int32_t T_hw_matlab = 0x00002F72;
+    int32_t sigma_sq_matlab = 0x00004ECA;
+    printf("\n--- CASO 2: VECTORES MATLAB (T = 0x2F72, sigma^2 = 0x4ECA) ---\n");
     cvqkd_evaluate_frame_security(&params, T_hw_matlab, sigma_sq_matlab, &res);
     cvqkd_print_security_report(&res);
 

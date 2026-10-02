@@ -2,6 +2,7 @@
 %  MASTER TESTBENCH: END-TO-END CV-QKD (Láser -> Fibra -> DSP -> Math)
 % ========================================================================
 clear; clc; close all;
+rng(2026); % Vectores de test reproducibles
 
 %% 0. RUTAS DEL PROYECTO (ajusta si mueves el script)
 SCRIPT_DIR = fileparts(mfilename('fullpath'));
@@ -25,16 +26,16 @@ N_SAMPLES   = N_BOB_DATA/2;   % Datos sacrificados para la estimación
 % En la fibra viajan los datos + los pilotos. Sumamos 1 piloto final para interpolar
 N_FIBER     = N_FRAMES * L_trama + 1; 
 
-% --- Parámetros Físicos del Canal ---
+% --- Parámetros Físicos del Canal (receptor heterodino: P y Q a la vez) ---
 Ts           = 1e-9;   % Tiempo de símbolo (1 Gbaud)
-T_real       = 0.45;    % Transmitancia real de la fibra
-xi_real      = 0.02;   % Ruido en exceso cuántico (SNU)
-V_A_snu      = 4.0;    % Varianza de Alice (SNU)
-V_elec_snu   = 0.1;    % Ruido electrónico (SNU)
-eta_detector = 0.6;    % Eficiencia del fotodiodo
+T_real       = 10^(-0.2); % Transmitancia: bobina de 10 km a 0.2 dB/km
+xi_real      = 0.01;   % Ruido en exceso referido a la entrada del canal (SNU)
+V_A_snu      = 5.0;    % Varianza de Alice (SNU): SNR/dim ~0.86 -> el LDPC (tasa 0.32) converge con beta ~0.72
+V_elec_snu   = 0.1;    % Ruido electrónico de cada detector (SNU de ese detector)
+eta_detector = 0.6;    % Eficiencia del receptor (sin contar el 50:50 del heterodino)
 
 % --- Calibración del Hardware (ADC) ---
-N0_adc_var   = 10000;  % Varianza para 1 SNU
+N0_adc_var   = 10000;  % Varianza de vacío de cada detector (solo LO) = 1 SNU
 Amp_Piloto   = 20000;  % Amplitud fuerte para el pulso piloto (para no perder fase)
 
 %% 1. MODELO DE RUIDO DE FASE DEL CANAL (Tu código integrado)
@@ -72,17 +73,19 @@ Q_A_tx(idx_datos) = sqrt(VarA_adc) * randn(length(idx_datos), 1);
 P_A_tx(idx_pilotos) = Amp_Piloto;
 Q_A_tx(idx_pilotos) = 0;
 
-%% 3. EL CANAL: ATENUACIÓN Y AWGN
-disp('3. La fibra atenúa e inyecta AWGN...');
-Ruido_Total_snu = 1.0 + V_elec_snu + (T_real * eta_detector * xi_real);
+%% 3. EL CANAL Y EL RECEPTOR HETERODINO
+% El híbrido de 90º reparte la señal entre las dos cuadraturas: cada una recibe
+% sqrt(T*eta/2) de la amplitud de Alice y un ruido 1 + v_el + T*eta*xi/2 (SNU).
+disp('3. La fibra atenúa e inyecta AWGN (deteccion heterodina)...');
+Ruido_Total_snu = 1.0 + V_elec_snu + (T_real * eta_detector * xi_real / 2);
 Ruido_Total_adc = Ruido_Total_snu * N0_adc_var;
 
 Z_noise_P = sqrt(Ruido_Total_adc) * randn(N_FIBER, 1);
 Z_noise_Q = sqrt(Ruido_Total_adc) * randn(N_FIBER, 1);
 
 % Rotación de Fase + Atenuación + AWGN
-P_rx_ideal = sqrt(T_real * eta_detector) * P_A_tx;
-Q_rx_ideal = sqrt(T_real * eta_detector) * Q_A_tx;
+P_rx_ideal = sqrt(T_real * eta_detector / 2) * P_A_tx;
+Q_rx_ideal = sqrt(T_real * eta_detector / 2) * Q_A_tx;
 
 P_B_rx = P_rx_ideal .* cos(fase_total_canal) - Q_rx_ideal .* sin(fase_total_canal) + Z_noise_P;
 Q_B_rx = P_rx_ideal .* sin(fase_total_canal) + Q_rx_ideal .* cos(fase_total_canal) + Z_noise_Q;
@@ -147,7 +150,7 @@ cov_AB_float = (cov_mat_P(1,2) + cov_mat_Q(1,2)) / 2;
 Sigma_Sq_ideal   = var_B_float;
 Sigma_ideal      = sqrt(Sigma_Sq_ideal);
 Sqrt_T_eta_ideal = cov_AB_float / VarA_adc;
-T_eta_ideal = Sqrt_T_eta_ideal^2; % T * eta = (Cov / VarA)^2
+T_eta_ideal = Sqrt_T_eta_ideal^2; % (Cov / VarA)^2 = T * eta / 2 en heterodino
 
 %% 6. EMULACIÓN PUNTO FIJO (LLR_Math_Unit FPGA)
 disp('6. Emulando el Hardware de Punto Fijo (FPGA)...');
@@ -784,6 +787,15 @@ if ENABLE_EXPORT_VIVADO
     end
     fclose(fid_syn);
     disp('   -> expected_syndrome.txt generado con éxito (Endianness corregido).');
+
+    % Mismo síndrome en palabras de 32 bits (memoria syn_bram del wrapper de Alice)
+    fid_synw = fopen(fullfile(DATA_DIR, 'expected_syndrome_words.hex'), 'w');
+    for i = 1:mb
+        for w = 0:11
+            fprintf(fid_synw, '%08x\n', bin2dec(char('0' + S_matrix(i, 32*w+32:-1:32*w+1))));
+        end
+    end
+    fclose(fid_synw);
     % =====================================================================
     % Exportar LLRs (u_bits.txt) en formato Signo-Magnitud 8-bits
     % para la L_BRAM del Testbench SystemVerilog
