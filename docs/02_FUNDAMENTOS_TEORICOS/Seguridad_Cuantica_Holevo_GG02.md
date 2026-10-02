@@ -88,4 +88,16 @@ $$\ell = \left\lfloor n K_{\text{finite}} - \log_2(1/\epsilon_{cor}) \right\rflo
 
 No existe aceptación "asintótica": una trama con $K_{\text{finite}} \le 0$ siempre se aborta.
 
-> **Nota**: con bloques de $n = 26\,112$ bits, $\Delta(n) \approx 0.25$ bits/dimensión supera la clave asintótica del punto de trabajo ($\approx 0.03$). Para obtener clave con seguridad de tamaño finito hay que acumular estimación y amplificación de privacidad sobre muchas tramas ($n \gtrsim 10^8$).
+### Evaluación por bloques de tramas
+
+Con una sola trama ($n = 26\,112$ bits, $m = 13\,056$ muestras de estimación) la corrección de tamaño finito y el término $\log_2(1/\epsilon_{cor})$ superan a la clave: toda trama aislada se aborta. Por eso el firmware evalúa la seguridad **por bloques de $F$ tramas**: el acelerador procesa cada trama (MDR y síndrome), la CPU promedia $t = \sqrt{\texttt{T\_FINAL}}$ y $\text{Var}(y)$ de las $F$ tramas (cada una aporta las mismas muestras, así que es la estimación con todas las del bloque) y evalúa una vez con $m$, $n$ y $\text{leak}_{EC}$ multiplicados por $F$.
+
+| $F$ (tramas) | $\ell$ (bits seguros del bloque) |
+|---|---|
+| 1 | 0 (ABORT) |
+| 40 | 3 434 |
+| 50 | 18 341 |
+| 100 | 63 769 |
+| 1000 | 1,08 M |
+
+Con $F = 50$ (valor del firmware) ya hay clave. Una ventana de ataque de 10 tramas dentro de un bloque eleva $\xi$ del bloque completo y lo aborta. `m_samples` y `n_key_bits` son `uint32_t`, lo que limita un bloque a unas 160 000 tramas.

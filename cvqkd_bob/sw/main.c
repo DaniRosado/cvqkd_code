@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <math.h>
 #include "xil_printf.h"
 #include "xparameters.h"
 #include "xaxidma.h"
@@ -48,9 +49,14 @@
 // =============================================================================
 // PARÁMETROS DEL STREAMING Y SEGURIDAD
 // =============================================================================
-#define NUM_STREAM_FRAMES   50    // Total de tramas a procesar en streaming
-#define ATTACK_START_FRAME  31    // Inicio de ventana de ataque / intrusión de Eva
-#define ATTACK_END_FRAME    40    // Fin de ventana de ataque (frames 31-40)
+// La seguridad se evalúa por bloques de tramas: con una sola trama (26.112 bits) la
+// corrección de tamaño finito supera a la clave; a partir de ~40 tramas ya hay clave.
+// (m_samples y n_key_bits son uint32_t: un bloque admite hasta ~160.000 tramas).
+#define FRAMES_PER_BLOCK    50
+#define NUM_BLOCKS          3
+#define NUM_STREAM_FRAMES   (FRAMES_PER_BLOCK * NUM_BLOCKS)
+#define ATTACK_START_FRAME  61    // Ataque de Eva dentro del bloque 2 (tramas 61-70)
+#define ATTACK_END_FRAME    70
 
 // =============================================================================
 // TIMER GLOBAL DE HARDWARE (ARM Cortex-A9 SCU Global Timer @ 325 MHz)
@@ -435,104 +441,110 @@ int main(void) {
                (int)f1_lat_ms, (int)((f1_lat_ms - (int)f1_lat_ms) * 100));
 
     // Evaluación Cuántica en CPU ARM
+    xil_printf("  (Referencia: una trama aislada, n = 26.112 bits. En la fase II la\r\n");
+    xil_printf("   seguridad se evalua por bloques de %d tramas.)\r\n", FRAMES_PER_BLOCK);
     cvqkd_security_result_t sec_res1;
     cvqkd_evaluate_frame_security(&sec_params, T_est, sigma_sq, &sec_res1);
     cvqkd_print_security_report(&sec_res1);
 
     // =========================================================================
-    // FASE II: STREAMING CONTINUO CON EVALUACIÓN DE SEGURIDAD (50 TRAMAS)
+    // FASE II: STREAMING CONTINUO CON SEGURIDAD EVALUADA POR BLOQUES
     // =========================================================================
+    // Cada trama se procesa en el acelerador (MDR y síndrome por trama). La
+    // estimación de parámetros y la amplificación de privacidad se hacen sobre el
+    // bloque completo: todas las tramas aportan el mismo número de muestras, así
+    // que la media de t = Cov/V_A y de Var(B) por trama es la estimación con todas
+    // las muestras del bloque (se promedia t, no t^2, porque Cov es lineal).
+    cvqkd_security_params_t block_params = sec_params;
+    block_params.m_samples    *= FRAMES_PER_BLOCK;
+    block_params.n_key_bits   *= FRAMES_PER_BLOCK;
+    block_params.leak_ec_bits *= FRAMES_PER_BLOCK;
+
     xil_printf("\r\n========================================================================\r\n");
-    xil_printf("   FASE II: STREAMING CONTINUO Y DEFENSA ACTIVA (%d TRAMAS)\r\n", NUM_STREAM_FRAMES);
-    xil_printf("   - Tramas  1 a 30: Canal Nominal (L = 10 km, xi = 0.010 SNU)\r\n");
-    xil_printf("   - Tramas 31 a 40: INYECCION DE ATAQUE / INTRUSION DE EVA (Ruido Elevado)\r\n");
-    xil_printf("   - Tramas 41 a 50: Canal Nominal Recuperado (Defensa y Descarte)\r\n");
+    xil_printf("   FASE II: STREAMING CONTINUO (%d TRAMAS EN %d BLOQUES DE %d)\r\n",
+               NUM_STREAM_FRAMES, NUM_BLOCKS, FRAMES_PER_BLOCK);
+    xil_printf("   - Canal nominal: L = 10 km, xi = 0.010 SNU\r\n");
+    xil_printf("   - Tramas %d a %d: INYECCION DE ATAQUE / INTRUSION DE EVA (bloque 2)\r\n",
+               ATTACK_START_FRAME, ATTACK_END_FRAME);
     xil_printf("========================================================================\r\n");
-    xil_printf(" FRAME | ESTADO | T*eta/2 | xi (SNU) | I(A;B) | chi(BE) | K (b/dim) | LATENCIA | VEREDICTO\r\n");
-    xil_printf("-------+--------+---------+----------+--------+---------+-----------+----------+---------------------\r\n");
 
-    uint32_t pass_count = 0;
-    uint32_t abort_count = 0;
-    uint32_t attack_abort_count = 0;
-    uint64_t total_stream_cycles = 0;
+    uint32_t pass_blocks = 0;
+    uint32_t attack_blocks = 0, attack_blocks_aborted = 0;
     uint64_t total_secure_bits = 0;
+    uint64_t total_stream_cycles = 0;   // Solo procesado: excluye los printf por UART
 
-    for (int frame = 1; frame <= NUM_STREAM_FRAMES; frame++) {
-        bool is_attack_frame = (frame >= ATTACK_START_FRAME && frame <= ATTACK_END_FRAME);
+    for (int block = 1; block <= NUM_BLOCKS; block++) {
+        double sum_t = 0.0, sum_var = 0.0;
+        bool block_has_attack = false;
 
-        // 1. Inyección de datos según escenario
-        if (is_attack_frame) {
-            // Ataque de Eva: Ruido de exceso inducido en las muestras ópticas del heterodino
-            for (int i = 0; i < N_ADC_SAMPLES; i++) {
-                int32_t p = (int16_t)(vec_bob_adc[i] & 0xFFFF);
-                int32_t q = (int16_t)((vec_bob_adc[i] >> 16) & 0xFFFF);
-                int32_t noise_p = ((rand() % 500) - 250);
-                int32_t noise_q = ((rand() % 500) - 250);
-                p += noise_p;
-                q += noise_q;
-                tx_adc_buf[i] = ((uint32_t)(uint16_t)q << 16) | (uint16_t)p;
+        xil_printf(" FRAME | ESTADO | T*eta/2 | sigma^2 (cuentas) | LATENCIA\r\n");
+        xil_printf("-------+--------+---------+-------------------+----------\r\n");
+
+        for (int f = 0; f < FRAMES_PER_BLOCK; f++) {
+            int frame = (block - 1) * FRAMES_PER_BLOCK + f + 1;
+            bool is_attack_frame = (frame >= ATTACK_START_FRAME && frame <= ATTACK_END_FRAME);
+            block_has_attack |= is_attack_frame;
+
+            // 1. Inyección de datos según escenario
+            if (is_attack_frame) {
+                // Ataque de Eva: Ruido de exceso inducido en las muestras ópticas del heterodino
+                for (int i = 0; i < N_ADC_SAMPLES; i++) {
+                    int32_t p = (int16_t)(vec_bob_adc[i] & 0xFFFF);
+                    int32_t q = (int16_t)((vec_bob_adc[i] >> 16) & 0xFFFF);
+                    p += (rand() % 500) - 250;
+                    q += (rand() % 500) - 250;
+                    tx_adc_buf[i] = ((uint32_t)(uint16_t)q << 16) | (uint16_t)p;
+                }
+            } else {
+                for (int i = 0; i < N_ADC_SAMPLES; i++) {
+                    tx_adc_buf[i] = vec_bob_adc[i];
+                }
             }
-        } else {
-            // Canal nominal óptico
-            for (int i = 0; i < N_ADC_SAMPLES; i++) {
-                tx_adc_buf[i] = vec_bob_adc[i];
-            }
+
+            // 2. Procesar la trama en el acelerador (reset, clave nueva, DMAs y espera)
+            uint64_t t_frame_start = read_global_timer();
+            bob_frame_hw_t f_hw;
+            if (bob_process_frame(&f_hw) != XST_SUCCESS) return XST_FAILURE;
+            uint64_t frame_cycles = read_global_timer() - t_frame_start;
+            total_stream_cycles += frame_cycles;
+            double frame_lat_ms = ((double)frame_cycles / GTIMER_FREQ_HZ) * 1000.0;
+
+            // 3. Acumular la estimación del bloque
+            sum_t   += sqrt((double)f_hw.T_final / 65536.0);
+            sum_var += (double)f_hw.sigma_sq;
+
+            int t_dec = (int)(((int64_t)(abs(f_hw.T_final) & 0xFFFF) * 10000) / 65536);
+            xil_printf(" %5d | %s |  0.%04d | %17d | %3d.%02d ms\r\n",
+                       frame, is_attack_frame ? "ATAQUE" : "NORMAL", t_dec, f_hw.sigma_sq,
+                       (int)frame_lat_ms, (int)((frame_lat_ms - (int)frame_lat_ms) * 100));
         }
 
-        // 2. Procesar la trama en el acelerador (reset, clave nueva, DMAs y espera)
-        uint64_t t_frame_start = read_global_timer();
-        bob_frame_hw_t f_hw;
-        if (bob_process_frame(&f_hw) != XST_SUCCESS) return XST_FAILURE;
-        int32_t f_T_est    = f_hw.T_final;
-        int32_t f_sigma_sq = f_hw.sigma_sq;
+        // 4. Evaluación de seguridad del bloque completo
+        double t_blk = sum_t / FRAMES_PER_BLOCK;
+        int32_t T_q16_blk = (int32_t)(t_blk * t_blk * 65536.0 + 0.5);
+        int32_t var_blk   = (int32_t)(sum_var / FRAMES_PER_BLOCK + 0.5);
 
-        // 3. Evaluación de seguridad en CPU ARM Cortex-A9
-        cvqkd_security_result_t f_sec;
-        cvqkd_evaluate_frame_security(&sec_params, f_T_est, f_sigma_sq, &f_sec);
+        cvqkd_security_result_t b_sec;
+        cvqkd_evaluate_frame_security(&block_params, T_q16_blk, var_blk, &b_sec);
 
-        uint64_t t_frame_end = read_global_timer();
-        uint64_t frame_cycles = t_frame_end - t_frame_start;
-        total_stream_cycles += frame_cycles;
-        double frame_lat_ms = ((double)frame_cycles / GTIMER_FREQ_HZ) * 1000.0;
+        xil_printf("\r\n>>> BLOQUE %d (tramas %d-%d%s): %u muestras de estimacion, %u bits de clave bruta\r\n",
+                   block, (block - 1) * FRAMES_PER_BLOCK + 1, block * FRAMES_PER_BLOCK,
+                   block_has_attack ? ", con ataque" : "",
+                   block_params.m_samples, block_params.n_key_bits);
+        cvqkd_print_security_report(&b_sec);
 
-        // Veredicto y acción de defensa
-        if (f_sec.is_secure) {
-            pass_count++;
-            total_secure_bits += f_sec.pa_output_bits;
-            // Ensamblar paquete para Alice
-            bob_tx_alice_packet.block_id = frame;
-            bob_tx_alice_packet.T_final  = f_T_est;
-            bob_tx_alice_packet.sigma_sq = f_sigma_sq;
-        } else {
-            abort_count++;
-            if (is_attack_frame) attack_abort_count++;
-            // Clave descartada inmediatamente, paquete abortado
-            bob_tx_alice_packet.magic_header = 0xDEADBEEF;
+        if (b_sec.is_secure) {
+            pass_blocks++;
+            total_secure_bits += b_sec.pa_output_bits;
         }
-
-        // Formateo de métricas para xil_printf
-        int t_dec = (int)(((int64_t)(abs(f_T_est) & 0xFFFF) * 10000) / 65536);
-        int xi_int = (int)f_sec.xi_snu;
-        int xi_frac = (int)((f_sec.xi_snu - xi_int) * 10000);
-        int iab_int = (int)f_sec.I_AB;
-        int iab_frac = (int)((f_sec.I_AB - iab_int) * 1000);
-        int chi_int = (int)f_sec.chi_BE;
-        int chi_frac = (int)((f_sec.chi_BE - chi_int) * 1000);
-        int k_int = (int)f_sec.K_asymp;
-        int k_frac = (int)((f_sec.K_asymp - k_int) * 10000);
-        int lat_int = (int)frame_lat_ms;
-        int lat_frac = (int)((frame_lat_ms - lat_int) * 100);
-
-        xil_printf(" %5d | %s |  0.%04d |  %2d.%04d  | %d.%03d  |  %d.%03d  |   %d.%04d  | %3d.%02d ms | %s\r\n",
-                   frame,
-                   is_attack_frame ? "ATAQUE" : "NORMAL",
-                   t_dec,
-                   xi_int, xi_frac,
-                   iab_int, iab_frac,
-                   chi_int, chi_frac,
-                   k_int, k_frac,
-                   lat_int, lat_frac,
-                   f_sec.is_secure ? "[ PASS - SEGURO ]" : "[ ABORT - ALERTA ]");
+        if (block_has_attack) {
+            attack_blocks++;
+            if (!b_sec.is_secure) attack_blocks_aborted++;
+        }
+        bob_tx_alice_packet.block_id     = block;
+        bob_tx_alice_packet.T_final      = T_q16_blk;
+        bob_tx_alice_packet.sigma_sq     = var_blk;
+        bob_tx_alice_packet.magic_header = b_sec.is_secure ? 0x514B4431 : 0xDEADBEEF;
     }
 
     // =========================================================================
@@ -542,22 +554,18 @@ int main(void) {
     double avg_lat_ms = total_stream_time_ms / (double)NUM_STREAM_FRAMES;
     double fps = (double)NUM_STREAM_FRAMES / (total_stream_time_ms / 1000.0);
     double optical_mbps = fps * (27857.0 * 32.0) / 1.0e6;
-    double net_skr_mbps = ((double)total_secure_bits / (total_stream_time_ms / 1000.0)) / 1.0e6;
+    double net_skr_kbps = ((double)total_secure_bits / (total_stream_time_ms / 1000.0)) / 1.0e3;
 
     xil_printf("\r\n========================================================================\r\n");
     xil_printf("         RESUMEN FINAL DE STREAMING Y SEGURIDAD CUANTICA                \r\n");
     xil_printf("========================================================================\r\n");
-    xil_printf("  * Total Tramas Procesadas:     %d\r\n", NUM_STREAM_FRAMES);
-    xil_printf("  * Tramas Seguras Autorizadas:  %d (%d%%)\r\n",
-               pass_count, (pass_count * 100) / NUM_STREAM_FRAMES);
-    xil_printf("  * Tramas Abortadas:           %d (%d%%)\r\n",
-               abort_count, (abort_count * 100) / NUM_STREAM_FRAMES);
-    xil_printf("  * Intrusiones Abortadas:       %u/%d tramas de ataque\r\n",
-               attack_abort_count, ATTACK_END_FRAME - ATTACK_START_FRAME + 1);
+    xil_printf("  * Total Tramas Procesadas:     %d (%d bloques de %d)\r\n",
+               NUM_STREAM_FRAMES, NUM_BLOCKS, FRAMES_PER_BLOCK);
+    xil_printf("  * Bloques Seguros Autorizados: %u/%d\r\n", pass_blocks, NUM_BLOCKS);
+    xil_printf("  * Bloques con Ataque Abortados: %u/%u\r\n", attack_blocks_aborted, attack_blocks);
     xil_printf("  ----------------------------------------------------------------------\r\n");
-    xil_printf("  * Tiempo Total de Streaming:   %d.%02d ms (%d.%02d s)\r\n",
-               (int)total_stream_time_ms, (int)((total_stream_time_ms - (int)total_stream_time_ms) * 100),
-               (int)(total_stream_time_ms / 1000.0), (int)(((total_stream_time_ms / 1000.0) - (int)(total_stream_time_ms / 1000.0)) * 100));
+    xil_printf("  * Tiempo Total de Streaming:   %d.%02d ms\r\n",
+               (int)total_stream_time_ms, (int)((total_stream_time_ms - (int)total_stream_time_ms) * 100));
     xil_printf("  * Latencia Media por Trama:    %d.%02d ms\r\n",
                (int)avg_lat_ms, (int)((avg_lat_ms - (int)avg_lat_ms) * 100));
     xil_printf("  * Tasa de Tramas (Throughput): %d.%01d tramas/seg\r\n",
@@ -565,10 +573,8 @@ int main(void) {
     xil_printf("  * Ingesta Optica Bruta:        %d.%02d Mbps\r\n",
                (int)optical_mbps, (int)((optical_mbps - (int)optical_mbps) * 100));
     xil_printf("  * Clave Secreta Neta Generada: %u bits seguros\r\n", (uint32_t)total_secure_bits);
-    xil_printf("  * Tasa Clave Secreta en Vivo:  %d.%03d Mbps\r\n",
-               (int)net_skr_mbps, (int)((net_skr_mbps - (int)net_skr_mbps) * 1000));
-    xil_printf("========================================================================\r\n");
-    xil_printf(" >>> SUBSISTEMA BOB COMPLETADO Y VERIFICADO CON EXITO EN SILICIO <<<\r\n");
+    xil_printf("  * Tasa Clave Secreta en Vivo:  %d.%02d kbps\r\n",
+               (int)net_skr_kbps, (int)((net_skr_kbps - (int)net_skr_kbps) * 100));
     xil_printf("========================================================================\r\n\r\n");
 
     return XST_SUCCESS;
