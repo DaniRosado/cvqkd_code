@@ -70,8 +70,9 @@ module tb_mdr_bob_streaming();
                 err_diff = hw_m[i] - sw_m[i];
                 if (err_diff < 0) err_diff = -err_diff;
                 
-                // Permitimos un margen de 5 unidades por redondeo en Q24
-                if (err_diff > 30000) begin
+                // Tolerancia de la semilla LUT de 1/sqrt (sin Newton-Raphson): error
+                // relativo <= 2^-9 sobre |m| <= sqrt(8) -> 0.0055 en Q24 (0x17000)
+                if (err_diff > 32'h17000) begin
                     if (err_count < 20) begin // Imprimimos solo los 20 primeros errores
                         $display("  [FAIL] Bloque %0d | Dim %0d | Esperado: %08X | Obtenido: %08X", 
                                  check_idx, i+1, sw_m[i], hw_m[i]);
