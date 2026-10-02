@@ -64,6 +64,7 @@ typedef struct {
     double skr_finite_mbps;   /* Tasa neta de clave con tamaño finito [Mbps] */
 
     /* Amplificación de Privacidad (Privacy Amplification) */
+    uint32_t n_key_bits;      /* Bits brutos de clave evaluados (trama o bloque) */
     uint32_t pa_output_bits;  /* Bits seguros a extraer tras amplificación de privacidad */
     double pa_rate;           /* Ratio de compresión de la función hash de Toeplitz */
 

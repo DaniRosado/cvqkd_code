@@ -118,7 +118,7 @@ bool cvqkd_evaluate_frame_security(
     cvqkd_security_result_t *result
 ) {
     if (!params || !result) return false;
-    *result = (cvqkd_security_result_t){ .status_msg = "" };
+    *result = (cvqkd_security_result_t){ .status_msg = "", .n_key_bits = params->n_key_bits };
 
     const double V_A  = params->V_A;
     const double eta  = params->eta;
@@ -257,7 +257,8 @@ void cvqkd_print_security_report(const cvqkd_security_result_t *res) {
     print_float_val("  * Transmitancia T:             ", res->T, "", 4);
     print_float_val("  (Atenuacion: ", res->loss_db, " dB", 2);
     print_float_val(" | Distancia: ", res->distance_km, " km)\r\n", 1);
-    print_float_val("  * Ruido de Exceso (xi):        ", res->xi_snu, " SNU\r\n", 4);
+    print_float_val("  * Ruido de Exceso (xi):        ", res->xi_snu, " SNU", 4);
+    print_float_val(" (peor caso: ", res->xi_worst, " SNU)\r\n", 4);
     print_float_val("  * SNR por cuadratura:          ", res->snr_linear, "", 3);
     print_float_val(" (", res->snr_db, " dB)\r\n", 2);
     PRINTF("  ----------------------------------------------------------------------\r\n");
@@ -268,7 +269,7 @@ void cvqkd_print_security_report(const cvqkd_security_result_t *res) {
     print_float_val(" (", res->skr_asymp_mbps, " Mbps @ 1 Gbaud)\r\n", 2);
     print_float_val("  * Tasa Clave (Tamano Finito):  ", res->K_finite, " bits/dim", 4);
     print_float_val(" (", res->skr_finite_mbps, " Mbps)\r\n", 2);
-    PRINTF("  * Bits tras Amplif. Privacidad: %u / 26112 bits ", res->pa_output_bits);
+    PRINTF("  * Bits tras Amplif. Privacidad: %u / %u bits ", res->pa_output_bits, res->n_key_bits);
     print_float_val("(", res->pa_rate * 100.0, "%)\r\n", 1);
     PRINTF("  ----------------------------------------------------------------------\r\n");
     if (res->is_secure) {
