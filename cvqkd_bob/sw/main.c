@@ -403,6 +403,26 @@ int main(void) {
     xil_printf("  -> Norma MDR ||m||^2: %d.%04d (Teorico: 8.0000) [%s]\r\n",
                n_int, n_frac, (n_int == 8 && n_frac <= 200) ? "OK" : "AVISO");
     xil_printf("  -> Telemetria HW: T*eta/2 = 0x%08X | sigma^2 = %d cuentas\r\n", T_est, sigma_sq);
+
+    // Comparación completa con MATLAB (la trama 1 usa los vectores sin modificar).
+    // El MDR se compara con tolerancia: el hardware usa una semilla LUT de 1/sqrt
+    // (sin Newton-Raphson); 0x30000 = 0.0117 en Q24.
+    int mdr_bad = 0, syn_bad = 0;
+    int32_t mdr_max_diff = 0;
+    for (int i = 0; i < N_MDR_WORDS; i++) {
+        int32_t diff = abs((int32_t)rx_mdr_buf[i] - (int32_t)vec_expected_mdr[i]);
+        if (diff > mdr_max_diff) mdr_max_diff = diff;
+        if (diff > 0x30000) mdr_bad++;
+    }
+    for (int i = 0; i < N_SYN_WORDS; i++) {
+        if (rx_syn_buf[i] != vec_expected_syndrome[i]) syn_bad++;
+    }
+    bool est_ok = (T_est == (int32_t)EXP_T_FINAL) && (sigma_sq == (int32_t)EXP_SIGMA_SQ);
+    xil_printf("  -> Estimacion vs MATLAB: [%s]\r\n", est_ok ? "OK, identica" : "FALLO");
+    xil_printf("  -> MDR vs MATLAB: %d/%d palabras fuera de tolerancia, error max 0x%X (Q24) [%s]\r\n",
+               mdr_bad, N_MDR_WORDS, mdr_max_diff, mdr_bad ? "FALLO" : "OK");
+    xil_printf("  -> Sindrome vs MATLAB: %d/%d palabras distintas [%s]\r\n",
+               syn_bad, N_SYN_WORDS, syn_bad ? "FALLO" : "OK");
     xil_printf("  -> Latencia de procesamiento Trama 1: %d.%02d ms\r\n",
                (int)f1_lat_ms, (int)((f1_lat_ms - (int)f1_lat_ms) * 100));
 
