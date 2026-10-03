@@ -23,13 +23,14 @@ create_project cvqkd_bob $proj_dir -part xc7z020clg400-1
 
 add_files [glob $repo_dir/cvqkd_bob/rtl/*.sv $repo_dir/cvqkd_bob/rtl/*.v]
 add_files [list \
+    $repo_dir/cvqkd_alice/rtl/bg1_rom_pkg.sv \
     $repo_dir/cvqkd_mdr/rtl/mdr_rom_pkg.sv \
     $repo_dir/cvqkd_mdr/rtl/mdr_bob_datapath.sv \
     $repo_dir/cvqkd_mdr/rtl/mdr_bob_streaming.sv]
 
 # Cores de Xilinx usados por el DSP y el estimador (se copian al proyecto)
 foreach ip {cordic_vect_ip cordic_rot_ip cordic_sqrt_q16_16 div_gen_48_32_params} {
-    import_ip $repo_dir/IPs/src/$ip/$ip.xci
+    import_ip $repo_dir/cvqkd_bob/ip/$ip/$ip.xci
 }
 upgrade_ip [get_ips]
 generate_target all [get_ips]

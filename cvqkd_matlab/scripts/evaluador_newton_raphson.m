@@ -75,8 +75,18 @@ y_rom_total = [y_par, y_impar];
 % 3. Convertimos a Punto Fijo Q24
 y_rom_q24 = round(y_rom_total * (2^24));
 
-% 4. Escribimos el archivo
-fid_rom = fopen('mdr_rom_pkg.sv', 'w');
+% 4. Escribimos el paquete directamente en la RTL del MDR
+rtl_dir = fullfile(fileparts(mfilename('fullpath')), '..', '..', 'cvqkd_mdr', 'rtl');
+fid_rom = fopen(fullfile(rtl_dir, 'mdr_rom_pkg.sv'), 'w');
+fprintf(fid_rom, '// ============================================================================\n');
+fprintf(fid_rom, '// Módulo:       mdr_rom_pkg\n');
+fprintf(fid_rom, '// Proyecto:     CV-QKD Hardware Accelerator\n');
+fprintf(fid_rom, '// Descripción:  ROM de semillas Newton-Raphson (1/sqrt) en formato Q24, 512 entradas\n');
+fprintf(fid_rom, '// Dependencias: (ninguna)\n');
+fprintf(fid_rom, '// ----------------------------------------------------------------------------\n');
+fprintf(fid_rom, '// Notas de Arquitectura:\n');
+fprintf(fid_rom, '// Direcciones 0-255: 1/sqrt(x); Direcciones 256-511: 1/sqrt(x)*1/sqrt(2) (paridad impar).\n');
+fprintf(fid_rom, '// ============================================================================\n\n');
 fprintf(fid_rom, 'package mdr_rom_pkg;\n\n');
 fprintf(fid_rom, '    // ROM de Semillas Newton-Raphson (512 posiciones)\n');
 fprintf(fid_rom, '    // Direcciones 0-255:   1/sqrt(x)\n');

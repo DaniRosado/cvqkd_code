@@ -80,14 +80,14 @@ module tb_param_estimator_top();
         alice_stream_valid = 0;
         bob_stream_data    = 0;
         alice_stream_data  = 0;
-        calib_VarA = 32'd40000;
+        calib_VarA = 32'd50000; // V_A = 5 SNU x N0 = 10000 cuentas
 
         $display("-------------------------------------------------------------------------");
         $display("[TB] Cargando archivos generados por MATLAB...");
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/ptr_ram.txt", mem_ptr);
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_ram.txt", mem_bob);
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/alice_ram.txt", mem_alice);
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_llr_math.txt", mem_expected);
+        $readmemh("ptr_ram.txt", mem_ptr);
+        $readmemh("bob_ram.txt", mem_bob);
+        $readmemh("alice_ram.txt", mem_alice);
+        $readmemh("expected_llr_math.txt", mem_expected);
         $display("[TB] Archivos cargados con exito.");
 
         #20 rst_n = 1;
@@ -147,8 +147,10 @@ module tb_param_estimator_top();
             
             if (err[0]<=5 && err[1]<=5 && err[2]<=5 && err[3]<=5) begin
                 $display("  [ OK ] ¡EXITO! El hardware emula a MATLAB con precision perfecta.");
+                $display("RESULTADO: PASS");
             end else begin
                 $display("  [ X ]  ¡FALLO! Error detectado en la cadena matematica.");
+                $display("RESULTADO: FAIL");
             end
             $display("=========================================================================");
         end

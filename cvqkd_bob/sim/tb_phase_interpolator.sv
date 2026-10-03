@@ -6,8 +6,8 @@ module tb_phase_interpolator();
     // 1. Declaración de Parámetros y Señales
     // =========================================================================
     localparam THETA_WIDTH = 18; // Formato Q3.15
-    localparam NUM_PILOTS = 3483; // 55713 / 16 = 3482 tramas completas + 1 piloto final
-    localparam NUM_DATA_OUT = 52224;
+    localparam NUM_PILOTS   = 1742;  // 27857 / 16 = 1741 tramas completas + 1 piloto final
+    localparam NUM_DATA_OUT = 26115; // 15 datos por cada par de pilotos consecutivos
 
     logic clk;
     logic rst;
@@ -22,17 +22,15 @@ module tb_phase_interpolator();
     logic cordic_valid;
 
     // Memorias para los vectores de MATLAB
-    logic [31:0] mem_pilotos [0:3500];
+    logic [31:0] mem_pilotos [0:NUM_PILOTS-1];
     logic [31:0] mem_fase_estimada [0:NUM_DATA_OUT-1];
 
     // Contadores y variables de monitoreo
     integer data_count = 0;
     integer error_count = 0;
     integer max_error = 0;
-    logic signed [17:0] fase_esperada;
+    int fase_esperada;   // Q3.15 completo (MATLAB guarda la fase desenrollada en 32 bits)
     integer current_error;
-    integer file_out;
-    integer file_handle;
 
     // =========================================================================
     // 2. Instanciación del DUT (Design Under Test)
@@ -60,35 +58,26 @@ module tb_phase_interpolator();
     // =========================================================================
     // 4. Proceso Monitor (Comprobador de Resultados)
     // =========================================================================
-    initial begin
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_interpolator_alone.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            file_out = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_interpolator_alone.txt", "w");
-        end else begin
-            file_out = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_bob/sim/sim_interpolator_alone.txt", "w");
-        end
-        if (file_out == 0) begin
-            $display("ERROR: No se pudo abrir el archivo para escribir.");
-        end
-    end
+    // Diferencia entre dos ángulos Q3.15 reducida a [-pi, pi] (MATLAB guarda la fase
+    // desenrollada y el hardware la envuelve: difieren en múltiplos de 2*pi)
+    localparam int Q15_PI = 102944, Q15_TWO_PI = 205887;
+    function automatic int angle_err(input int a, input int b);
+        int d = a - b;
+        while (d >  Q15_PI) d -= Q15_TWO_PI;
+        while (d < -Q15_PI) d += Q15_TWO_PI;
+        return (d < 0) ? -d : d;
+    endfunction
     always_ff @(negedge clk) begin
         if (cordic_valid) begin
             if (data_count < NUM_DATA_OUT) begin
                 // Extraemos el valor esperado
-                fase_esperada = mem_fase_estimada[data_count][17:0];
+                fase_esperada = $signed(mem_fase_estimada[data_count]);
                 
                 // IMPORTANTE: El DUT niega el ángulo (-theta_raw). Le damos la vuelta para comparar.
-                current_error = $signed(-cordic_theta) - fase_esperada;
-                if (current_error < 0) current_error = -current_error; // Valor absoluto
+                current_error = angle_err($signed(-cordic_theta), fase_esperada);
 
                 // Actualizamos estadísticas
                 if (current_error > max_error) max_error = current_error;
-
-                // Guardar en archivo: [idx, fase_dut, fase_esperada]
-                if (file_out != 0) begin
-                    $fdisplay(file_out, "%0d %0d %0d", data_count, $signed(-cordic_theta), fase_esperada);
-                end
 
                 // Si el error es mayor de 30 unidades, avisamos
                 if (current_error > 30) begin
@@ -114,22 +103,8 @@ module tb_phase_interpolator();
     // 5. Proceso Estímulos (Inyección de Pilotos)
     // =========================================================================
     initial begin
-        // Cargamos los archivos (Compatible Windows/Linux)
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_pilotos_raw.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_pilotos_raw.txt", mem_pilotos);
-        end else begin
-            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/fase_pilotos_raw.txt", mem_pilotos);
-        end
-
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_estimada_datos.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_estimada_datos.txt", mem_fase_estimada);
-        end else begin
-            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/fase_estimada_datos.txt", mem_fase_estimada);
-        end
+        $readmemh("fase_pilotos_raw.txt",    mem_pilotos);
+        $readmemh("fase_estimada_datos.txt", mem_fase_estimada);
 
         // A) Reset del sistema
         rst = 1'b1;
@@ -167,11 +142,12 @@ module tb_phase_interpolator();
         
         if (error_count == 0 && data_count == NUM_DATA_OUT) begin
             $display("\n    [ OK ] El interpolador matematico es PERFECTO.");
+            $display("RESULTADO: PASS");
         end else begin
             $display("\n    [ X ]  El interpolador acumula error matematico.");
+            $display("RESULTADO: FAIL");
         end
         $display("=================================================================\n");
-        if (file_out != 0) $fclose(file_out);
         $finish;
     end
 

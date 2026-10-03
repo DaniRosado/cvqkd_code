@@ -1,17 +1,24 @@
 # Makefile para Benchmarks CV-QKD (Alice y Bob): Hardware FPGA vs CPU Software
 
-CC_HOST = gcc
-CC_ARM  = /home/drg/AMD/Xilin/2025.2/Vitis/gnu/aarch32/lin/gcc-arm-none-eabi/bin/arm-none-eabi-gcc
-SIZE_ARM = /home/drg/AMD/Xilin/2025.2/Vitis/gnu/aarch32/lin/gcc-arm-none-eabi/bin/arm-none-eabi-size
+# Rutas de la instalación de Vitis y de la plataforma de Bob (PYNQ-Z2) para los binarios ARM:
+#   make arm XILINX_VITIS=/ruta/a/Vitis VITIS_WS=/ruta/al/workspace
+XILINX_VITIS ?= $(HOME)/AMD/Xilin/2025.2/Vitis
+VITIS_WS     ?= $(HOME)/VitisProyects
+ARM_BIN  = $(XILINX_VITIS)/gnu/aarch32/lin/gcc-arm-none-eabi/bin
+BSP      = $(VITIS_WS)/cvqkd_bob/cvqkd_bob_platform/export/cvqkd_bob_platform/sw/standalone_ps7_cortexa9_0
 
-CFLAGS_HOST = -O3 -Wall -Wextra -I.
-CFLAGS_ARM  = -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -O3 -Wall -Wextra -I. \
-              -isystem /home/drg/VitisProyects/cvqkd_bob/cvqkd_bob_platform/export/cvqkd_bob_platform/sw/standalone_ps7_cortexa9_0/include \
-              -DPLATFORM_ARM_BAREMETAL=1
+CC_HOST  = gcc
+CC_ARM   = $(ARM_BIN)/arm-none-eabi-gcc
+SIZE_ARM = $(ARM_BIN)/arm-none-eabi-size
 
-LDFLAGS_ARM = -specs=/home/drg/VitisProyects/cvqkd_bob/cvqkd_bob_platform/export/cvqkd_bob_platform/sw/standalone_ps7_cortexa9_0/Xilinx.spec \
-              -T /home/drg/VitisProyects/cvqkd_bob/cvqkd_bob_app/src/lscript.ld \
-              -L/home/drg/VitisProyects/cvqkd_bob/cvqkd_bob_platform/export/cvqkd_bob_platform/sw/standalone_ps7_cortexa9_0/lib \
+# Módulo de seguridad, vectores de MATLAB y script de enlazado: los del firmware de Bob
+BOB_SW = ../cvqkd_bob/sw
+
+CFLAGS_HOST = -O3 -Wall -Wextra -I. -I$(BOB_SW)
+CFLAGS_ARM  = -mcpu=cortex-a9 -mfpu=vfpv3 -mfloat-abi=hard -O3 -Wall -Wextra -I. -I$(BOB_SW) \
+              -isystem $(BSP)/include -DPLATFORM_ARM_BAREMETAL=1
+
+LDFLAGS_ARM = -specs=$(BSP)/Xilinx.spec -T $(BOB_SW)/lscript.ld -L$(BSP)/lib \
               -Wl,--start-group,-lxilstandalone,-lxiltimer,-lxil,-lgcc,-lc,-lm,--end-group
 
 all: host arm bob_host bob_arm
@@ -39,17 +46,17 @@ cvqkd_benchmark_pynq_arm.elf: bench_arm.o
 # ------------------------------------------------------------------------------
 bob_host: bench_bob_host
 
-bench_bob_host: cvqkd_bob_cpu_benchmark.c cvqkd_security.c cvqkd_security.h matlab_vectors.h cvqkd_benchmark_data.h
-	$(CC_HOST) $(CFLAGS_HOST) cvqkd_bob_cpu_benchmark.c cvqkd_security.c -o bench_bob_host -lm
+bench_bob_host: cvqkd_bob_cpu_benchmark.c $(BOB_SW)/cvqkd_security.c $(BOB_SW)/cvqkd_security.h $(BOB_SW)/matlab_vectors.h cvqkd_benchmark_data.h
+	$(CC_HOST) $(CFLAGS_HOST) cvqkd_bob_cpu_benchmark.c $(BOB_SW)/cvqkd_security.c -o bench_bob_host -lm
 	@echo ">>> Compilado bench_bob_host (Bob x86-64) con exito!"
 
 bob_arm: cvqkd_bob_benchmark_pynq_arm.elf
 
-bench_bob_arm.o: cvqkd_bob_cpu_benchmark.c cvqkd_security.h matlab_vectors.h cvqkd_benchmark_data.h
+bench_bob_arm.o: cvqkd_bob_cpu_benchmark.c $(BOB_SW)/cvqkd_security.h $(BOB_SW)/matlab_vectors.h cvqkd_benchmark_data.h
 	$(CC_ARM) $(CFLAGS_ARM) -c cvqkd_bob_cpu_benchmark.c -o bench_bob_arm.o
 
-cvqkd_security_arm.o: cvqkd_security.c cvqkd_security.h
-	$(CC_ARM) $(CFLAGS_ARM) -c cvqkd_security.c -o cvqkd_security_arm.o
+cvqkd_security_arm.o: $(BOB_SW)/cvqkd_security.c $(BOB_SW)/cvqkd_security.h
+	$(CC_ARM) $(CFLAGS_ARM) -c $(BOB_SW)/cvqkd_security.c -o cvqkd_security_arm.o
 
 cvqkd_bob_benchmark_pynq_arm.elf: bench_bob_arm.o cvqkd_security_arm.o
 	$(CC_ARM) $(CFLAGS_ARM) bench_bob_arm.o cvqkd_security_arm.o $(LDFLAGS_ARM) -o cvqkd_bob_benchmark_pynq_arm.elf
@@ -63,10 +70,13 @@ run_bob_host: bench_bob_host
 	./bench_bob_host
 
 run_bob_arm: cvqkd_bob_benchmark_pynq_arm.elf
-	python3 run_bob_benchmark_arm.py
+	python3 ../tools/run_board.py bench-bob
+
+run_alice_arm: cvqkd_benchmark_pynq_arm.elf
+	python3 ../tools/run_board.py bench-alice
 
 clean:
 	rm -f bench_host bench_arm.o cvqkd_benchmark_pynq_arm.elf \
 	      bench_bob_host bench_bob_arm.o cvqkd_security_arm.o cvqkd_bob_benchmark_pynq_arm.elf
 
-.PHONY: all host arm bob_host bob_arm run_bob_host run_bob_arm clean
+.PHONY: all host arm bob_host bob_arm run_bob_host run_bob_arm run_alice_arm clean

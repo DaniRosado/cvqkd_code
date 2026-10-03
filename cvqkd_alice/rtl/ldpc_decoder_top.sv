@@ -124,15 +124,11 @@ module ldpc_decoder_top #(
         .write_data(dp_r_write_data)
     );
 
-    // Memoria interna para el síndrome esperado de Alice (Bob)
-    // Inicializada con $readmemb como fallback de simulación, pero sobreescribible en caliente
+    // Síndrome objetivo calculado por Bob: se carga fila a fila por el puerto target_syn
     logic [Z-1:0] target_syndrome_mem [0:45];
-    initial begin
-        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_syndrome.txt", target_syndrome_mem);
-    end
 
     always_ff @(posedge clk) begin
-        if (target_syn_we === 1'b1) begin
+        if (target_syn_we) begin
             target_syndrome_mem[target_syn_addr] <= target_syn_data;
         end
     end

@@ -12,8 +12,8 @@ module tb_mdr_alice_top();
     // =====================================================================
     // 1. PARÁMETROS Y SEÑALES DE CONTROL
     // =====================================================================
-    localparam int TOTAL_BLOCKS = 13056; 
-    localparam int TOTAL_LLRS   = TOTAL_BLOCKS * 8; // 104.448 LLRs individuales
+    localparam int TOTAL_BLOCKS = 3264;
+    localparam int TOTAL_LLRS   = TOTAL_BLOCKS * 8; // 26.112 LLRs individuales
     localparam int CLK_PERIOD   = 10;               // Frecuencia: 100 MHz
 
     logic clk;
@@ -35,22 +35,28 @@ module tb_mdr_alice_top();
     // =====================================================================
     // 2. MEMORIAS EMULADAS PARA LA SIMULACIÓN
     // =====================================================================
-    // Memorias orientadas a bloques (13056 posiciones)
+    // Memorias orientadas a bloques (3264 posiciones)
     logic [127:0] ram_x_mem [0:TOTAL_BLOCKS-1];
     logic [255:0] ram_m_mem [0:TOTAL_BLOCKS-1];
     logic [31:0]  ram_k_mem [0:TOTAL_BLOCKS-1];
     
-    // Memoria orientada a LLRs individuales (104448 posiciones, 1 byte por línea)
+    // Memoria orientada a LLRs individuales (26112 posiciones, 1 byte por línea)
     logic [7:0]   expected_llr_mem [0:TOTAL_LLRS-1];
+
+    // Contadores del comprobador
+    int errores_totales = 0;
+    int llrs_checked    = 0;
+    logic [7:0] hw_llr, exp_llr;
+    int hw_val, exp_val, diff;
 
     // =====================================================================
     // 3. CARGA DE LA "VERDAD ABSOLUTA" DE MATLAB
     // =====================================================================
     initial begin
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/alice_mdr_inputs.txt",          ram_x_mem);
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_m_messages.txt",       ram_m_mem);
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/alice_k_dynamic.txt",           ram_k_mem);
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_llrs_hardware.txt",    expected_llr_mem);
+        $readmemh("alice_mdr_inputs.txt",          ram_x_mem);
+        $readmemh("expected_m_messages.txt",       ram_m_mem);
+        $readmemh("alice_k_dynamic.txt",           ram_k_mem);
+        $readmemh("expected_llrs_hardware.txt",    expected_llr_mem);
         
         $display("---------------------------------------------------");
         $display("[TB-ALICE] Archivos cuánticos cargados con éxito.");
@@ -58,15 +64,11 @@ module tb_mdr_alice_top();
     end
 
     // Comportamiento síncrono de las memorias de lectura del sistema
-    always_comb begin
+    always @(posedge clk) begin   // Lectura síncrona (1 ciclo), como las BRAM del wrapper
         if (ram_x_en) begin
-            ram_x_data = ram_x_mem[ram_x_addr];
-            ram_m_data = ram_m_mem[ram_x_addr];
-            ram_k_data = ram_k_mem[ram_x_addr];
-        end else begin
-            ram_x_data = '0;
-            ram_m_data = '0;
-            ram_k_data = '0;
+            ram_x_data <= ram_x_mem[ram_x_addr];
+            ram_m_data <= ram_m_mem[ram_x_addr];
+            ram_k_data <= ram_k_mem[ram_x_addr];
         end
     end
 
@@ -114,28 +116,29 @@ module tb_mdr_alice_top();
         
         // Esperamos a que la FSM complete todos los bloques
         wait(done == 1'b1);
-        
+        repeat (50) @(posedge clk);  // Vaciado del pipeline de salida
         $display("---------------------------------------------------");
-        $display("  [TB-ALICE] SIMULACIÓN COMPLETADA CON ÉXITO");
+        $display("  [TB-ALICE] %0d LLRs comprobados, %0d fuera de tolerancia", llrs_checked, errores_totales);
         $display("---------------------------------------------------");
+        if (errores_totales == 0 && llrs_checked == TOTAL_LLRS) $display("RESULTADO: PASS");
+        else                                                     $display("RESULTADO: FAIL");
         $finish;
     end
 
     // =====================================================================
     // 6. CHEQUEADOR EN TIEMPO REAL (Tolerante a diferencias de redondeo)
     // =====================================================================
-    int errores_totales = 0;
-
-    always_ff @(posedge clk) begin
+    always @(posedge clk) begin
         if (ram_write_en) begin
-            logic [7:0] hw_llr  = ram_write_data;
-            logic [7:0] exp_llr = expected_llr_mem[ram_write_addr];
-            
+            hw_llr  = ram_write_data;
+            exp_llr = expected_llr_mem[ram_write_addr];
+            llrs_checked++;
+
             // Convertimos el formato Signo-Magnitud a entero con signo para restar
-            int hw_val  = (hw_llr[7])  ? -int'(hw_llr[6:0])  : int'(hw_llr[6:0]);
-            int exp_val = (exp_llr[7]) ? -int'(exp_llr[6:0]) : int'(exp_llr[6:0]);
-            
-            int diff = hw_val - exp_val;
+            hw_val  = (hw_llr[7])  ? -int'(hw_llr[6:0])  : int'(hw_llr[6:0]);
+            exp_val = (exp_llr[7]) ? -int'(exp_llr[6:0]) : int'(exp_llr[6:0]);
+
+            diff = hw_val - exp_val;
             if (diff < 0) diff = -diff;
             
             // Tolerancia estricta: permitimos un desfase de +/- 2 unidades
@@ -148,7 +151,8 @@ module tb_mdr_alice_top();
                 
                 if (errores_totales > 20) begin
                     $display("[TB-ALICE] Demasiados errores detectados. Abortando.");
-                    $stop;
+                    $display("RESULTADO: FAIL");
+                    $finish;
                 end
             end else begin
                 // Reporte periódico para comprobar la salud de la simulación

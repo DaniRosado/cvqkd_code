@@ -1,75 +1,70 @@
 `timescale 1ns / 1ps
 
+// Test del nodo de variable (VNU) en signo-magnitud: mensajes R y L_q de W = 8 bits
+// y LLR a posteriori de WL = 10 bits.
+//   Fase 1: L_q = L_read - R_old (exacto en L_q_full, saturado a +/-127 para la CNU)
+//   Fase 2: L_write = L_q_full + R_new, saturado a +/-511
 module tb_vnu_node();
 
-    // Señales
-    logic [7:0] L_read, R_old, L_q;
-    logic [7:0] L_q_delayed, R_new, L_write;
+    localparam int W  = 8;
+    localparam int WL = 10;
 
-    // Instancia del DUT
-    vnu_node dut (
-        .L_read      (L_read),
-        .R_old       (R_old),
-        .L_q         (L_q),
-        .L_q_delayed (L_q_delayed),
-        .R_new       (R_new),
-        .L_write     (L_write)
+    logic [WL-1:0]      L_read, L_write;
+    logic [W-1:0]       R_old, R_new, L_q;
+    logic signed [WL:0] L_q_full, L_q_full_delayed;
+
+    vnu_node #(.W(W), .WL(WL)) dut (
+        .L_read          (L_read),
+        .R_old           (R_old),
+        .L_q             (L_q),
+        .L_q_full        (L_q_full),
+        .L_q_full_delayed(L_q_full_delayed),
+        .R_new           (R_new),
+        .L_write         (L_write)
     );
 
-    // Tarea de ayuda para imprimir resultados en Signo-Magnitud
-    task check_result(input string name, input logic [7:0] val, input int expected_val);
-        int real_val;
-        if (val[7]) real_val = -int'(val[6:0]);
-        else        real_val =  int'(val[6:0]);
-        
-        if (real_val == expected_val)
-            $display("[OK]   %s: Obtenido %d (Bin: %b)", name, real_val, val);
-        else
-            $display("[FAIL] %s: Esperado %d, Obtenido %d (Bin: %b)", name, expected_val, real_val, val);
-    endtask
+    int errors = 0;
 
-    // Tarea para convertir entero a SM en el TB
-    function logic [7:0] to_sm(input int val);
-        if (val < 0) return {1'b1, 7'(-val)};
-        else         return {1'b0, 7'(val)};
+    // Entero -> signo-magnitud de WL y de W bits
+    function automatic logic [WL-1:0] sm(input int val);
+        return (val < 0) ? {1'b1, (WL-1)'(-val)} : {1'b0, (WL-1)'(val)};
+    endfunction
+    function automatic logic [W-1:0] sm8(input int val);
+        return (val < 0) ? {1'b1, (W-1)'(-val)} : {1'b0, (W-1)'(val)};
     endfunction
 
+    function automatic int to_int(input logic [WL-1:0] val, input int bits);
+        int mag = val & ((1 << (bits-1)) - 1);
+        return val[bits-1] ? -mag : mag;
+    endfunction
+
+    // Aplica un caso completo (las dos fases) y comprueba las tres salidas
+    task automatic check(input int l_read, input int r_old, input int r_new,
+                         input int exp_lq, input int exp_lq_full, input int exp_lwrite);
+        L_read = sm(l_read);
+        R_old  = sm8(r_old);
+        #1;
+        L_q_full_delayed = L_q_full;
+        R_new  = sm8(r_new);
+        #1;
+        if (to_int(L_q, W) != exp_lq || L_q_full != exp_lq_full || to_int(L_write, WL) != exp_lwrite) begin
+            $display("  [FAIL] L_read=%0d R_old=%0d R_new=%0d -> L_q=%0d L_q_full=%0d L_write=%0d (esperado %0d %0d %0d)",
+                     l_read, r_old, r_new, to_int(L_q, W), L_q_full, to_int(L_write, WL),
+                     exp_lq, exp_lq_full, exp_lwrite);
+            errors++;
+        end
+    endtask
+
     initial begin
-        $display("=== INICIANDO TESTBENCH VNU ===");
+        //      L_read  R_old  R_new | L_q   L_q_full  L_write
+        check(   20,     5,    -10,     15,     15,        5);  // Caso normal
+        check(  -10,    20,     40,    -30,    -30,       10);  // Cruce por cero
+        check(  300,   -50,    100,    127,    350,      450);  // L_q satura, el posterior no
+        check( -500,    50,    -20,   -127,   -550,     -511);  // Saturación negativa del posterior
+        check(  511,  -127,    127,    127,    638,      511);  // Extremos de rango
 
-        // --- TEST 1: Caso Normal ---
-        $display("\n-- TEST 1: Resta y Suma Normal --");
-        L_read = to_sm(20);  R_old = to_sm(5);  // L_q debe ser 15
-        #10;
-        check_result("L_q (20 - 5)", L_q, 15);
-        
-        L_q_delayed = L_q;   R_new = to_sm(-10); // L_write debe ser 5
-        #10;
-        check_result("L_write (15 + (-10))", L_write, 5);
-
-        // --- TEST 2: Cruce por Cero ---
-        $display("\n-- TEST 2: Cruce por Cero --");
-        L_read = to_sm(-10); R_old = to_sm(20); // L_q debe ser -30
-        #10;
-        check_result("L_q (-10 - 20)", L_q, -30);
-        
-        L_q_delayed = L_q;   R_new = to_sm(40); // L_write debe ser 10
-        #10;
-        check_result("L_write (-30 + 40)", L_write, 10);
-
-        // --- TEST 3: Saturación Positiva ---
-        $display("\n-- TEST 3: Saturación Positiva --");
-        L_read = to_sm(100); R_old = to_sm(-50); // 150 -> Satura a 127
-        #10;
-        check_result("L_q (100 - (-50))", L_q, 127);
-
-        // --- TEST 4: Saturación Negativa ---
-        $display("\n-- TEST 4: Saturación Negativa --");
-        L_read = to_sm(-100); R_old = to_sm(50); // -150 -> Satura a -127
-        #10;
-        check_result("L_q (-100 - 50)", L_q, -127);
-
-        $display("\n=== TESTBENCH FINALIZADO ===");
+        if (errors == 0) $display("tb_vnu_node: 5 casos correctos\nRESULTADO: PASS");
+        else             $display("tb_vnu_node: %0d casos con error\nRESULTADO: FAIL", errors);
         $finish;
     end
 

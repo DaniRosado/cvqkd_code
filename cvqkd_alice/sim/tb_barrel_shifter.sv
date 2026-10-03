@@ -1,116 +1,103 @@
 `timescale 1ns / 1ps
 
+// Test exhaustivo del barrel shifter de Alice: los 384 desplazamientos en las dos
+// direcciones con datos aleatorios, contra una rotación calculada en el testbench.
 module tb_barrel_shifter();
 
-    // Reducimos Z a 8 solo para el testbench (facilita ver las formas de onda)
-    localparam int Z = 8;
+    localparam int Z = 384;
     localparam int W = 8;
 
-    // Señales
+    // Señales del Hardware (DUT)
     logic [W-1:0] data_in  [0:Z-1];
     logic [8:0]   shift_val;
     logic         dir_inverse;
     logic [W-1:0] data_out [0:Z-1];
 
-    // Instancia del DUT (Device Under Test)
-    barrel_shifter #(
-        .Z(Z),
-        .W(W)
-    ) dut (
+    // Instancia del bloque que queremos torturar
+    barrel_shifter #(.Z(Z), .W(W)) dut (
         .data_in    (data_in),
         .shift_val  (shift_val),
         .dir_inverse(dir_inverse),
         .data_out   (data_out)
     );
 
+    int errores_directo = 0;
+    int errores_inverso = 0;
+
     initial begin
-        $display("=== INICIANDO TESTBENCH BARREL SHIFTER ===");
+        $display("==================================================");
+        $display("   TEST INTENSIVO DEL BARREL SHIFTER (Z=384)");
+        $display("==================================================");
 
-        // 1. Inicializar la entrada con un patrón reconocible (ej. 10, 20, 30...)
-        for (int i = 0; i < Z; i++) begin
-            data_in[i] = (i + 1) * 10;
-        end
+        // =======================================================
+        // PRUEBA AUTOMÁTICA AUTÓNOMA (384 Shifts x 2 Direcciones)
+        // =======================================================
+        $display("[TEST] Verificación exhaustiva: los 384 desplazamientos en las dos direcciones...");
+        begin
+            int total_tests_auto = 0;
+            logic [W-1:0] test_in [0:Z-1];
+            logic [W-1:0] exp_out [0:Z-1];
 
-        // --- TEST 1: Sin desplazamiento (Directo) ---
-        shift_val   = 0;
-        dir_inverse = 1'b0;
-        #10;
-        $display("TEST 1 (Shift 0, Directo) -> Out[0]: %0d (Esperado: 10)", data_out[0]);
-
-        // --- TEST 2: Desplazamiento de 2 posiciones (Directo) ---
-        // data_in[0] (que es 10) debería ir a data_out[2]
-        shift_val   = 2;
-        dir_inverse = 1'b0;
-        #10;
-        $display("TEST 2 (Shift 2, Directo) -> Out[2]: %0d (Esperado: 10)", data_out[2]);
-        $display("TEST 2 (Shift 2, Directo) -> Out[0]: %0d (Esperado: 70)", data_out[0]); // El 70 da la vuelta
-
-        // --- TEST 3: Desplazamiento de 2 posiciones (Inverso) ---
-        // Para deshacer el camino, data_in[2] debería volver a data_out[0]
-        // (Simulamos que la salida del test 2 entra al shifter inverso)
-        data_in = data_out; // Metemos la salida rotada como nueva entrada
-        shift_val   = 2;
-        dir_inverse = 1'b1; // Modo Inverso
-        #10;
-        $display("TEST 3 (Shift 2, Inverso) -> Out[0]: %0d (Esperado: 10)", data_out[0]);
-
-        // --- TEST 4: Verificación Exhaustiva Automática (todos los shifts 0..Z-1 en ambos sentidos) ---
-        $display("\n--- INICIANDO VERIFICACIÓN EXHAUSTIVA (Z=%0d) ---", Z);
-        begin : test_exhaustive
-            int num_errors = 0;
-            logic [W-1:0] orig_data [0:Z-1];
-            logic [W-1:0] exp_data  [0:Z-1];
-
-            // Cargar datos base
-            for (int i = 0; i < Z; i++) begin
-                orig_data[i] = (i + 1) * 10;
+            // Inicializar patrón aleatorio pero determinista
+            for (int z = 0; z < Z; z++) begin
+                test_in[z] = (z * 17 + 5) & 8'hFF;
             end
 
-            // 4.1 Barrido Directo
+            // 3.1 Todos los shifts directos (0 a 383)
             dir_inverse = 1'b0;
             for (int s = 0; s < Z; s++) begin
-                data_in = orig_data;
-                shift_val = s;
+                data_in   = test_in;
+                shift_val = s[8:0];
                 #10;
-                // Calcular esperado según fórmula original
-                for (int i = 0; i < Z; i++) begin
-                    exp_data[(i + s) % Z] = orig_data[i];
+                for (int z = 0; z < Z; z++) begin
+                    exp_out[(z + s) % Z] = test_in[z];
                 end
-                for (int i = 0; i < Z; i++) begin
-                    if (data_out[i] !== exp_data[i]) begin
-                        $display("[ERROR DIRECTO] Shift=%0d, Pos=%0d -> Obtenido: %0d, Esperado: %0d",
-                                 s, i, data_out[i], exp_data[i]);
-                        num_errors++;
+                for (int z = 0; z < Z; z++) begin
+                    if (data_out[z] !== exp_out[z]) begin
+                        $display("[FALLO AUTO DIRECTO] Shift %0d, Pos %0d: Esperado %0d, Obtenido %0d",
+                                 s, z, exp_out[z], data_out[z]);
+                        errores_directo++;
                     end
                 end
+                total_tests_auto += Z;
             end
 
-            // 4.2 Barrido Inverso
+            // 3.2 Todos los shifts inversos (0 a 383)
             dir_inverse = 1'b1;
             for (int s = 0; s < Z; s++) begin
-                data_in = orig_data;
-                shift_val = s;
+                data_in   = test_in;
+                shift_val = s[8:0];
                 #10;
-                for (int i = 0; i < Z; i++) begin
-                    exp_data[(i + (Z - (s % Z))) % Z] = orig_data[i];
+                for (int z = 0; z < Z; z++) begin
+                    exp_out[(z + (Z - (s % Z))) % Z] = test_in[z];
                 end
-                for (int i = 0; i < Z; i++) begin
-                    if (data_out[i] !== exp_data[i]) begin
-                        $display("[ERROR INVERSO] Shift=%0d, Pos=%0d -> Obtenido: %0d, Esperado: %0d",
-                                 s, i, data_out[i], exp_data[i]);
-                        num_errors++;
+                for (int z = 0; z < Z; z++) begin
+                    if (data_out[z] !== exp_out[z]) begin
+                        $display("[FALLO AUTO INVERSO] Shift %0d, Pos %0d: Esperado %0d, Obtenido %0d",
+                                 s, z, exp_out[z], data_out[z]);
+                        errores_inverso++;
                     end
                 end
+                total_tests_auto += Z;
             end
-
-            if (num_errors == 0) begin
-                $display(">>> TEST 4 SUPERADO CON ÉXITO: Todos los desplazamientos verificados al 100%% sin errores.");
-            end else begin
-                $display(">>> TEST 4 FALLIDO: Se encontraron %0d errores.", num_errors);
-            end
+            $display("[INFO] Completados %0d chequeos individuales en modo autónomo.", total_tests_auto);
         end
 
-        $display("=== TESTBENCH FINALIZADO ===");
+        // =======================================================
+        // VEREDICTO FINAL
+        // =======================================================
+        $display("==================================================");
+        if (errores_directo == 0 && errores_inverso == 0) begin
+            $display("   *** ÉXITO TOTAL: EL SHIFTER ES PERFECTO ***");
+            $display("   Superados con éxito todos los tests individuales.");
+            $display("RESULTADO: PASS");
+        end else begin
+            $display("   *** ALERTA ROJA: SE ENCONTRARON FALLOS ***");
+            $display("   Errores Directos: %0d", errores_directo);
+            $display("   Errores Inversos: %0d", errores_inverso);
+            $display("RESULTADO: FAIL");
+        end
+        $display("==================================================");
         $finish;
     end
 

@@ -52,6 +52,7 @@ module tb_cvqkd_syndrome_pingpong();
     // =========================================================================
     int frames_checked = 0;
     int err_count      = 0;
+    int total_errors   = 0;
 
     // Array para capturar el síndrome emitido por streaming
     logic [383:0] captured_syndrome [0:ROWS-1];
@@ -84,6 +85,7 @@ module tb_cvqkd_syndrome_pingpong();
                 $display("  [ OK ] Trama %0d calculada sin errores. !Match perfecto!", frames_checked + 1);
             end
             
+            total_errors += err_count;
             frames_checked++;
             err_count      = 0;   // Reseteamos para la siguiente trama
             rows_captured <= 0;
@@ -102,8 +104,8 @@ module tb_cvqkd_syndrome_pingpong();
         $display("=========================================================================");
         $display("[TB PING-PONG] Cargando archivos de MATLAB...");
         
-        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_random_bits.txt", mem_trng_in);
-        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_syndrome.txt", mem_expected_syndrome);
+        $readmemb("bob_random_bits.txt", mem_trng_in);
+        $readmemb("expected_syndrome.txt", mem_expected_syndrome);
         
         #40;
         rst_n = 1;
@@ -152,9 +154,14 @@ module tb_cvqkd_syndrome_pingpong();
         
         #100;
         $display("-------------------------------------------------------------------------");
-        $display("  [ OK ] !PRUEBA DE ESTRES SUPERADA!");
-        $display("         El hardware ha absorbido 2 tramas seguidas haciendo uso ");
-        $display("         del Ping-Pong Buffer de forma transparente y sin colisiones.");
+        if (total_errors == 0) begin
+            $display("  [ OK ] !PRUEBA DE ESTRES SUPERADA!");
+            $display("         El hardware ha absorbido 2 tramas seguidas haciendo uso ");
+            $display("         del Ping-Pong Buffer de forma transparente y sin colisiones.");
+            $display("RESULTADO: PASS");
+        end else begin
+            $display("RESULTADO: FAIL");
+        end
         $display("=========================================================================");
         
         $finish;

@@ -92,9 +92,9 @@ module tb_cvqkd_alice_axi_wrapper();
     logic [383:0] mem_block_bits [0:67];
 
     initial begin
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/alice_mdr_inputs.txt",    mem_x_raw);
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_m_messages.txt", mem_m_raw);
-        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/block_bits.txt",          mem_block_bits);
+        $readmemh("alice_mdr_inputs.txt",    mem_x_raw);
+        $readmemh("expected_m_messages.txt", mem_m_raw);
+        $readmemb("block_bits.txt",          mem_block_bits);
     end
 
     // Reloj
@@ -223,6 +223,7 @@ module tb_cvqkd_alice_axi_wrapper();
 
         if (((status_val >> 2) & 1) == 0) begin
             $display("[ERROR FATAL] El decodificador LDPC no convergio.");
+            $display("RESULTADO: FAIL");
             $finish;
         end
 
@@ -251,8 +252,10 @@ module tb_cvqkd_alice_axi_wrapper();
         if (key_errors == 0) begin
             $display("  [ OK ] !EXITO TOTAL! La clave de Alice reconciliada en hardware");
             $display("         coincide al 100%% bit a bit con Bob (816/816 palabras, 26.112 bits).");
+            $display("RESULTADO: PASS");
         end else begin
             $display("  [FAIL] %0d palabras de clave con discrepancias.", key_errors);
+            $display("RESULTADO: FAIL");
         end
         $display("=========================================================================\n");
 

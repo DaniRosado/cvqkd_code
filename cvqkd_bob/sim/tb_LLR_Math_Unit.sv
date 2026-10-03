@@ -57,32 +57,18 @@ module tb_LLR_Math_Unit();
     // =========================================================================
     // PROCESO DE TEST (STIMULUS)
     // =========================================================================
-    integer file_handle;
 
     initial begin
-        // 1. CARGA DE ARCHIVOS (Compatible Windows/Linux)
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/accumulators.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/accumulators.txt", mem_accumulators);
-        end else begin
-            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/accumulators.txt", mem_accumulators);
-        end
-
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/expected_llr_math.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/expected_llr_math.txt", mem_expected);
-        end else begin
-            $readmemh("/home/drg/tmp/cvqkd_bob/Matlab/expected_llr_math.txt", mem_expected);
-        end
+        // 1. CARGA DE ARCHIVOS
+        $readmemh("accumulators.txt",      mem_accumulators);
+        $readmemh("expected_llr_math.txt", mem_expected);
         
         // 2. CONDICIONES INICIALES
         rst        = 1'b1;
         start_calc = 1'b0;
         
-        // Asignamos la calibración generada en MATLAB (4.0 SNU * 10000)
-        calib_VarA = 32'd40000; 
+        // Calibración de MATLAB: V_A = 5 SNU x N0 = 10000 cuentas
+        calib_VarA = 32'd50000;
         
         // Inyectamos los acumuladores leídos del TXT
         sum_sq_P_B = mem_accumulators[0];
@@ -95,16 +81,18 @@ module tb_LLR_Math_Unit();
         sum_cov_Q  = mem_accumulators[6];
         sum_Q_A    = mem_accumulators[7];
 
-        #25 rst = 1'b0; // Soltamos reset
+        // Los netlists de los IP (divisor y CORDIC) están en reset global (GSR)
+        // los primeros 100 ns: el cálculo se lanza después.
+        #200 rst = 1'b0;
         
         $display("\n=======================================================");
         $display("[INFO] Iniciando Simulacion de la Unidad LLR Math...");
         
-        // 3. DISPARO DEL CÁLCULO
-        @(posedge clk);
+        // 3. DISPARO DEL CÁLCULO (pulso de 1 ciclo, dado en el flanco de bajada)
+        @(negedge clk);
         start_calc = 1'b1;
-        @(posedge clk);
-        start_calc = 1'b0; // Pulso de 1 ciclo
+        @(negedge clk);
+        start_calc = 1'b0;
         
         // 4. ESPERAMOS A QUE TERMINE LA TUBERÍA
         wait(data_ready == 1'b1);
@@ -154,9 +142,11 @@ module tb_LLR_Math_Unit();
         if (num_errores == 0) begin
             $display("  [ OK ] ¡HARDWARE PERFECTO! ");
             $display("         La FPGA coincide bit a bit con la emulacion de MATLAB.");
+            $display("RESULTADO: PASS");
         end else begin
             $display("  [ X ]  ¡ERROR MATEMATICO! ");
             $display("         Al menos un parametro supera el margen de tolerancia.");
+            $display("RESULTADO: FAIL");
         end
         $display("=======================================================\n");
     endtask

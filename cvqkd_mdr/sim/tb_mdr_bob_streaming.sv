@@ -97,9 +97,9 @@ module tb_mdr_bob_streaming();
         $display("=========================================================================");
         $display("[TB MDR STREAMING] Cargando plantillas de oro desde MATLAB...");
         
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_mdr_inputs.txt", mem_Y_in); 
-        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_random_bits.txt", mem_trng_in); // ¡Leemos en binario!
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_m_messages.txt", mem_m_exp);
+        $readmemh("bob_mdr_inputs.txt", mem_Y_in); 
+        $readmemb("bob_random_bits.txt", mem_trng_in); // ¡Leemos en binario!
+        $readmemh("expected_m_messages.txt", mem_m_exp);
         
         #40;
         rst_n = 1;
@@ -143,8 +143,10 @@ module tb_mdr_bob_streaming();
         if (err_count == 0) begin
             $display("  [ OK ] ¡EXITO ABSOLUTO! El pipeline del MDR funciona sin un solo fallo.");
             $display("         Tolerancia de redondeo y paradas de flujo superadas.");
+            $display("RESULTADO: PASS");
         end else begin
             $display("  [CRITICAL] Se han encontrado %0d discrepancias de datos.", err_count);
+            $display("RESULTADO: FAIL");
         end
         $display("=========================================================================");
         

@@ -89,6 +89,7 @@ module tb_cvqkd_reconciliation_top();
     // =========================================================================
     int syn_frames_checked = 0;
     int syn_err_count      = 0;
+    int syn_total_errors   = 0;
 
     // Captura de filas streaming + verificación
     logic [383:0] captured_syndrome [0:ROWS-1];
@@ -116,37 +117,21 @@ module tb_cvqkd_reconciliation_top();
             if (syn_err_count == 0) $display("  [ OK ] Trama %0d: Matriz de Sindrome Perfecta.", syn_frames_checked + 1);
             else                    $display("  [FAIL] Trama %0d: %0d errores en Sindrome.", syn_frames_checked + 1, syn_err_count);
             
+            syn_total_errors += syn_err_count;
             syn_frames_checked++;
             syn_err_count      = 0;
             syn_rows_captured <= 0;
         end
     end
 
+    // Clave de Bob: un byte nuevo por bloque 8D, como la memoria de clave del wrapper
     int contador = 0;
-    int contador_valids = 0;
-    logic retardo = 0;
-    // vamos a actualizar el TRNG cada vez que veamos la señal de valid_data del MDR, para simular que el TRNG se actualiza con cada bloque procesado
-    always_ff @(negedge clk) begin
-        /*if (dut.router_valid) begin
-            if (contador_valids < 4)
-                contador_valids <= contador_valids + 1;
-            else
-                contador_valids <= 1;
-        end*/
-        if(dut.accum_valid) begin
+    always @(negedge clk) begin
+        if (dut.accum_valid) begin
             trng_data <= mem_trng_in[contador];
-            if(contador < 3263) contador++;
-            else    contador <= 0; 
+            contador  <= (contador < BLOCKS_PER_FRAME - 1) ? contador + 1 : 0;
         end
     end
-    
-    /*always_ff @(posedge clk) begin
-        if (contador_valids == 2) begin
-            trng_data <= mem_trng_in[contador];
-            if(contador < 3263) contador++;
-            else    contador <= 0;  
-        end
-    end*/
 
     // =========================================================================
     // 6. HILO PRINCIPAL: EMULADOR DEL ROUTER
@@ -159,10 +144,10 @@ module tb_cvqkd_reconciliation_top();
 
         $display("=========================================================================");
         $display("[TB TOP] Cargando archivos de MATLAB...");
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_mdr_inputs.txt", mem_Y_in); 
-        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_random_bits.txt", mem_trng_in); 
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_m_messages.txt", mem_m_exp);
-        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_syndrome.txt", mem_syn_exp);
+        $readmemh("bob_mdr_inputs.txt", mem_Y_in); 
+        $readmemb("bob_random_bits.txt", mem_trng_in); 
+        $readmemh("expected_m_messages.txt", mem_m_exp);
+        $readmemb("expected_syndrome.txt", mem_syn_exp);
         
         trng_data <= mem_trng_in[0];
         
@@ -207,6 +192,10 @@ module tb_cvqkd_reconciliation_top();
         $display("-------------------------------------------------------------------------");
         if (mdr_err_count == 0) $display("  [ OK ] MDR: Los 6528 mensajes inyectados cruzaron el pipeline con exito.");
         else                    $display("  [FAIL] MDR: Detectados %0d errores en pipeline.", mdr_err_count);
+        if (mdr_err_count == 0 && mdr_check_idx == 2 * BLOCKS_PER_FRAME && syn_total_errors == 0)
+            $display("RESULTADO: PASS");
+        else
+            $display("RESULTADO: FAIL");
         $display("=========================================================================");
         
         $finish;

@@ -10,9 +10,10 @@ module tb_mac_variance();
     logic               clear;
     logic               enable;
     logic signed [15:0] data_in;
-    
+
     logic signed [63:0] sum_sq;
     logic signed [63:0] sum_val;
+    logic               math_ok;
 
     // =========================================================================
     // 2. Instanciación del DUT (Device Under Test)
@@ -44,10 +45,10 @@ module tb_mac_variance();
         clear   = 1'b0;
         enable  = 1'b0;
         data_in = '0;
-        
+
         #20; // Esperamos 2 ciclos de reloj
         rst = 1'b0;
-        
+
         $display("---------------------------------------------------");
         $display("[INFO] Iniciando Test de Calculador de Varianza...");
 
@@ -55,13 +56,13 @@ module tb_mac_variance();
         // Vamos a inyectar los datos en cada flanco de subida sin parar
         @(posedge clk);
         enable <= 1'b1; data_in <= 16'sd2;   // Inyectamos un 2 positivo
-        
+
         @(posedge clk);
         enable <= 1'b1; data_in <= -16'sd3;  // Inyectamos un 3 negativo
-        
+
         @(posedge clk);
         enable <= 1'b1; data_in <= 16'sd4;   // Inyectamos un 4 positivo
-        
+
         @(posedge clk);
         enable <= 1'b1; data_in <= -16'sd5;  // Inyectamos un 5 negativo
 
@@ -71,8 +72,8 @@ module tb_mac_variance();
         data_in <= '0;
 
         // C) ESPERA DEL PIPELINE
-        // Nuestro bloque tiene 3 etapas de pipeline. 
-        // Esperamos unos 5 ciclos para estar 100% seguros de que los datos 
+        // Nuestro bloque tiene 3 etapas de pipeline.
+        // Esperamos unos 5 ciclos para estar 100% seguros de que los datos
         // han cruzado todos los registros y se han sumado.
         repeat(5) @(posedge clk);
 
@@ -81,7 +82,8 @@ module tb_mac_variance();
         $display("       -> Sumatorio simple esperado : -2  | Obtenido: %0d", sum_val);
         $display("       -> Sumatorio cuad. esperado  : 54  | Obtenido: %0d", sum_sq);
 
-        if (sum_val == -2 && sum_sq == 54) begin
+        math_ok = (sum_val == -2 && sum_sq == 54);
+        if (math_ok) begin
             $display(" ");
             $display("  [ OK ] ¡CHECK MATEMÁTICO SUPERADO! ");
             $display("         El bloque maneja signos y pipelines correctamente.");
@@ -91,20 +93,22 @@ module tb_mac_variance();
             $display("  [ X ]  ¡FALLO EN EL HARDWARE! ");
             $display(" ");
         end
-        
+
         // E) PRUEBA DEL CLEAR (Limpieza entre tramas)
         $display("[INFO] Probando la senal de CLEAR...");
         clear <= 1'b1;
         @(posedge clk);
         clear <= 1'b0;
-        
+
         @(posedge clk); // Esperamos a que los acumuladores se actualicen
-        
+
         if (sum_val == 0 && sum_sq == 0) begin
             $display("  [ OK ] El hardware se ha reseteado correctamente.");
         end else begin
             $display("  [ X ]  Error en el CLEAR.");
         end
+        if (math_ok && sum_val == 0 && sum_sq == 0) $display("RESULTADO: PASS");
+        else                                        $display("RESULTADO: FAIL");
 
         $display("---------------------------------------------------");
         $finish;

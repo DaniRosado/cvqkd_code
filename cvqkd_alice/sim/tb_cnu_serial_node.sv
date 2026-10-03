@@ -9,7 +9,7 @@ module tb_cnu_serial_node();
     logic       valid_in;
     logic [6:0] col_idx_in;
     logic [7:0] L_q_in;
-    
+
     logic [6:0] min1_out, min2_out, min1_col_out;
     logic       total_sign_out;
 
@@ -54,11 +54,11 @@ module tb_cnu_serial_node();
         valid_in   = 0;
         col_idx_in = 0;
         L_q_in     = 0;
-        
+
         #20 rst_n = 1;
-        
+
         $display("=== INICIANDO TESTBENCH CNU (SERIAL) ===");
-        
+
         // --- TEST 1: Simular una fila de 5 aristas ---
         // Vamos a inyectar estos valores (Signo, Magnitud):
         // Col 0: (+, 40)
@@ -68,37 +68,36 @@ module tb_cnu_serial_node();
         // Col 9: (+, 16)  <- Debería desplazar al Min 2
         //
         // Signo total esperado: (+) ^ (-) ^ (+) ^ (-) ^ (+) = (+) -> 0
-        // Min1 sin escalar: 12. Escalo (12 - 3) = 9
-        // Min2 sin escalar: 16. Escalo (16 - 4) = 12
-        // Min1 Columna: 2
-        
+        // Min1 = 12 (columna 2) y Min2 = 16. El CNU no escala: el factor
+        // alpha = 0.75 se aplica en el datapath tras elegir min1/min2.
+
         @(posedge clk);
         start_row = 1'b1; // Reseteamos la fila
-        
+
         // Inyectamos los 5 datos
-        send_data(7'd0, 1'b0, 7'd40); 
+        send_data(7'd0, 1'b0, 7'd40);
         send_data(7'd2, 1'b1, 7'd12);
         send_data(7'd5, 1'b0, 7'd60);
         send_data(7'd8, 1'b1, 7'd20);
         send_data(7'd9, 1'b0, 7'd16);
-        
+
         // Paramos de inyectar
         @(posedge clk);
         valid_in <= 1'b0;
-        
+
         // Dejamos un ciclo para que la salida se estabilice visualmente
         @(posedge clk);
-        
+
         $display("\n-- Resultados de la Fila 1 --");
-        $display("Min1 Magnitud Esperada: 9  | Obtenida: %0d", min1_out);
-        $display("Min2 Magnitud Esperada: 12 | Obtenida: %0d", min2_out);
+        $display("Min1 Magnitud Esperada: 12 | Obtenida: %0d", min1_out);
+        $display("Min2 Magnitud Esperada: 16 | Obtenida: %0d", min2_out);
         $display("Columna del Min1 Esp. : 2  | Obtenida: %0d", min1_col_out);
         $display("Signo Total Esperado  : 0  | Obtenido: %0b", total_sign_out);
-        
-        if (min1_out == 9 && min2_out == 12 && min1_col_out == 2 && total_sign_out == 0)
-            $display("-> [OK] Test de Búsqueda y Escalado Superado.");
+
+        if (min1_out == 12 && min2_out == 16 && min1_col_out == 2 && total_sign_out == 0)
+            $display("-> [OK] Test de búsqueda de mínimos superado.\nRESULTADO: PASS");
         else
-            $display("-> [FAIL] Hubo errores en el cálculo.");
+            $display("-> [FAIL] Hubo errores en el cálculo.\nRESULTADO: FAIL");
 
         $display("\n=== TESTBENCH FINALIZADO ===");
         $finish;

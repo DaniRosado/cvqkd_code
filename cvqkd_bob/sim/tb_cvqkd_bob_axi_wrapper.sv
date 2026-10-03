@@ -165,12 +165,12 @@ module tb_cvqkd_bob_axi_wrapper();
     endtask
 
     initial begin
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_raw_adc.txt", mem_adc);
-        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/mask_bit.txt", mem_mask);
-        $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/alice_ram.txt", mem_alice);
-        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_random_bits.txt", mem_key);
-        $readmemb("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/expected_syndrome.txt", mem_syn);
-        fd = $fopen("dump.txt", "w");
+        $readmemh("bob_raw_adc.txt", mem_adc);
+        $readmemb("mask_bit.txt", mem_mask);
+        $readmemh("alice_ram.txt", mem_alice);
+        $readmemb("bob_random_bits.txt", mem_key);
+        $readmemb("expected_syndrome.txt", mem_syn);
+        fd = $fopen("dump.txt", "w");  // Volcado de diagnóstico en el directorio de simulación
 
         repeat (10) @(posedge aclk);
         aresetn <= 1;
@@ -223,8 +223,8 @@ module tb_cvqkd_bob_axi_wrapper();
 
         $fclose(fd);
         $display("=========================================================================");
-        if (errors == 0) $display("  [ EXITO ] Todas las comprobaciones superadas.");
-        else             $display("  [ FALLO ] %0d comprobaciones fallidas.", errors);
+        if (errors == 0) $display("  [ EXITO ] Todas las comprobaciones superadas.\nRESULTADO: PASS");
+        else             $display("  [ FALLO ] %0d comprobaciones fallidas.\nRESULTADO: FAIL", errors);
         $display("=========================================================================");
         $finish;
     end
@@ -233,6 +233,7 @@ module tb_cvqkd_bob_axi_wrapper();
     initial begin
         #20ms;
         $display("[TIMEOUT] mdr_beats=%0d syn_rows=%0d", mdr_beats, syn_rows);
+        $display("RESULTADO: FAIL");
         $finish;
     end
 

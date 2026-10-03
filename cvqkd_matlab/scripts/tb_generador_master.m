@@ -8,10 +8,8 @@ rng(2026); % Vectores de test reproducibles
 SCRIPT_DIR = fileparts(mfilename('fullpath'));
 if isempty(SCRIPT_DIR), SCRIPT_DIR = pwd(); end
 addpath(SCRIPT_DIR);
-DATA_DIR   = fullfile(SCRIPT_DIR, '..', 'data');
-BOB_DIR    = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_bob');
-ALICE_DATA_DIR = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_alice', 'data');
-ALICE_SIM_DIR  = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_alice', 'sim');
+DATA_DIR   = fullfile(SCRIPT_DIR, '..', 'data');                     % Vectores de test (y matriz base BG1)
+RTL_DIR    = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_alice', 'rtl');  % Destino de bg1_rom_pkg.sv
 
 %% 0.1. PARÁMETROS DEL SISTEMA
 ENABLE_EXPORT_VIVADO = true;
@@ -328,7 +326,7 @@ end
 %% 9. Carga y expansión de la matriz LDPC
 disp('9. Carga matriz LDPC y Sindrome...');
 
-bg_matrix = load(fullfile(BOB_DIR, 'NR_1_1_384.txt'));
+bg_matrix = load(fullfile(DATA_DIR, 'NR_1_1_384.txt'));
 [mb, nb] = size(bg_matrix);
 Z = 384;
 
@@ -552,7 +550,7 @@ fprintf('   -> Flips en ultima iteracion: %d\n', metrics_flips(iter_converged));
 
 %% 11. GENERADOR DE ROM SYSTEMVERILOG ---
 disp('11. Generando ROM System Verilog');
-fileID = fopen('bg1_rom_pkg.sv', 'w');
+fileID = fopen(fullfile(RTL_DIR, 'bg1_rom_pkg.sv'), 'w');
 
 fprintf(fileID, 'package bg1_rom_pkg;\n\n');
 
@@ -883,39 +881,6 @@ disp('--- PEGA ESTO EN MDR_ALICE_DATAPATH.SV ---');
 disp('======================================================');
 
 % Inyectamos un vector de prueba (1 a 8) para extraer el ADN de tu matriz
-X_dummy = (1:8)'; 
-M_X = generar_matriz_ortogonal(X_dummy);
-
-% Extraemos los índices (restamos 1 porque SystemVerilog empieza en 0)
-M_IDX = abs(M_X) - 1;
-
-% Extraemos los signos (1 si es negativo, 0 si es positivo)
-M_NEG = M_X < 0;
-
-% 1. Imprimir M_IDX
-fprintf('localparam int M_IDX [0:7][0:7] = ''{\n');
-for r = 1:8
-    fprintf('    ''{%d, %d, %d, %d, %d, %d, %d, %d}', M_IDX(r,:));
-    if r < 8, fprintf(','); end
-    fprintf('\n');
-end
-fprintf('};\n\n');
-
-% 2. Imprimir M_NEG
-fprintf('localparam logic M_NEG [0:7][0:7] = ''{\n');
-for r = 1:8
-    fprintf('    ''{%d, %d, %d, %d, %d, %d, %d, %d}', M_NEG(r,:));
-    if r < 8, fprintf(','); end
-    fprintf('\n');
-end
-fprintf('};\n');
-disp('======================================================');
-
-disp('======================================================');
-disp('--- PEGA ESTE CÓDIGO EN mdr_alice_datapath.sv ---');
-disp('======================================================');
-
-% Inyectamos un vector de prueba para extraer el ADN de TU matriz exacta
 X_dummy = (1:8)'; 
 M_X = generar_matriz_ortogonal(X_dummy);
 

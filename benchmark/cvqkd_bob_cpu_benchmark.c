@@ -463,9 +463,9 @@ int main(void) {
     double throughput_raw_mbps = fps * (27857.0 * 32.0) / 1.0e6;
     double throughput_data_mbps = fps * (26112.0) / 1.0e6;
 
-    // Latencia del Acelerador Hardware Bob en FPGA (medido con DMA streaming)
-    // El hardware realiza Etapas 1..4 en pipeline a 100 MHz (~1.5 ms a nivel RTL)
-    double fpga_hw_ms = 1.50; // Latencia pura del datapath de hardware
+    // Latencia del acelerador de Bob medida en la PYNQ-Z2 (03/10/2026):
+    // DMA + DSP + estimación + MDR + síndrome por trama, con el PL a 71,4 MHz
+    double fpga_hw_ms = 1.94;
 
     PRINTF("\r\n========================================================================\r\n");
     PRINTF("          DESGLOSE DE LATENCIA POR ETAPA EN SOFTWARE                    \r\n");
@@ -501,7 +501,7 @@ int main(void) {
     PRINTF("========================================================================\r\n");
     PRINTF("  * Latencia Software CPU:           %d.%02d ms / trama\r\n",
            (int)avg_ms_tot, (int)((avg_ms_tot - (int)avg_ms_tot) * 100));
-    PRINTF("  * Latencia Hardware FPGA (RTL):    %d.%02d ms / trama\r\n",
+    PRINTF("  * Latencia Hardware FPGA (placa):  %d.%02d ms / trama\r\n",
            (int)fpga_hw_ms, (int)((fpga_hw_ms - (int)fpga_hw_ms) * 100));
     PRINTF("  * SPEEDUP ACELERADOR FPGA:         %d.%01dx mas rapido que esta CPU\r\n",
            (int)speedup, (int)((speedup - (int)speedup) * 10));

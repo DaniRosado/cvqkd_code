@@ -9,7 +9,7 @@ module tb_mac_covariance();
     logic               enable;
     logic signed [15:0] data_bob;
     logic signed [15:0] data_alice;
-    
+
     logic signed [63:0] sum_cov;
     logic signed [63:0] sum_val_bob;
     logic signed [63:0] sum_val_alice;
@@ -40,23 +40,23 @@ module tb_mac_covariance();
         enable     = 1'b0;
         data_bob   = '0;
         data_alice = '0;
-        
+
         #20;
         rst = 1'b0;
-        
+
         $display("---------------------------------------------------");
         $display("[INFO] Iniciando Test de Covarianza Cruzada...");
 
         // INYECCIÓN PAR A PAR
         @(posedge clk);
         enable <= 1'b1; data_bob <=  16'sd2; data_alice <=  16'sd3;
-        
+
         @(posedge clk);
         enable <= 1'b1; data_bob <= -16'sd3; data_alice <=  16'sd2;
-        
+
         @(posedge clk);
         enable <= 1'b1; data_bob <=  16'sd4; data_alice <= -16'sd1;
-        
+
         @(posedge clk);
         enable <= 1'b1; data_bob <= -16'sd5; data_alice <= -16'sd4;
 
@@ -78,11 +78,11 @@ module tb_mac_covariance();
             $display(" ");
             $display("  [ OK ] ¡CHECK DE COVARIANZA SUPERADO! ");
             $display("         Cruces de signos y sumas perfectas.");
-            $display(" ");
+            $display("RESULTADO: PASS");
         end else begin
             $display(" ");
             $display("  [ X ]  ¡ERROR EN LOS DSP Slices! ");
-            $display(" ");
+            $display("RESULTADO: FAIL");
         end
 
         $display("---------------------------------------------------");

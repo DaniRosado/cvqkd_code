@@ -6,8 +6,11 @@ module tb_cvqkd_bob_dsp_top();
     // 1. Declaración de Parámetros y Señales
     // =========================================================================
     localparam ADC_WIDTH = 16;
-    localparam NUM_SAMPLES_IN = 55713;  
-    localparam NUM_SAMPLES_OUT = 52230; 
+    // Trama de MATLAB: 1.742 pilotos + 26.115 datos; bob_ram.txt guarda los 26.112 primeros
+    localparam NUM_SAMPLES_IN  = 27857;
+    localparam NUM_SAMPLES_OUT = 26115;
+    localparam NUM_PILOTS      = 1742;
+    localparam NUM_CHECK       = 26112;
 
     logic clk;
     logic rst;
@@ -20,10 +23,9 @@ module tb_cvqkd_bob_dsp_top();
     // Memorias
     logic [31:0] memoria_in [0:NUM_SAMPLES_IN-1];
     logic [31:0] memoria_expected [0:NUM_SAMPLES_OUT-1];
-    logic [31:0] mem_pilotos_esperados [0:3500]; 
-    logic [31:0] mem_fase_estimada [0:NUM_SAMPLES_OUT-1]; // NUEVO ARCHIVO
+    logic [31:0] mem_pilotos_esperados [0:NUM_PILOTS-1];
+    logic [31:0] mem_fase_estimada [0:NUM_SAMPLES_OUT-1];
 
-    integer file_out, file_err, file_phase, file_handle;
 
     // --- Contadores Datos ---
     integer out_counter = 0;   
@@ -34,12 +36,12 @@ module tb_cvqkd_bob_dsp_top();
 
     // --- Contadores Pilotos ---
     integer piloto_count = 0;
-    logic signed [17:0] fase_esperada;
+    int fase_esperada;
     integer error_fase, max_error_fase = 0, sum_error_fase = 0, pilotos_fuera_margen = 0;
 
     // --- Contadores Interpolador ---
     integer fase_datos_count = 0;
-    logic signed [17:0] fase_interpolada_esperada;
+    int fase_interpolada_esperada;   // Q3.15 completo (fase desenrollada de MATLAB)
     integer error_fase_interp, max_error_interp = 0, errores_interp_count = 0;
 
     // =========================================================================
@@ -55,35 +57,27 @@ module tb_cvqkd_bob_dsp_top();
 
     initial begin clk = 0; forever #5 clk = ~clk; end
 
-    initial begin
-        // Apertura de archivos de SALIDAAAAAA (Compatible Windows/Linux)
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_outputs.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            file_out = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_outputs.txt", "w");
-            file_err = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_errors.txt", "w");
-            file_phase = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Sim/sim_phase_interp.txt", "w");
-        end else begin
-            file_out = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/sim_outputs.txt", "w");
-            file_err = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/sim_errors.txt", "w");
-            file_phase = $fopen("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/sim_phase_interp.txt", "w");
-        end
-    end
+    // Diferencia entre dos ángulos Q3.15 reducida a [-pi, pi] (MATLAB guarda la fase
+    // desenrollada y el hardware la envuelve: difieren en múltiplos de 2*pi)
+    localparam int Q15_PI = 102944, Q15_TWO_PI = 205887;
+    function automatic int angle_err(input int a, input int b);
+        int d = a - b;
+        while (d >  Q15_PI) d -= Q15_TWO_PI;
+        while (d < -Q15_PI) d += Q15_TWO_PI;
+        return (d < 0) ? -d : d;
+    endfunction
 
     // =========================================================================
     // VERIFICACIÓN DE DATOS FINALES (P y Q)
     // =========================================================================
     always_ff @(negedge clk) begin
         if (valid_out) begin
-            $fdisplay(file_out, "%04x%04x", q_out[15:0], p_out[15:0]);
 
-            if (expected_idx < 52224) begin
+            if (expected_idx < NUM_CHECK) begin
                 exp_q = memoria_expected[expected_idx][31:16];
                 exp_p = memoria_expected[expected_idx][15:0];
                 diff_p = $signed(p_out) - exp_p;
                 diff_q = $signed(q_out) - exp_q;
-    
-                if (file_err != 0) $fdisplay(file_err, "%0d %0d %0d", out_counter, diff_p, diff_q);
 
                 abs_diff_p = (diff_p < 0) ? -diff_p : diff_p;
                 abs_diff_q = (diff_q < 0) ? -diff_q : diff_q;
@@ -105,9 +99,8 @@ module tb_cvqkd_bob_dsp_top();
     // =========================================================================
     always_ff @(posedge clk) begin
         if (dut.cordic1_to_interp_valid) begin
-            fase_esperada = mem_pilotos_esperados[piloto_count][17:0];
-            error_fase = $signed(dut.cordic1_to_interp_theta) - fase_esperada;
-            if (error_fase < 0) error_fase = -error_fase; 
+            fase_esperada = $signed(mem_pilotos_esperados[piloto_count]);
+            error_fase = angle_err($signed(dut.cordic1_to_interp_theta), fase_esperada);
 
             if (error_fase > max_error_fase) max_error_fase = error_fase;
             sum_error_fase = sum_error_fase + error_fase;
@@ -123,18 +116,12 @@ module tb_cvqkd_bob_dsp_top();
     always_ff @(posedge clk) begin
         // Se activa cuando el interpolador envía un ángulo de dato válido a CORDIC 2
         if (dut.interp_cordic_valid) begin
-            if (fase_datos_count < 52224) begin
-                fase_interpolada_esperada = mem_fase_estimada[fase_datos_count][17:0];
+            if (fase_datos_count < NUM_SAMPLES_OUT) begin
+                fase_interpolada_esperada = $signed(mem_fase_estimada[fase_datos_count]);
                 
                 // IMPORTANTE: Le damos la vuelta al ángulo de Vivado porque está negado (-theta_raw)
-                error_fase_interp = $signed(-dut.interp_cordic_theta) - fase_interpolada_esperada;
+                error_fase_interp = angle_err($signed(-dut.interp_cordic_theta), fase_interpolada_esperada);
                 
-                // Guardamos en archivo para graficar en MATLAB
-                if (file_phase != 0) begin
-                    $fdisplay(file_phase, "%0d %0d %0d", fase_datos_count, $signed(-dut.interp_cordic_theta), fase_interpolada_esperada);
-                end
-                
-                if (error_fase_interp < 0) error_fase_interp = -error_fase_interp;
 
                 if (error_fase_interp > max_error_interp) max_error_interp = error_fase_interp;
 
@@ -155,41 +142,15 @@ module tb_cvqkd_bob_dsp_top();
     // 5. INYECCIÓN DE DATOS Y VEREDICTO
     // =========================================================================
     initial begin
-        // Carga de archivos de entrada (Compatible Windows/Linux)
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_raw_adc.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_raw_adc.txt", memoria_in);
-        end else begin
-            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/bob_raw_adc.txt", memoria_in);
-        end
-
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_ram.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/bob_ram.txt", memoria_expected);
-        end else begin
-            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/data/bob_ram.txt", memoria_expected);
-        end
-
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_pilotos_raw.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_pilotos_raw.txt", mem_pilotos_esperados);
-        end else begin
-            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/fase_pilotos_raw.txt", mem_pilotos_esperados);
-        end
-
-        file_handle = $fopen("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_estimada_datos.txt", "r");
-        if (file_handle != 0) begin
-            $fclose(file_handle);
-            $readmemh("C:/Users/usser/Vivado_Sources/cvqkd_bob/Matlab/fase_estimada_datos.txt", mem_fase_estimada);
-        end else begin
-            $readmemh("/home/drg/TFG/cvqkd_code/cvqkd_matlab/data/fase_estimada_datos.txt", mem_fase_estimada);
-        end
+        $readmemh("bob_raw_adc.txt",         memoria_in);
+        $readmemh("bob_ram.txt",             memoria_expected);
+        $readmemh("fase_pilotos_raw.txt",    mem_pilotos_esperados);
+        $readmemh("fase_estimada_datos.txt", mem_fase_estimada);
 
         rst = 1'b1; valid_in = 1'b0; p_in = '0; q_in = '0;
-        #20; rst = 1'b0;
+        // Los netlists de los CORDIC están en reset global (GSR) los primeros 100 ns:
+        // si se inyecta antes, se pierde el primer piloto y todo queda desalineado.
+        #200; rst = 1'b0;
         
         for (int i = 0; i < NUM_SAMPLES_IN; i++) begin
             @(posedge clk);
@@ -199,8 +160,6 @@ module tb_cvqkd_bob_dsp_top();
 
         @(posedge clk); valid_in <= 1'b0; p_in <= '0; q_in <= '0;
         repeat(100) @(posedge clk);
-        $fclose(file_out); if (file_err != 0) $fclose(file_err);
-        if (file_phase != 0) $fclose(file_phase);
         
         $display("\n=================================================================");
         $display("                  REPORTE DE AUTOVERIFICACIÓN                    ");
@@ -220,7 +179,12 @@ module tb_cvqkd_bob_dsp_top();
 
         $display("\n--> 3. ROTACIÓN FINAL (CORDIC 2)");
         $display("    Errores P y Q (> 1 ud)  : %0d", error_counter);
-        
+
+        if (piloto_count == NUM_PILOTS && fase_datos_count == NUM_SAMPLES_OUT && expected_idx == NUM_CHECK &&
+            pilotos_fuera_margen == 0 && errores_interp_count == 0 && error_counter == 0)
+            $display("RESULTADO: PASS");
+        else
+            $display("RESULTADO: FAIL");
         $display("=================================================================\n");
         $finish;
     end
