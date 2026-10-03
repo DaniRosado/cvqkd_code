@@ -66,3 +66,26 @@ El tiempo medido es solo el del acelerador (vaciado de caché, DMAs y espera). Q
 
 - El canal de la fase II es sintético y no tiene ruido de fase. El DSP de recuperación de fase solo se ejercita con la trama de MATLAB de la fase I.
 - La seguridad asume ataques colectivos y un detector de confianza ($\eta$ y $v_{el}$ calibrados). Faltan un generador de números aleatorios verdadero (TRNG), la autenticación del canal clásico y la verificación de la corrección ($\epsilon_{cor}$) con hash.
+
+---
+
+## 6. Repetición con el diseño optimizado (commit `cbf8d94`)
+
+Mismo ensayo con el hardware regenerado tras las optimizaciones (síndrome con un solo
+acumulador, FIFO de trama de 32.768 posiciones, estimador con productos de su anchura
+real, MDR sin la etapa de copia) y el firmware que envía cada trama en una sola
+transferencia DMA:
+
+| Magnitud | Diseño anterior | Diseño optimizado |
+|---|---|---|
+| Fase I: estimación, síndrome y norma MDR frente a MATLAB | Idénticos | Idénticos |
+| Bits seguros de los bloques 1 / 2 / 3 | 254 776 / 0 / 326 350 | 254 776 / 0 / 326 350 |
+| Latencia media por trama | 1,94 ms | 1,91 ms |
+| Tasa de tramas | 514,7 tramas/s | 521,9 tramas/s |
+| Ingesta óptica bruta | 458,9 Mbps | 465,3 Mbps |
+| Tasa de clave secreta en vivo | 99,7 kbps | 101,1 kbps |
+| Recursos (LUT / FF / BRAM36 / DSP) | 37.690 / 48.309 / 105 / 76 | 27.138 / 30.095 / 73,5 / 52 |
+
+Todas las filas de la fase II (T·η/2 y σ² de las tramas mostradas) coinciden valor a
+valor con la ejecución anterior: el diseño optimizado es funcionalmente idéntico en
+placa y ocupa entre un 28 % y un 38 % menos.

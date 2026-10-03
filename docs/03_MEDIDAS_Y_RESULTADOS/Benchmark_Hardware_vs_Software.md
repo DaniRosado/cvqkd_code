@@ -9,7 +9,7 @@
 > 1. **Alice**: Decodificador QC-LDPC 5G-NR ($N=26.112\text{ bits}$, $Z=384$, Base Graph 1, 7 iteraciones).
 > 2. **Bob**: Pipeline completo (Compensación de Fase + Estimación de Parámetros + Proyección MDR 8D + Síndrome LDPC + Cota de Holevo).
 
-> **Nota (03/10/2026)**: las cifras de la FPGA de esta tabla no son medidas. Alice: latencia estimada con el número de sondeos (1,24 ms); con el contador de ciclos del wrapper la trama tarda 41.783 ciclos = **1,67 ms** a 25 MHz (simulación). Bob: 1,50 ms a 100 MHz era un valor nominal; medido en la PYNQ-Z2 es **1,94 ms por trama** con el PL a 71,4 MHz (DMA incluido). Los speedups cambian en proporción (por ejemplo, ARM frente a FPGA: 66,9× en Alice y 9,3× en Bob).
+> **Nota (03/10/2026)**: las cifras de la FPGA de esta tabla no son medidas. Alice: latencia estimada con el número de sondeos (1,24 ms); con el contador de ciclos del wrapper la trama tarda 41.783 ciclos = **1,67 ms** a 25 MHz (simulación). Bob: 1,50 ms a 100 MHz era un valor nominal; medido en la PYNQ-Z2 es **1,91 ms por trama** con el PL a 71,4 MHz (DMA incluido; 1,94 ms antes de las optimizaciones). Los speedups cambian en proporción (por ejemplo, ARM frente a FPGA: 66,9× en Alice y 9,4× en Bob).
 
 ---
 

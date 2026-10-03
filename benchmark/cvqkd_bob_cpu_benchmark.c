@@ -463,9 +463,9 @@ int main(void) {
     double throughput_raw_mbps = fps * (27857.0 * 32.0) / 1.0e6;
     double throughput_data_mbps = fps * (26112.0) / 1.0e6;
 
-    // Latencia del acelerador de Bob medida en la PYNQ-Z2 (03/10/2026):
+    // Latencia del acelerador de Bob medida en la PYNQ-Z2 (03/10/2026, diseño optimizado):
     // DMA + DSP + estimación + MDR + síndrome por trama, con el PL a 71,4 MHz
-    double fpga_hw_ms = 1.94;
+    double fpga_hw_ms = 1.91;
 
     PRINTF("\r\n========================================================================\r\n");
     PRINTF("          DESGLOSE DE LATENCIA POR ETAPA EN SOFTWARE                    \r\n");

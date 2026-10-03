@@ -95,8 +95,9 @@ pueden cambiar con `VITIS_WS` o con las opciones `--bit` y `--elf`.
 
 | Medida | Valor |
 | :--- | :--- |
-| Bob, latencia por trama en placa | 1,94 ms (DMA + acelerador, 514 tramas/s, 459 Mbps de ingesta) |
-| Bob, tasa de clave en vivo | 99,7 kbps (bloques de 1000 tramas, 10 km, ξ = 0,01 SNU) |
+| Bob, latencia por trama en placa | 1,91 ms (DMA + acelerador, 522 tramas/s, 465 Mbps de ingesta) |
+| Bob, tasa de clave en vivo | 101,1 kbps (bloques de 1000 tramas, 10 km, ξ = 0,01 SNU) |
+| Bob, recursos de la Zynq-7020 | 51 % LUT, 28 % FF, 53 % BRAM, 24 % DSP |
 | Bob, ataque de interceptación y reenvío | Bloque abortado con solo un 1 % de tramas atacadas |
 | Alice, latencia por trama (simulación) | 41.783 ciclos: 1,67 ms a 25 MHz (13 iteraciones LDPC) |
 | Verificación | Estimación y síndrome de Bob idénticos a MATLAB; clave de Alice idéntica a la de Bob |
