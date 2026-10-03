@@ -5,6 +5,8 @@
 > **Firmware**: MicroBlaze enlazado con telemetría de iteraciones en `REG_STATUS[15:8]`  
 > **Total tramas evaluadas**: 1.000 tramas (10 escalones de SNR $\times$ 100 tramas/escalón)  
 
+> **Nota (03/10/2026)**: las latencias y throughputs de Alice de este informe se estimaron con el número de sondeos del MicroBlaze (`polls × 0,72 µs`, con 1250 µs fijos si salía 0), no se midieron. El wrapper de Alice incluye ahora un contador de ciclos (registro `0x18`): en simulación, una trama del punto de trabajo (13 iteraciones) tarda **41.783 ciclos = 1,67 ms a 25 MHz (15,6 Mbps)**, frente a los 1,24 ms / 21,04 Mbps estimados. Hay que repetir la medida en placa con el firmware actual (`tools/run_board.py alice`).
+
 ---
 
 ## 🎯 Objetivo del Ensayo

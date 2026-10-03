@@ -39,9 +39,11 @@ Para todos los nodos de variable conectados a la fila de comprobación, se calcu
 
 $$min_1 = \min_{c'} |L_{q, c'}|, \quad min_2 = \min_{c'' \ne \text{argmin}} |L_{q, c''}|, \quad S_{\text{total}} = \prod_{c'} \text{sgn}(L_{q, c'})$$
 
-El nuevo mensaje de comprobación $R_{\text{new}}$ para la variable $c$ viene dado por:
+El nuevo mensaje de comprobación $R_{\text{new}}$ para la variable $c$ viene dado por (*Min-Sum normalizado*, $\alpha = 0.75$):
 
-$$R_{\text{new}} = (S_{\text{total}} \cdot \text{sgn}(L_{q, c})) \times \begin{cases} min_2 & \text{si } |L_{q, c}| = min_1 \\ min_1 & \text{si } |L_{q, c}| > min_1 \end{cases}$$
+$$R_{\text{new}} = \alpha \cdot (S_{\text{total}} \cdot \text{sgn}(L_{q, c})) \times \begin{cases} min_2 & \text{si } |L_{q, c}| = min_1 \\ min_1 & \text{si } |L_{q, c}| > min_1 \end{cases}$$
+
+En hardware, el escalado $\alpha = 0.75$ se hace como $x - (x \gg 2)$ una sola vez, tras elegir $min_1$ o $min_2$.
 
 ### 4. Actualización del Nodo de Variable (VNU — Fase 2: Suma y Escritura):
 Se desrotan los mensajes $R_{\text{new}}$ y se suman a la información previa para obtener el LLR posterior actualizado:
@@ -58,5 +60,19 @@ Al finalizar cada iteración completa de las 46 filas, el módulo `syndrome_chec
 
 $$\mathbf{s}_{\text{calc}} = H \cdot \hat{\mathbf{b}} \pmod 2 \stackrel{?}{=} \mathbf{s}_{\text{Bob}}$$
 
-- Si $\mathbf{s}_{\text{calc}} == \mathbf{s}_{\text{Bob}}$: La señal `is_converged` pasa a `1`. La decodificación se **detiene inmediatamente**, activando `ldpc_success = 1` y transfiriendo la clave a `key_bram`.
-- Si existen discrepancias: La FSM arranca una nueva iteración hasta alcanzar `MAX_ITER = 200`.
+En la práctica, la comprobación de cada fila se hace al vuelo, justo después de actualizarla. Como las capas posteriores pueden volver a cambiar el signo de variables compartidas, la convergencia solo se declara si **además ningún bit duro cambió durante la iteración** (`hd_changed`): en ese caso las comprobaciones hechas sobre la marcha equivalen al síndrome de la decisión final.
+
+- Si se cumple: la señal `is_converged` pasa a `1`, la decodificación se **detiene**, se activa `ldpc_success = 1` y la clave se copia a `key_bram`.
+- Si no: la FSM arranca una nueva iteración, hasta un máximo de `MAX_ITER = 200`.
+
+---
+
+## 🔢 Formatos Numéricos en Hardware
+
+| Magnitud | Formato | Motivo |
+| :--- | :--- | :--- |
+| Mensajes $R$ y $L_q$ hacia la CNU | Signo-magnitud de $W = 8$ bits ($\pm 127$) | Anchura de los 384 nodos CNU y de las memorias `R_BRAM` |
+| LLR a posteriori $L$ en `L_BRAM` | Signo-magnitud de $WL = 10$ bits ($\pm 511$) | Con 8 bits el posterior se saturaba y el decodificador divergía tras unas pocas iteraciones |
+| $L_q$ exacto en el camino de escritura | Complemento a 2 de $WL+1$ bits | $L_{\text{write}} = L_q + R_{\text{new}}$ sin perder la confianza acumulada |
+
+Con la trama de MATLAB del punto de trabajo (10 km), el decodificador converge en 13 iteraciones.

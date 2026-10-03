@@ -4,6 +4,8 @@
 > **Plataforma**: Digilent Nexys Video (Xilinx Artix-7 `XC7A200T-1SBG484C` @ 25 MHz)  
 > **Volumen de datos**: 1.000 tramas $\times$ 26.112 bits = **26.112.000 bits (26.11 Megabits)**  
 
+> **Nota (03/10/2026)**: las latencias y throughputs de Alice de este informe se estimaron con el número de sondeos del MicroBlaze (`polls × 0,72 µs`, con 1250 µs fijos si salía 0), no se midieron. El wrapper de Alice incluye ahora un contador de ciclos (registro `0x18`): en simulación, una trama del punto de trabajo (13 iteraciones) tarda **41.783 ciclos = 1,67 ms a 25 MHz (15,6 Mbps)**, frente a los 1,24 ms / 21,04 Mbps estimados. Hay que repetir la medida en placa con el firmware actual (`tools/run_board.py alice`).
+
 ---
 
 ## 🎯 Objetivo

@@ -9,6 +9,8 @@
 > 1. **Alice**: Decodificador QC-LDPC 5G-NR ($N=26.112\text{ bits}$, $Z=384$, Base Graph 1, 7 iteraciones).
 > 2. **Bob**: Pipeline completo (Compensación de Fase + Estimación de Parámetros + Proyección MDR 8D + Síndrome LDPC + Cota de Holevo).
 
+> **Nota (03/10/2026)**: las cifras de la FPGA de esta tabla no son medidas. Alice: latencia estimada con el número de sondeos (1,24 ms); con el contador de ciclos del wrapper la trama tarda 41.783 ciclos = **1,67 ms** a 25 MHz (simulación). Bob: 1,50 ms a 100 MHz era un valor nominal; medido en la PYNQ-Z2 es **1,94 ms por trama** con el PL a 71,4 MHz (DMA incluido). Los speedups cambian en proporción (por ejemplo, ARM frente a FPGA: 66,9× en Alice y 9,3× en Bob).
+
 ---
 
 ## 🎯 1. Resumen Ejecutivo y Comparativa Global de Rendimiento
@@ -27,7 +29,7 @@
 
 ## 🔬 2. Análisis Detallado: Subsistema Bob (Ingesta, DSP y Reconciliación)
 
-En el subsistema de Bob, el benchmark por software ([`benchmark/cvqkd_bob_cpu_benchmark.c`](file:///home/drg/TFG/cvqkd_code/benchmark/cvqkd_bob_cpu_benchmark.c)) desglosa el tiempo empleado por cada etapa:
+En el subsistema de Bob, el benchmark por software ([`benchmark/cvqkd_bob_cpu_benchmark.c`](../../benchmark/cvqkd_bob_cpu_benchmark.c)) desglosa el tiempo empleado por cada etapa:
 
 ```
                                   DESGLOSE DE LATENCIA DE BOB
@@ -92,18 +94,18 @@ Al contrastar la frecuencia de reloj frente a la latencia obtenida, se evidencia
 
 ### 5.1. Para Alice (Decodificador LDPC)
 ```bash
-cd /home/drg/TFG/cvqkd_code/benchmark
+cd benchmark
 # En PC Host:
 make host && ./bench_host
 # En PYNQ-Z2 (ARM):
-sudo ./run_pynq_benchmark.py
+make arm && ../tools/run_board.py bench-alice
 ```
 
 ### 5.2. Para Bob (Pipeline Completo)
 ```bash
-cd /home/drg/TFG/cvqkd_code/benchmark
+cd benchmark
 # En PC Host:
 make bob_host && ./bench_bob_host
 # En PYNQ-Z2 (ARM):
-sudo ./run_bob_benchmark_arm.py
+make bob_arm && ../tools/run_board.py bench-bob
 ```

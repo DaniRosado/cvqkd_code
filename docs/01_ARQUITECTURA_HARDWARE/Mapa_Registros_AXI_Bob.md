@@ -50,7 +50,7 @@ for (int i = 0; i < N_KEY_WORDS; i++) {
 | Instancia | Base Address | Canal | Uso en Protocolo CV-QKD | Ancho de Bus |
 | :--- | :---: | :---: | :--- | :---: |
 | `axi_dma_0` | `0x40400000` | **MM2S** | Envío de pulsos ópticos del ADC $\{Q, P\}$ (111.4 KB) | 32 bits |
-| `axi_dma_0` | `0x40400000` | **S2MM** | Recepción de vectores públicos MDR $m$ (104.4 KB) | 32 bits |
+| `axi_dma_0` | `0x40400000` | **S2MM** | Recepción de vectores públicos MDR $m$ (104.4 KB) | 256 bits |
 | `axi_dma_1` | `0x40410000` | **MM2S** | Envío de muestras de sacrificio de Alice (52.2 KB) | 32 bits |
-| `axi_dma_1` | `0x40410000` | **S2MM** | Recepción de matriz de síndrome LDPC $s$ (2.94 KB) | 32 bits |
+| `axi_dma_1` | `0x40410000` | **S2MM** | Recepción de matriz de síndrome LDPC $s$ (2.94 KB) | 512 bits |
 | `axi_dma_2` | `0x40420000` | **MM2S** | Envío de máscara de criba de sacrificio (3.26 KB) | 32 bits |

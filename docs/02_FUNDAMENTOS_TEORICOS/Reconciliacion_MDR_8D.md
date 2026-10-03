@@ -44,13 +44,13 @@ Donde la primera fila de $M(\mathbf{v})$ es exactamente $\mathbf{v}$.
 
 ## 🔢 Cálculo de los Log-Likelihood Ratios (LLR)
 
-La fiabilidad de cada bit (LLR) que alimenta al decodificador LDPC se calcula mediante la distribución condicional gaussiana:
+La fiabilidad de cada bit (LLR) que alimenta al decodificador LDPC se calcula con la distribución condicional gaussiana. Con detección heterodina cada cuadratura de Bob es $y = t\,x + z$, con $t = \sqrt{T\eta/2}$ y ruido de varianza $\sigma_z^2$:
 
-$$\text{LLR}_{i,k} = \ln \left( \frac{P(b_{i,k} = 0 \mid \mathbf{x}_i, \mathbf{m}_i, \mathbf{y}_i)}{P(b_{i,k} = 1 \mid \mathbf{x}_i, \mathbf{m}_i, \mathbf{y}_i)} \right) = \frac{2 \sqrt{T \eta}}{\sigma^2} \|\mathbf{y}_i\| u_{i,k}$$
+$$\text{LLR}_{i,k} = \ln \left( \frac{P(b_{i,k} = 0 \mid \mathbf{x}_i, \mathbf{m}_i)}{P(b_{i,k} = 1 \mid \mathbf{x}_i, \mathbf{m}_i)} \right) = \frac{2 t}{\sigma_z^2} \|\mathbf{y}_i\| u_{i,k}$$
 
-Definiendo el factor de calibración dinámico $K_{dyn, i}$:
+Definiendo el factor de calibración dinámico $K_{dyn, i}$, $\mathbf{LLR}_{i,k} = K_{dyn, i} \cdot u_{i,k}$.
 
-$$K_{dyn, i} = \frac{2 \sqrt{T \eta}}{\sigma^2} \|\mathbf{y}_i\| \implies \mathbf{LLR}_{i,k} = K_{dyn, i} \cdot u_{i,k}$$
+En la implementación (modelo de MATLAB y hardware) se usa $K_{dyn, i} = 2\|\mathbf{y}_i\| / \sigma_B^2$, con $\sigma_B^2 = \text{Var}(y)$ la varianza total por cuadratura medida por el estimador y $\mathbf{x}$ sin normalizar. Es el LLR exacto multiplicado por un factor constante en toda la trama ($\sigma_z^2 / (t\,\sigma_B^2)$, con todas las magnitudes en las mismas unidades): el Min-Sum es invariante a una escala común salvo por la cuantización y la saturación a 8 bits, que es lo que fija este factor.
 
 En el hardware de Alice, el módulo `mdr_alice_datapath.sv` ejecuta esta multiplicación en aritmética de punto fijo:
 - $u_{i,k}$ en formato con signo de 42 bits (acumulación de productos DSP48E1).

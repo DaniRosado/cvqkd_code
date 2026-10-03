@@ -12,7 +12,7 @@
 ```mermaid
 graph TD
     subgraph Host_PC["Host PC (Control & Monitoreo)"]
-        PYTHON["verify_alice_key.py"]
+        PYTHON["tools/run_board.py alice"]
         XSDB["Xilinx XSDB (JTAG)"]
     end
 
@@ -64,9 +64,12 @@ graph TD
 
 ## 🧩 Descripción de Módulos Principales
 
-### 1. `cvqkd_alice_axi_wrapper.sv`
-- Proporciona la interfaz esclava AXI4-Lite de 32 bits hacia el MicroBlaze.
+### 1. `cvqkd_alice_axi_wrapper.v`
+- Proporciona la interfaz esclava AXI4-Lite de 32 bits hacia el MicroBlaze. Es Verilog-2001 porque Vivado solo admite Verilog o VHDL como top de una referencia a módulo (el resto del diseño es SystemVerilog).
 - Contiene los registros de control, estado y las memorias intermedias accesibles por el procesador.
+- Las memorias `ram_x`, `ram_m`, `ram_k` y `syn_bram` se inicializan en síntesis con los vectores de MATLAB (`$readmemh` por nombre de fichero; `create_alice_project.tcl` los añade como *Memory Initialization Files*). La placa solo tiene 16 KB de memoria local para el MicroBlaze, así que la trama de prueba va precargada en el bitstream.
+- Los receptores AXI4-Stream `s_axis_x` y `s_axis_m` permiten cargar tramas nuevas por DMA, pero en este diseño los dos AXI DMA no tienen memoria de origen (no hay DDR): el firmware usa la trama precargada.
+- Cuenta los ciclos de reloj de cada ejecución (registro `0x18`): el firmware calcula con él la latencia real.
 - Gobierna la carga de las 46 filas de síndrome de Bob hacia el decodificador ($552\text{ ciclos}$).
 - Extrae la clave decodificada desde `L_BRAM` hacia `key_bram` en 816 ciclos tras la señal de éxito.
 

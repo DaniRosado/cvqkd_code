@@ -3,7 +3,7 @@
 > **Fecha de ensayo**: 29 de septiembre de 2026  
 > **Plataforma**: Digilent Nexys Video (Xilinx Artix-7 `XC7A200T-1SBG484C` @ 25 MHz)  
 > **Host**: Host PC conectado por USB-UART (`/dev/ttyUSB0`) y JTAG FT2232H  
-> **Script**: `verify_alice_key.py`  
+> **Script**: `verify_alice_key.py` (hoy `tools/run_board.py alice`)  
 
 ---
 

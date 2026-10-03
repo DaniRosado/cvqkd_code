@@ -1,96 +1,116 @@
 # Arquitectura y Co-Diseño Hardware/Software de Bob (PYNQ-Z2)
 
-> **Subsistema**: Receptor Cuántico Bob (Zynq-7020 SoC)  
 > **Plataforma**: PYNQ-Z2 (Xilinx Zynq `XC7Z020-1CLG400C`)  
-> **Co-Diseño**: Lógica Programable Artix-7 (100 MHz) + Procesador ARM Cortex-A9 Dual-Core (650 MHz)  
-> **Última Actualización**: 29 de septiembre de 2026  
+> **Lógica programable**: 71,4 MHz (FCLK0 del PS) · **Procesador**: ARM Cortex-A9 a 650 MHz  
+> **Proyecto**: `cvqkd_bob/scripts/create_bob_project.tcl` · **Firmware**: `cvqkd_bob/sw/`  
+> **Última actualización**: 3 de octubre de 2026
 
 ---
 
-## 1. Visión General del Subsistema de Bob
+## 1. Visión general
 
-A diferencia de Alice (cuyo rol principal es la decodificación intensiva de canal LDPC a partir de los datos recibidos), **Bob** es el extremo de **medida óptica y preparación cuántica**:
-1. Recibe los pulsos ópticos del receptor heterodino (dos detectores balanceados, P y Q) a través de interfaces analógicas de alta velocidad.
-2. Extrae y compensa el desfase de portadora utilizando pulsos piloto intercalados (interpolador CORDIC).
-3. Realiza la criba de sacrificio (50% de las muestras) para estimar analíticamente los parámetros del canal ($T$ y $\sigma^2$).
-4. Genera los bits aleatorios de clave mediante un TRNG/PRNG y realiza la proyección multidimensional 8D (MDR) y el cómputo de síndrome LDPC ($H \cdot b$).
-5. **Evalúa en la CPU ARM en tiempo real la Cota de Holevo $\chi(B; E)$** para garantizar que ningún intruso (Eva) haya interceptado información del canal, abortando la clave en caso de anomalía.
+Bob es el extremo que mide: recibe las dos cuadraturas del receptor heterodino, corrige
+la fase con los pilotos, estima el canal con las muestras que Alice revela y genera la
+información de reconciliación (mensajes MDR y síndrome LDPC). La CPU orquesta los DMA
+y decide si el bloque es seguro.
 
 ```
- +---------------------------------------------------------------------------------------------------+
- |                                       PYNQ-Z2 (ZYNQ-7020)                                         |
- |                                                                                                   |
- |   +-------------------------------------------------------------------------------------------+   |
- |   |                      PROCESSING SYSTEM (PS) - ARM Cortex-A9 @ 650 MHz                     |   |
- |   |                                                                                           |   |
- |   |  - Orquestación AXI-DMA (Simple Transfer 3x)      - Control y Calibración AXI4-Lite       |   |
- |   |  - Generador de Máscara de Criba Dinámica         - Evaluación Seguridad Cuántica:        |   |
- |   |  - Medición SCU Global Timer (325 MHz)              * Holevo Bound chi(B; E)              |   |
- |   |  - Protocolo Ethernet/TCP Bob -> Alice              * Información Mutua I(A; B)           |   |
- |   |  - Defensa Activa: Decisión PASS / ABORT            * Secret Key Rate (Asymp & Finite)    |   |
- |   +-------------------------------------------------------------------------------------------+   |
- |                                                ▲ AXI-Lite / AXI-Stream HP                     |
- |   +-------------------------------------------------------------------------------------------+   |
- |   |                     PROGRAMMABLE LOGIC (PL) - FPGA Artix-7 Logic @ 100 MHz                |   |
- |   |                                                                                           |   |
- |   |  [AXI DMA 0 (MM2S)] ---> Ingesta Muestras Ópticas ADC {Q, P} (27.857 muestras)            |   |
- |   |  [AXI DMA 1 (MM2S)] ---> Muestras de Sacrificio de Alice    (13.056 muestras)            |   |
- |   |  [AXI DMA 2 (MM2S)] ---> Máscara de Sacrificio (50%)        (816 palabras / 26.112 bits)  |   |
- |   |                                                                                           |   |
- |   |  [Estimador DSP Hardware]  ---> Transmitancia T*eta (Q16.16) y Varianza sigma^2 (Hardware) |   |
- |   |  [BRAM Interna de Clave]   ---> 816 palabras de clave retenidas (0x100 - 0xDC0)           |   |
- |   |  [Motor MDR 8D Streaming]  ---> ||m||^2 = 8.0000 exacto (3.264 bloques x 256 bits)        |   |
- |   |  [Generador Síndrome LDPC] ---> Matriz H * b (46 filas x 512 bits)                        |   |
- |   |                                                                                           |   |
- |   |  [AXI DMA 0 (S2MM)] <--- Mensajes Públicos MDR (m) hacia DDR                              |   |
- |   |  [AXI DMA 1 (S2MM)] <--- Síndrome LDPC (s) hacia DDR                                      |   |
- |   +-------------------------------------------------------------------------------------------+   |
- +---------------------------------------------------------------------------------------------------+
+                PS: ARM Cortex-A9 (650 MHz)
+   DMA, carga de la clave, evaluación de seguridad (Holevo + tamaño finito), PASS/ABORT
+        |  AXI4-Lite (GP0)                         |  AXI HP0 (DDR)
+        v                                          v
+ +-----------------------------------------------------------------------------+
+ |  PL (71,4 MHz)                    cvqkd_bob_axi_wrapper                      |
+ |                                                                             |
+ |  DMA0 MM2S ADC {Q,P} --> DSP: demux pilotos -> CORDIC vect -> interpolador  |
+ |                          -> FIFO -> CORDIC rot  --> router (FIFO de trama)  |
+ |  DMA2 MM2S máscara ----> deserializador 32:1 ----^        |          |      |
+ |                                              sacrificio |          | clave|
+ |  DMA1 MM2S Alice ------> estimador: 2 x mac_moments -> LLR_math_unit       |
+ |                          (T*eta/2, sigma^2 en registros)          |         |
+ |  clave (AXI-Lite) -----> acumulador 8D -> MDR 8D ------------> DMA0 S2MM    |
+ |                                       -> síndrome (ping-pong) -> DMA1 S2MM  |
+ +-----------------------------------------------------------------------------+
 ```
 
 ---
 
-## 2. Partición Hardware / Software
+## 2. Partición hardware / software
 
-La distribución óptima de tareas aprovecha la aceleración paralela masiva de la FPGA y la precisión aritmética flotante de la CPU:
-
-| Módulo / Función | Dominio | Implementación | Justificación Técnica |
+| Función | Dónde | Implementación | Motivo |
 | :--- | :---: | :--- | :--- |
-| **Ingesta de Muestras Ópticas** | Hardware | Pipeline AXI4-Stream | Flujo masivo de datos (111.4 KB por trama) inviable por software en tiempo real. |
-| **Interpolación de Fase CORDIC** | Hardware | DSP48E1 pipelined | Corrección de fase pulso a pulso a 100 MHz sin intervención de CPU. |
-| **Estimación Analítica ($T$, $\sigma^2$)** | Hardware | Acumuladores DSP + Divisor Radix-2 + CORDIC Sqrt | Acumulación de 13.056 productos cruzados $\sum P_A P_B$ en tiempo de streaming. |
-| **Proyección MDR 8D** | Hardware | Rotaciones ortogonales de Clifford | Cálculo de 3.264 vectores en $S^7$ con conservación estricta de energía. |
-| **Generador de Síndrome $H \cdot b$** | Hardware | Desplazadores circulares paralelos | Operaciones de paridad de matriz dispersa $46 \times 68$ con $Z=384$. |
-| **Orquestación de Memoria y DMA** | Software | Controlador Baremetal AXI DMA | Control flexible de transferencias en DDR mediante interrupciones/sondeo. |
-| **Evaluación de Seguridad Cuántica** | Software | C flotante (`cvqkd_security.c`) | Funciones trascendentes ($g(x)$, $\log_2$, autovalores simplécticos $4 \times 4$). |
-| **Detección de Intrusión (PASS/ABORT)**| Software | CPU ARM Cortex-A9 | Decisión de política de seguridad y descarte preventivo de claves. |
+| Recuperación de fase | PL | 2 CORDIC (IP) + interpolador lineal entre pilotos (1 cada 16 símbolos) | Una muestra por ciclo, sin intervención de la CPU |
+| Criba de sacrificio | PL | FIFO de trama (32.768 × 32 bits) + máscara | Reparte la trama entre estimación y clave |
+| Estimación de $t$ y $\sigma^2$ | PL | Acumuladores de momentos (DSP48) + divisor y raíz (IP) | Las sumas se hacen al ritmo de llegada de las muestras |
+| MDR 8D | PL | Norma, raíz inversa por ROM, normalización y matriz ortogonal 8×8 | 3.264 mensajes por trama, uno cada 4 muestras |
+| Síndrome LDPC | PL | Ping-pong de clave + acumulador de 384 bits, una arista por ciclo | 316 aristas del BG1: unos 320 ciclos por síndrome |
+| DMA y control | PS | Transferencias simples, sondeo | Flexibilidad |
+| Seguridad | PS | C en coma flotante (`cvqkd_security.c`) | Funciones trascendentes y autovalores simplécticos, una vez por bloque |
 
 ---
 
-## 3. Interfaces de Comunicación PL-PS
+## 3. Flujo de una trama (firmware)
 
-### 3.1. Canales AXI DMA (High-Performance AXI_HP)
-El subsistema integra **tres controladores AXI DMA** independientes configurados en modo *Direct Register (Simple Transfer)*:
-1. **DMA 0 (`axi_dma_0` @ `0x40400000`)**:
-   - **MM2S**: Transmite los pulsos ópticos del ADC del receptor heterodino ($27.857 \times 4\text{ B} = 111.428\text{ B}$) divididos en bloques de 16 KB (respetando el límite de 14 bits del DMA).
-   - **S2MM**: Recibe los mensajes públicos de reconciliación MDR calculados por Bob.
-2. **DMA 1 (`axi_dma_1` @ `0x40410000`)**:
-   - **MM2S**: Transmite las muestras de sacrificio reveladas por Alice ($13.056 \times 4\text{ B} = 52.224\text{ B}$).
-   - **S2MM**: Recibe el síndrome LDPC generado ($46 \times 64\text{ B} = 2.944\text{ B}$).
-3. **DMA 2 (`axi_dma_2` @ `0x40420000`)**:
-   - **MM2S**: Transmite la máscara de sacrificio ($816 \times 4\text{ B} = 3.264\text{ B}$).
+1. *Soft reset*, calibración de $V_A$ y carga de las 816 palabras de clave por AXI-Lite
+   (el hardware usa cada byte una sola vez y bloquea la reconciliación sin clave nueva).
+2. Se arman las recepciones: mensajes MDR (DMA0 S2MM, una transferencia de 104.448 B con
+   TLAST en el último) y síndrome (DMA1 S2MM).
+3. DMA0 envía la trama del ADC (111.428 B en una transferencia): queda entera en la
+   FIFO del router.
+4. DMA2 envía la máscara y DMA1 las muestras de Alice: el router reparte las muestras
+   entre el estimador y la reconciliación.
+5. Se espera a los DMA de salida y a `done_est`; si el hardware marca `data_loss` la
+   trama se descarta.
 
-### 3.2. Bus AXI4-Lite de Control y Memoria Interna
-Mapeado en `0x40000000` con espacio de memoria contiguo para registros de estado y memoria interna de clave:
-- **0x00 - 0x1C**: Registros de control, calibración y telemetría de canal.
-- **0x100 - 0xDC0**: BRAM interna de clave (816 palabras = 26.112 bits). El procesador escribe la clave secreta generada en DDR y la FPGA la consume directamente para modular el MDR y el síndrome.
+Los DMA0 y DMA1 tienen el registro de longitud de 17 bits (hasta 128 KB por transferencia).
 
 ---
 
-## 4. Medición de Rendimiento Hardware (SCU Global Timer)
+## 4. Interfaces
 
-Para medir la latencia sin sobrecarga de interrupciones o llamadas del sistema operativo, el software utiliza el **SCU Global Timer** del Cortex-A9:
-- Dirección Base: `0xF8F00200`
-- Frecuencia: $F_{\text{CPU}} / 2 = 325.0\text{ MHz}$
-- Resolución temporal: **3.076 ns por tick**
-- La lectura de 64 bits se realiza de forma atómica para evitar desbordamientos del registro inferior.
+| DMA | Dirección | Canal | Contenido | Ancho del stream |
+| :--- | :---: | :---: | :--- | :---: |
+| `axi_dma_0` | `0x40400000` | MM2S | Muestras del ADC {Q, P} (27.857 × 32 bits) | 32 bits |
+| `axi_dma_0` | `0x40400000` | S2MM | Mensajes MDR (3.264 × 256 bits) | 256 bits |
+| `axi_dma_1` | `0x40410000` | MM2S | Muestras de sacrificio de Alice (13.056 × 32 bits) | 32 bits |
+| `axi_dma_1` | `0x40410000` | S2MM | Síndrome (46 filas de 384 bits en palabras de 512) | 512 bits |
+| `axi_dma_2` | `0x40420000` | MM2S | Máscara de sacrificio (816 × 32 bits) | 32 bits |
+
+Registros y memoria de clave: [Mapa de registros de Bob](Mapa_Registros_AXI_Bob.md).
+
+---
+
+## 5. Medida del tiempo
+
+El firmware mide con el temporizador global del Cortex-A9 (`0xF8F00200`, 325 MHz,
+lectura atómica de 64 bits). La latencia por trama que se publica es la del acelerador
+(vaciado de caché, DMA y espera); quedan fuera la generación sintética de tramas y la UART.
+
+---
+
+## 6. Recursos (Zynq-7020, implementación del 03/10/2026)
+
+Diseño completo generado con `create_bob_project.tcl`, timing cumplido a 70 MHz (WNS +0,861 ns):
+
+| Recurso | Usado | Disponible | % |
+| :--- | ---: | ---: | ---: |
+| LUT | 27.138 | 53.200 | 51 % |
+| Flip-flops | 30.095 | 106.400 | 28 % |
+| BRAM36 | 73,5 | 140 | 53 % |
+| DSP48 | 52 | 220 | 24 % |
+
+Reparto del acelerador (LUT / FF / BRAM36 / DSP):
+
+| Bloque | LUT | FF | BRAM36 | DSP |
+| :--- | ---: | ---: | ---: | ---: |
+| DSP (CORDIC + interpolador) | 2.645 | 2.632 | 0,5 | 4 |
+| Router (FIFO de trama) | 68 | 169 | 32 | 0 |
+| Estimador (momentos + unidad matemática) | 3.323 | 5.059 | 2 | 32 |
+| MDR 8D | 3.178 | 1.893 | 0 | 16 |
+| Síndrome (ping-pong + acumulador) | 2.368 | 836 | 11,5 | 0 |
+
+Frente a la versión anterior del 22/09 (37.690 LUT, 48.309 FF, 105 BRAM36, 76 DSP), el
+síndrome con un solo acumulador, la FIFO de la mitad de tamaño y los productos del
+estimador con su anchura real ahorran un 28 % de LUT, un 38 % de FF, un 30 % de BRAM y
+un 32 % de DSP. La mayor parte de lo que queda fuera del acelerador son los DMA y la
+interconexión hacia HP0, sobre todo por los streams de 256 y 512 bits de salida.

@@ -1,9 +1,9 @@
 # Mapa de Registros AXI-Lite del Acelerador de Alice
 
-> **Módulo RTL**: `cvqkd_alice_axi_wrapper.sv`  
+> **Módulo RTL**: `cvqkd_alice_axi_wrapper.v`  
 > **Interfaz de Bus**: AXI4-Lite Slave de 32 bits  
 > **Espacio de Direcciones**: 8 KB (0x0000 a 0x1FFF)  
-> **Base Address en Vivado Address Editor**: `0x44A00000` (mapeada a `0x00004000` en MicroBlaze según BSP)  
+> **Dirección base**: `0x00004000` en el espacio de datos del MicroBlaze (`create_alice_project.tcl`)  
 
 ---
 
@@ -17,6 +17,7 @@
 | **`0x0C`** | **`REG_K_MODE`** | R/W | 32 b | Selector de modo de $K$: `0 = Escalar manual`, `1 = Dinámico de ram_k` |
 | **`0x10`** | **`REG_X_BLOCKS_RX`**| RO | 32 b | Contador de bloques recibidos por el streaming de $X$ (0 a 3.264) |
 | **`0x14`** | **`REG_M_BLOCKS_RX`**| RO | 32 b | Contador de bloques recibidos por el streaming de $m$ (0 a 3.264) |
+| **`0x18`** | **`REG_CYCLES`** | RO | 32 b | Ciclos de reloj de la última ejecución (del arranque al final): latencia medida en hardware |
 | **`0x100` – `0x99C`**| **`syn_bram`** | R/W | 32 b | **Memoria de Síndrome de Bob**: 552 palabras de 32 bits ($17.664$ bits) |
 | **`0xA00` – `0x16BC`**| **`key_bram`** | RO | 32 b | **Memoria de Clave Reconciliada**: 816 palabras de 32 bits ($26.112$ bits) |
 
