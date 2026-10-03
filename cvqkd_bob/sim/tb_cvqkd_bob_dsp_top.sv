@@ -33,6 +33,7 @@ module tb_cvqkd_bob_dsp_top();
     integer error_counter = 0; 
     logic signed [15:0] exp_q, exp_p;
     integer diff_p, diff_q, abs_diff_p, abs_diff_q; 
+    integer max_diff_pq = 0;
 
     // --- Contadores Pilotos ---
     integer piloto_count = 0;
@@ -85,9 +86,12 @@ module tb_cvqkd_bob_dsp_top();
                 if (abs_diff_p > 100 || abs_diff_q > 100) begin
                     $display("\n[STOP HW] ¡ERROR ENORME EN DATOS! Salida: %0d", out_counter);
                     //$stop; 
-                end else if (abs_diff_p > 1 || abs_diff_q > 1) begin
-                    error_counter++;
                 end
+                // Tolerancia de 2 LSB: MATLAB rota en coma flotante y el CORDIC en punto
+                // fijo con la fase cuantizada en Q3.15 (el redondeo da a veces 2 LSB)
+                if (abs_diff_p > 2 || abs_diff_q > 2) error_counter++;
+                if (abs_diff_p > max_diff_pq) max_diff_pq = abs_diff_p;
+                if (abs_diff_q > max_diff_pq) max_diff_pq = abs_diff_q;
                 expected_idx++;
             end
             out_counter++;
@@ -178,7 +182,7 @@ module tb_cvqkd_bob_dsp_top();
             $display("    [ OK ] Interpolacion precisa.");
 
         $display("\n--> 3. ROTACIÓN FINAL (CORDIC 2)");
-        $display("    Errores P y Q (> 1 ud)  : %0d", error_counter);
+        $display("    Errores P y Q (> 2 ud)  : %0d (diferencia maxima %0d)", error_counter, max_diff_pq);
 
         if (piloto_count == NUM_PILOTS && fase_datos_count == NUM_SAMPLES_OUT && expected_idx == NUM_CHECK &&
             pilotos_fuera_margen == 0 && errores_interp_count == 0 && error_counter == 0)
