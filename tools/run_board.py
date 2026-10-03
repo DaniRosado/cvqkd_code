@@ -8,8 +8,10 @@ Ejecuta el firmware en las placas y muestra (o comprueba) la salida por UART.
     tools/run_board.py bench-bob     PYNQ-Z2: cadena de Bob en software en el ARM (benchmark/)
 
 Rutas por defecto (se pueden cambiar con las opciones o con variables de entorno):
-    XILINX_VITIS   instalación de Vitis (para xsdb), si xsdb no está en el PATH
+    XILINX_VITIS   instalación de Vitis; si no se indica, se busca xsdb en el PATH y en
+                   ~/AMD, /opt/Xilinx y /tools/Xilinx (la versión más reciente)
     VITIS_WS       workspace de Vitis con cvqkd_alice/ y cvqkd_bob/ (por defecto ~/VitisProyects)
+Si se ejecuta con sudo (acceso a la UART), ~ es el HOME del usuario que lanza sudo.
 
 La UART se detecta en /dev/serial/by-id (Nexys Video: FT232R; PYNQ-Z2: segunda
 interfaz del FT2232); con --port se fuerza otro puerto.
@@ -27,7 +29,8 @@ import threading
 import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VITIS_WS = os.environ.get("VITIS_WS", os.path.expanduser("~/VitisProyects"))
+HOME = os.path.expanduser("~" + os.environ.get("SUDO_USER", ""))  # con sudo, el HOME del usuario
+VITIS_WS = os.environ.get("VITIS_WS", os.path.join(HOME, "VitisProyects"))
 
 
 def platform_hw(system):
@@ -54,12 +57,17 @@ RUNS = {
 
 
 def find_xsdb():
-    xsdb = shutil.which("xsdb")
-    if not xsdb and os.environ.get("XILINX_VITIS"):
-        xsdb = os.path.join(os.environ["XILINX_VITIS"], "bin", "xsdb")
-    if not xsdb or not os.path.exists(xsdb):
-        sys.exit("No se encuentra xsdb: añade Vitis al PATH o define XILINX_VITIS.")
-    return xsdb
+    if os.environ.get("XILINX_VITIS"):
+        candidates = [os.path.join(os.environ["XILINX_VITIS"], "bin", "xsdb")]
+    else:
+        candidates = [shutil.which("xsdb") or ""]
+        for root in (os.path.join(HOME, "AMD"), "/opt/Xilinx", "/tools/Xilinx"):
+            candidates += sorted(glob.glob(os.path.join(root, "*", "*", "Vitis", "bin", "xsdb")) +
+                                 glob.glob(os.path.join(root, "*", "Vitis", "bin", "xsdb")), reverse=True)
+    for xsdb in candidates:
+        if xsdb and os.path.exists(xsdb):
+            return xsdb
+    sys.exit("No se encuentra xsdb: añade Vitis al PATH o define XILINX_VITIS.")
 
 
 def find_uart(board):
