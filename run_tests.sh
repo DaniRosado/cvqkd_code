@@ -18,16 +18,6 @@ ROOT=$(cd "$(dirname "$0")" && pwd)
 BUILD=${CVQKD_SIM_DIR:-$ROOT/build/sim}   # Directorio de trabajo (configurable)
 DATA=$ROOT/cvqkd_matlab/data
 
-if ! command -v xvlog >/dev/null 2>&1; then
-    if [ -n "${XILINX_VIVADO:-}" ]; then
-        PATH=$XILINX_VIVADO/bin:$PATH
-    else
-        echo "No se encuentra xvlog: añade Vivado al PATH o define XILINX_VIVADO." >&2
-        exit 1
-    fi
-fi
-VIVADO_DIR=$(cd "$(dirname "$(command -v xvlog)")/.." && pwd)
-
 A=$ROOT/cvqkd_alice/rtl
 B=$ROOT/cvqkd_bob/rtl
 M=$ROOT/cvqkd_mdr/rtl
@@ -41,7 +31,7 @@ RTL_SV=(
     $M/mdr_alice_fsm.sv $M/mdr_alice_datapath.sv $M/mdr_alice_top.sv $A/alice_post_processing_core.sv
     $M/mdr_bob_datapath.sv $M/mdr_bob_streaming.sv
     $B/sync_fifo.sv $B/demux_framer.sv $B/phase_interpolator.sv $B/cvqkd_bob_dsp_top.sv $B/bob_stream_router.sv
-    $B/mac_variance.sv $B/mac_covariance.sv $B/LLR_math_unit.sv $B/param_estimator_top.sv $B/mdr_accumulator.sv
+    $B/mac_moments.sv $B/LLR_math_unit.sv $B/param_estimator_top.sv $B/mdr_accumulator.sv
     $B/barrel_shifter_384.sv $B/syndrome_calc_bg1.sv $B/cvqkd_syndrome_pingpong.sv $B/cvqkd_reconciliation_top.sv
     $B/cvqkd_bob_subsystem_top.sv
 )
@@ -50,7 +40,6 @@ RTL_V=(
     $A/cvqkd_alice_axi_wrapper.v $B/cvqkd_bob_axi_wrapper.v
     $IP/cordic_vect_ip/cordic_vect_ip_sim_netlist.v $IP/cordic_rot_ip/cordic_rot_ip_sim_netlist.v
     $IP/cordic_sqrt_q16_16/cordic_sqrt_q16_16_sim_netlist.v $IP/div_gen_48_32_params/div_gen_48_32_params_sim_netlist.v
-    $VIVADO_DIR/data/verilog/src/glbl.v
 )
 
 # Testbenches, de los unitarios a los de sistema completo
@@ -64,8 +53,7 @@ TESTS=(
     cvqkd_alice/sim/tb_cvqkd_alice_axi_wrapper.sv
     cvqkd_bob/sim/tb_sync_fifo.sv
     cvqkd_bob/sim/tb_barrel_shifter_384.sv
-    cvqkd_bob/sim/tb_mac_variance.sv
-    cvqkd_bob/sim/tb_mac_covariance.sv
+    cvqkd_bob/sim/tb_mac_moments.sv
     cvqkd_bob/sim/tb_LLR_Math_Unit.sv
     cvqkd_bob/sim/tb_param_estimator_top.sv
     cvqkd_bob/sim/tb_phase_interpolator.sv
@@ -98,6 +86,16 @@ else
     done
 fi
 
+if ! command -v xvlog >/dev/null 2>&1; then
+    if [ -n "${XILINX_VIVADO:-}" ]; then
+        PATH=$XILINX_VIVADO/bin:$PATH
+    else
+        echo "No se encuentra xvlog: añade Vivado al PATH o define XILINX_VIVADO." >&2
+        exit 1
+    fi
+fi
+VIVADO_DIR=$(cd "$(dirname "$(command -v xvlog)")/.." && pwd)
+
 mkdir -p "$BUILD"
 cd "$BUILD" || exit 1
 ln -sf "$DATA"/* .   # Los testbenches leen los vectores de MATLAB por nombre
@@ -107,7 +105,8 @@ need_rtl=0
 for t in "${SELECTED[@]}"; do [ "$t" != test_security ] && need_rtl=1; done
 if [ $need_rtl -eq 1 ]; then
     echo "Compilando RTL..."
-    if ! xvlog -sv "${RTL_SV[@]}" > rtl_sv.log 2>&1 || ! xvlog "${RTL_V[@]}" > rtl_v.log 2>&1; then
+    if ! xvlog -sv "${RTL_SV[@]}" > rtl_sv.log 2>&1 ||
+       ! xvlog "${RTL_V[@]}" "$VIVADO_DIR/data/verilog/src/glbl.v" > rtl_v.log 2>&1; then
         grep -h ERROR rtl_sv.log rtl_v.log | head -5
         echo "Error compilando la RTL (ver $BUILD/rtl_*.log)"
         exit 1

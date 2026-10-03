@@ -108,23 +108,25 @@ module param_estimator_top #(
     // =================================================================
     // 3. ACELERADORES HARDWARE MAC Y UNIDAD MATEMÁTICA
     // =================================================================
-    logic signed [63:0] var_P_sum_sq, var_P_sum_val, cov_P_sum_cov, cov_P_sum_alice, ignore_cov_bob_p;
-    logic signed [63:0] var_Q_sum_sq, var_Q_sum_val, cov_Q_sum_cov, cov_Q_sum_alice, ignore_cov_bob_q;
-    
-    // Cables internos 
+    logic signed [63:0] sum_sq_P_B, sum_P_B, sum_cov_P, sum_P_A;
+    logic signed [63:0] sum_sq_Q_B, sum_Q_B, sum_cov_Q, sum_Q_A;
+
+    // Cables internos
     logic signed [31:0] T_final_int, T_sqrt_int, sigma_sq_int, sigma_int;
 
-    mac_variance var_P_inst (.clk(clk), .rst(~rst_n), .clear(mac_clear), .enable(mac_enable), .data_in(bob_p), .sum_sq(var_P_sum_sq), .sum_val(var_P_sum_val));
-    mac_covariance cov_P_inst (.clk(clk), .rst(~rst_n), .clear(mac_clear), .enable(mac_enable), .data_bob(bob_p), .data_alice(alice_p), .sum_cov(cov_P_sum_cov), .sum_val_bob(ignore_cov_bob_p), .sum_val_alice(cov_P_sum_alice));
-    mac_variance var_Q_inst (.clk(clk), .rst(~rst_n), .clear(mac_clear), .enable(mac_enable), .data_in(bob_q), .sum_sq(var_Q_sum_sq), .sum_val(var_Q_sum_val));
-    mac_covariance cov_Q_inst (.clk(clk), .rst(~rst_n), .clear(mac_clear), .enable(mac_enable), .data_bob(bob_q), .data_alice(alice_q), .sum_cov(cov_Q_sum_cov), .sum_val_bob(ignore_cov_bob_q), .sum_val_alice(cov_Q_sum_alice));
+    mac_moments mac_P_inst (.clk(clk), .rst(~rst_n), .clear(mac_clear), .enable(mac_enable),
+                            .data_a(alice_p), .data_b(bob_p),
+                            .sum_sq_b(sum_sq_P_B), .sum_b(sum_P_B), .sum_ab(sum_cov_P), .sum_a(sum_P_A));
+    mac_moments mac_Q_inst (.clk(clk), .rst(~rst_n), .clear(mac_clear), .enable(mac_enable),
+                            .data_a(alice_q), .data_b(bob_q),
+                            .sum_sq_b(sum_sq_Q_B), .sum_b(sum_Q_B), .sum_ab(sum_cov_Q), .sum_a(sum_Q_A));
 
     LLR_math_unit #(
         .N_SAMPLES(NUM_SAMPLES)
     ) math_unit_inst (
         .clk(clk), .rst(~rst_n), .start_calc(start_math),
-        .sum_sq_P_B(var_P_sum_sq), .sum_P_B(var_P_sum_val), .sum_cov_P(cov_P_sum_cov), .sum_P_A(cov_P_sum_alice),
-        .sum_sq_Q_B(var_Q_sum_sq), .sum_Q_B(var_Q_sum_val), .sum_cov_Q(cov_Q_sum_cov), .sum_Q_A(cov_Q_sum_alice),
+        .sum_sq_P_B(sum_sq_P_B), .sum_P_B(sum_P_B), .sum_cov_P(sum_cov_P), .sum_P_A(sum_P_A),
+        .sum_sq_Q_B(sum_sq_Q_B), .sum_Q_B(sum_Q_B), .sum_cov_Q(sum_cov_Q), .sum_Q_A(sum_Q_A),
         .calib_VarA(calib_VarA),
         .T_final(T_final_int), .T_sqrt(T_sqrt_int), .sigma_sq(sigma_sq_int), .sigma(sigma_int),
         .data_ready(math_done)

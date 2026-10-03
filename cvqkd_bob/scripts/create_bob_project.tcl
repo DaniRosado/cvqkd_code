@@ -61,8 +61,8 @@ connect_bd_intf_net [get_bd_intf_pins $ps7/FIXED_IO] [get_bd_intf_ports FIXED_IO
 # Acelerador de Bob
 set bob [create_bd_cell -type module -reference cvqkd_bob_axi_wrapper cvqkd_bob_axi_wrapper_0]
 
-# DMA 0: ADC -> Bob (MM2S, 32 b) y MDR -> DDR (S2MM, 256 b). La trama MDR completa
-# (104.448 B) llega en una sola transferencia: registro de longitud de 17 bits.
+# DMA 0: ADC -> Bob (MM2S, 32 b) y MDR -> DDR (S2MM, 256 b). Registro de longitud de
+# 17 bits: la trama ADC (111.428 B) y la MDR (104.448 B) van en una transferencia cada una.
 set dma0 [create_bd_cell -type ip -vlnv xilinx.com:ip:axi_dma:7.1 axi_dma_0]
 set_property -dict [list \
     CONFIG.c_include_sg {0} \
@@ -71,11 +71,12 @@ set_property -dict [list \
     CONFIG.c_s2mm_burst_size {16} \
     CONFIG.c_m_axi_s2mm_data_width {256}] $dma0
 
-# DMA 1: muestras de Alice -> Bob (MM2S, 32 b) y síndrome -> DDR (S2MM, 512 b)
+# DMA 1: muestras de Alice -> Bob (MM2S, 32 b) y síndrome -> DDR (S2MM, 512 b).
+# Registro de longitud de 17 bits: las 13.056 muestras (52.224 B) en una transferencia.
 set dma1 [create_bd_cell -type ip -vlnv xilinx.com:ip:axi_dma:7.1 axi_dma_1]
 set_property -dict [list \
     CONFIG.c_include_sg {0} \
-    CONFIG.c_sg_length_width {14} \
+    CONFIG.c_sg_length_width {17} \
     CONFIG.c_m_axis_mm2s_tdata_width {32} \
     CONFIG.c_s2mm_burst_size {16} \
     CONFIG.c_m_axi_s2mm_data_width {512}] $dma1

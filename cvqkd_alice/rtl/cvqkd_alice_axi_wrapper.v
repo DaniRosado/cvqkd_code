@@ -68,12 +68,14 @@ module cvqkd_alice_axi_wrapper #(
     // 0x0C: reg_k_mode   (0: estático reg_k_factor, 1: dinámico ram_k)
     // 0x10: reg_x_blocks_rx (bloques X recibidos por DMA)
     // 0x14: reg_m_blocks_rx (bloques m recibidos por DMA)
+    // 0x18: reg_cycles      (ciclos de reloj de la última ejecución: latencia medida)
     // =========================================================================
     reg [31:0] reg_ctrl;
     reg [31:0] reg_k_factor;
     reg [31:0] reg_k_mode;
     reg [13:0] reg_x_blocks_rx;
     reg [13:0] reg_m_blocks_rx;
+    reg [31:0] reg_cycles;
 
     wire soft_reset = reg_ctrl[0];
     wire auto_run   = reg_ctrl[3];
@@ -276,6 +278,7 @@ module cvqkd_alice_axi_wrapper #(
                         6'h03: axi_rdata <= reg_k_mode;
                         6'h04: axi_rdata <= {18'd0, reg_x_blocks_rx};
                         6'h05: axi_rdata <= {18'd0, reg_m_blocks_rx};
+                        6'h06: axi_rdata <= reg_cycles;
                         default: axi_rdata <= 32'd0;
                     endcase
                 end else begin
@@ -575,6 +578,16 @@ module cvqkd_alice_axi_wrapper #(
                 end
             endcase
         end
+    end
+
+    // Latencia medida en hardware: ciclos desde el arranque hasta el final (ST_DONE)
+    always @(posedge aclk) begin
+        if (!aresetn || soft_reset)
+            reg_cycles <= 0;
+        else if (state == ST_IDLE && (start_mdr_pulse || auto_start_pending || start_ldpc_pulse))
+            reg_cycles <= 0;
+        else if (core_busy)
+            reg_cycles <= reg_cycles + 1'b1;
     end
 
     // Pulso de start hacia el MDR

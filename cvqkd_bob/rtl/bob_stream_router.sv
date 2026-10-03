@@ -33,10 +33,11 @@ module bob_stream_router (
     logic        mega_fifo_empty;
     logic        mega_fifo_full;
 
-    // 65536 (2^16) es potencia de 2 y mayor que el bloque de datos de una trama.
+    // Guarda los datos de una trama completa (26.115 muestras sin pilotos) mientras
+    // llega la máscara: 32.768 (2^15) es la potencia de 2 inmediatamente superior.
     sync_fifo #(
         .DATA_WIDTH(32),
-        .DEPTH(65536)
+        .DEPTH(32768)
     ) mega_fifo_inst (
         .clk(clk),
         .rst(rst),

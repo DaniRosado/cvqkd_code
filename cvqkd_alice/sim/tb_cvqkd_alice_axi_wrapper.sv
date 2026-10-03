@@ -141,6 +141,7 @@ module tb_cvqkd_alice_axi_wrapper();
 
     // Secuencia de prueba
     logic [31:0] status_val;
+    logic [31:0] cycles_val;
     int key_errors = 0;
 
     initial begin
@@ -220,9 +221,11 @@ module tb_cvqkd_alice_axi_wrapper();
         $display("  -> LDPC Done     : %d", ((status_val >> 1) & 1));
         $display("  -> LDPC Success  : %d", ((status_val >> 2) & 1));
         $display("  -> Clave Lista   : %d", ((status_val >> 3) & 1));
+        axi_read(13'h0018, cycles_val);
+        $display("  -> Latencia      : %0d ciclos (%0d iteraciones LDPC)", cycles_val, (status_val >> 8) & 8'hFF);
 
-        if (((status_val >> 2) & 1) == 0) begin
-            $display("[ERROR FATAL] El decodificador LDPC no convergio.");
+        if (((status_val >> 2) & 1) == 0 || cycles_val == 0) begin
+            $display("[ERROR FATAL] El decodificador LDPC no convergio o el contador de ciclos no avanzo.");
             $display("RESULTADO: FAIL");
             $finish;
         end

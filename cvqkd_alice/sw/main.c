@@ -1,3 +1,13 @@
+/******************************************************************************
+ *  TFG: Acelerador Hardware CV-QKD - Subsistema Alice (Nexys Video, MicroBlaze)
+ *
+ *  Fase 1: reconciliación de la trama de MATLAB (MDR 8D + LDPC) y volcado de la
+ *          clave por UART para compararla con la de Bob (tools/run_board.py alice).
+ *  Fase 2: barrido del factor K (SNR) en 10 escalones de 100 tramas: tasa de
+ *          éxito, iteraciones del LDPC y latencia medida por el contador de ciclos
+ *          del acelerador (registro 0x18).
+ ******************************************************************************/
+
 #include "xil_io.h"
 #include "xil_printf.h"
 #include "xparameters.h"
@@ -7,7 +17,21 @@
 #define REG_STATUS         (ALICE_BASE + 0x04)
 #define REG_K_FACTOR       (ALICE_BASE + 0x08)
 #define REG_K_MODE         (ALICE_BASE + 0x0C)
+#define REG_CYCLES         (ALICE_BASE + 0x18) // Ciclos de reloj de la última ejecución
 #define KEY_BRAM_BASE      (ALICE_BASE + 0x0A00) // 816 palabras
+
+// Bits de REG_CTRL y REG_STATUS
+#define CTRL_SOFT_RESET    0x01
+#define CTRL_START_AUTO    0x0A                  // start_mdr + auto_run (MDR y después LDPC)
+#define ST_LDPC_DONE       (1u << 1)
+#define ST_LDPC_SUCCESS    (1u << 2)
+#define ST_KEY_READY       (1u << 3)
+#define ST_BUSY            (1u << 4)
+#define ST_ITERS(s)        (((s) >> 8) & 0xFF)
+
+#define CLK_MHZ            25                    // Reloj del acelerador (clk_wiz de la BD)
+#define N_KEY_WORDS        816                   // 26.112 bits
+#define FRAME_BITS         26112
 
 #define NUM_K_STEPS        10
 #define FRAMES_PER_STEP    100
@@ -42,55 +66,49 @@ typedef struct {
     u32 thr_kbps;
 } step_stats_t;
 
-step_stats_t step_results[NUM_K_STEPS];
+static step_stats_t step_results[NUM_K_STEPS];
 
-int main() {
+// Lanza una trama (MDR + LDPC) y espera a que el acelerador termine.
+// Devuelve el registro de estado final, o 0 si se agota el tiempo.
+static u32 run_frame(u32 k_mode, u32 k_factor)
+{
+    Xil_Out32(REG_CTRL, CTRL_SOFT_RESET);
+    Xil_Out32(REG_CTRL, 0);
+    Xil_Out32(REG_K_MODE, k_mode);
+    if (k_mode == 0) Xil_Out32(REG_K_FACTOR, k_factor);
+    Xil_Out32(REG_CTRL, CTRL_START_AUTO);
+
+    for (u32 polls = 0; polls < 1000000; polls++) {
+        u32 status = Xil_In32(REG_STATUS);
+        if ((status & ST_LDPC_DONE) && !(status & ST_BUSY)) return status;
+    }
+    return 0;
+}
+
+int main()
+{
     xil_printf("\r\n========================================\r\n");
     xil_printf("   CV-QKD ALICE HARDWARE ACCELERATOR    \r\n");
     xil_printf("   Nexys Video (Artix-7 XC7A200T)       \r\n");
     xil_printf("========================================\r\n");
 
-    // 1. Soft-Reset inicial
-    Xil_Out32(REG_CTRL, 0x01);
-    for(volatile int i = 0; i < 1000; i++);
-    Xil_Out32(REG_CTRL, 0x00);
-
-    // 2. Configurar modo dinámico para K (lee de ram_k)
-    Xil_Out32(REG_K_MODE, 0x01);
-
     // =========================================================================
     // FASE 1: VERIFICACION DE LA CLAVE DORADA (TRAMA 1)
     // =========================================================================
     xil_printf("[ALICE] Lanzando reconciliacion hardware (MDR + LDPC)...\r\n");
-    Xil_Out32(REG_CTRL, 0x0A); // auto_run = 1, start_mdr = 1
-
-    u32 status = 0;
-    u32 timeout = 0;
-    while (timeout < 5000000) {
-        status = Xil_In32(REG_STATUS);
-        if (status & (1 << 3)) { // key_ready == 1
-            break;
-        }
-        timeout++;
-    }
-
-    if (!(status & (1 << 3))) {
-        xil_printf("[ERROR] Timeout esperando a key_ready. Status = 0x%08X\r\n", status);
+    u32 status = run_frame(1, 0);   // K dinámico (ram_k)
+    if (!(status & ST_KEY_READY)) {
+        xil_printf("[ERROR] La trama 1 no se reconcilio. Status = 0x%08X\r\n", status);
         return -1;
     }
-
-    xil_printf("[ALICE] Reconciliacion completada con exito!\r\n");
-    xil_printf("        - MDR Done:     %d\r\n", (status >> 0) & 1);
-    xil_printf("        - LDPC Done:    %d\r\n", (status >> 1) & 1);
-    xil_printf("        - LDPC Success: %d\r\n", (status >> 2) & 1);
-    xil_printf("        - Key Ready:    %d\r\n", (status >> 3) & 1);
+    u32 cycles = Xil_In32(REG_CYCLES);
+    xil_printf("[ALICE] Reconciliacion completada: %d iteraciones LDPC, %d ciclos (%d us a %d MHz)\r\n",
+               ST_ITERS(status), cycles, cycles / CLK_MHZ, CLK_MHZ);
 
     // Volcar las 816 palabras de la clave b_hat (26.112 bits) por UART
     xil_printf("\r\n--- KEY_START ---\r\n");
-    for (int w = 0; w < 816; w++) {
-        (void)Xil_In32(KEY_BRAM_BASE + (w * 4));
-        u32 key_word = Xil_In32(KEY_BRAM_BASE + (w * 4));
-        xil_printf("%08X\r\n", key_word);
+    for (int w = 0; w < N_KEY_WORDS; w++) {
+        xil_printf("%08X\r\n", Xil_In32(KEY_BRAM_BASE + (w * 4)));
     }
     xil_printf("--- KEY_END ---\r\n");
 
@@ -100,110 +118,56 @@ int main() {
     xil_printf("\r\n========================================================================\r\n");
     xil_printf("   INICIANDO BARRIDO DE SNR Y FACTOR K EN SILICIO (%d TRAMAS)          \r\n", TOTAL_STREAM_FRAMES);
     xil_printf("   - 10 escalones de SNR x 100 tramas/escalon                          \r\n");
-    xil_printf("   - Telemetria de Iteraciones LDPC, Latencia y Throughput en vivo     \r\n");
+    xil_printf("   - Latencia medida con el contador de ciclos del acelerador          \r\n");
     xil_printf("========================================================================\r\n\r\n");
 
-    u32 global_success = 0;
-    u32 global_fail = 0;
-    u32 global_timeout = 0;
-    u64 global_polls = 0;
-    u64 global_iters = 0;
-    u32 global_frame_idx = 0;
+    u32 global_success = 0, global_timeout = 0, global_frame_idx = 0;
 
     for (int s = 0; s < NUM_K_STEPS; s++) {
-        u32 step_success = 0;
-        u32 step_fail = 0;
-        u32 step_timeout = 0;
-        u64 step_polls = 0;
-        u64 step_iters = 0;
+        u32 step_success = 0, step_fail = 0, step_timeout = 0;
+        u64 step_iters = 0, step_cycles = 0;
 
         xil_printf("[ESCALON %2d/10] Probando 100 tramas con %s (%s)...\r\n",
                    s + 1, K_CONFIGS[s].name, K_CONFIGS[s].fiber_desc);
 
         for (int f = 1; f <= FRAMES_PER_STEP; f++) {
             global_frame_idx++;
+            status = run_frame(K_CONFIGS[s].k_mode, K_CONFIGS[s].k_factor);
+            cycles = Xil_In32(REG_CYCLES);
 
-            // 1. Soft-reset rápido para limpiar acumulador y FSM
-            Xil_Out32(REG_CTRL, 0x01);
-            Xil_Out32(REG_CTRL, 0x00);
-
-            // 2. Configurar modo y factor K
-            Xil_Out32(REG_K_MODE, K_CONFIGS[s].k_mode);
-            if (K_CONFIGS[s].k_mode == 0) {
-                Xil_Out32(REG_K_FACTOR, K_CONFIGS[s].k_factor);
-            }
-
-            // 3. Disparar nuevo frame
-            Xil_Out32(REG_CTRL, 0x0A); // auto_run = 1, start_mdr = 1
-
-            // 4. Sondeo ultra-rápido en bucle cerrado
-            u32 poll_cnt = 0;
-            u32 frame_status = 0;
-            while (poll_cnt < 200000) {
-                frame_status = Xil_In32(REG_STATUS);
-                if (frame_status & (1 << 3)) { // key_ready == 1
-                    break;
-                }
-                if ((poll_cnt > 1000) && (frame_status & (1 << 1)) && !(frame_status & (1 << 4))) {
-                    // ldpc_done activo y core_busy = 0
-                    break;
-                }
-                poll_cnt++;
-            }
-
-            u32 iters = (frame_status >> 8) & 0xFF;
-
-            if (frame_status & (1 << 3)) { // key_ready == 1
-                step_success++;
-                global_success++;
-                step_polls += poll_cnt;
-                global_polls += poll_cnt;
-                step_iters += iters;
-                global_iters += iters;
-            } else if (frame_status & (1 << 1)) {
-                step_fail++;
-                global_fail++;
-                step_iters += iters;
-                global_iters += iters;
-            } else {
+            if (status == 0) {
                 step_timeout++;
-                global_timeout++;
+            } else if (status & ST_KEY_READY) {
+                step_success++;
+                step_iters  += ST_ITERS(status);
+                step_cycles += cycles;
+            } else {
+                step_fail++;
             }
 
             // Diagnóstico de la primera trama del escalón
             if (f == 1) {
-                (void)Xil_In32(KEY_BRAM_BASE);
-                u32 check_word0 = Xil_In32(KEY_BRAM_BASE);
-                xil_printf("  -> [DIAG Trama %4d] Status = 0x%08X (KeyReady=%d, Succ=%d, Iters=%2d) | Word0 = 0x%08X | Polls = %d\r\n",
-                           global_frame_idx, frame_status,
-                           (frame_status >> 3) & 1,
-                           (frame_status >> 2) & 1,
-                           iters,
-                           check_word0,
-                           poll_cnt);
+                xil_printf("  -> [DIAG Trama %4d] Status = 0x%08X (KeyReady=%d, Succ=%d, Iters=%2d) | Word0 = 0x%08X | Ciclos = %d\r\n",
+                           global_frame_idx, status, (status >> 3) & 1, (status >> 2) & 1,
+                           ST_ITERS(status), Xil_In32(KEY_BRAM_BASE), cycles);
             }
         }
+        global_success += step_success;
+        global_timeout += step_timeout;
 
-        // Métricas del escalón actual
-        u32 avg_polls = (step_success > 0) ? (u32)(step_polls / step_success) : (step_polls / FRAMES_PER_STEP);
-        u32 avg_iters = (step_success > 0) ? (u32)(step_iters / step_success) : (step_iters / FRAMES_PER_STEP);
-        u32 lat_us = (avg_polls * 72) / 100;
-        if (lat_us == 0) lat_us = 1250;
-        u32 thr_kbps = (lat_us > 0) ? (26112000 / lat_us) : 0;
-
-        step_results[s].success = step_success;
-        step_results[s].fail = step_fail;
-        step_results[s].timeout = step_timeout;
-        step_results[s].avg_iters = avg_iters;
-        step_results[s].lat_us = lat_us;
-        step_results[s].thr_kbps = thr_kbps;
+        // Métricas del escalón (sobre las tramas reconciliadas)
+        step_stats_t *r = &step_results[s];
+        r->success   = step_success;
+        r->fail      = step_fail;
+        r->timeout   = step_timeout;
+        r->avg_iters = step_success ? (u32)(step_iters / step_success) : 0;
+        r->lat_us    = step_success ? (u32)(step_cycles / step_success / CLK_MHZ) : 0;
+        r->thr_kbps  = r->lat_us ? (FRAME_BITS * 1000u / r->lat_us) : 0;
 
         xil_printf("  [RESULTADO] %s | Exito: %3d%% | Iters Medias: %2d | Latencia: %d.%02d ms | Throughput: %d.%02d Mbps\r\n\r\n",
-                   K_CONFIGS[s].name,
-                   (step_success * 100) / FRAMES_PER_STEP,
-                   avg_iters,
-                   lat_us / 1000, (lat_us % 1000) / 10,
-                   thr_kbps / 1000, (thr_kbps % 1000) / 10);
+                   K_CONFIGS[s].name, (step_success * 100) / FRAMES_PER_STEP, r->avg_iters,
+                   r->lat_us / 1000, (r->lat_us % 1000) / 10,
+                   r->thr_kbps / 1000, (r->thr_kbps % 1000) / 10);
     }
 
     xil_printf("====================================================================================================\r\n");
@@ -212,14 +176,12 @@ int main() {
     xil_printf(" Paso | Configuracion        | Condicion        | Exito    | Iters Medias | Latencia  | Throughput  \r\n");
     xil_printf("----------------------------------------------------------------------------------------------------\r\n");
     for (int s = 0; s < NUM_K_STEPS; s++) {
+        step_stats_t *r = &step_results[s];
         xil_printf("  %2d  | %s | %s |  %3d%%   |      %2d      |  %d.%02d ms  | %d.%02d Mbps\r\n",
-                   s + 1,
-                   K_CONFIGS[s].name,
-                   K_CONFIGS[s].fiber_desc,
-                   (step_results[s].success * 100) / FRAMES_PER_STEP,
-                   step_results[s].avg_iters,
-                   step_results[s].lat_us / 1000, (step_results[s].lat_us % 1000) / 10,
-                   step_results[s].thr_kbps / 1000, (step_results[s].thr_kbps % 1000) / 10);
+                   s + 1, K_CONFIGS[s].name, K_CONFIGS[s].fiber_desc,
+                   (r->success * 100) / FRAMES_PER_STEP, r->avg_iters,
+                   r->lat_us / 1000, (r->lat_us % 1000) / 10,
+                   r->thr_kbps / 1000, (r->thr_kbps % 1000) / 10);
     }
     xil_printf("====================================================================================================\r\n");
     xil_printf(" Total tramas analizadas : %d\r\n", TOTAL_STREAM_FRAMES);
@@ -227,8 +189,8 @@ int main() {
                global_success, TOTAL_STREAM_FRAMES,
                (global_success * 100) / TOTAL_STREAM_FRAMES,
                ((global_success * 10000) / TOTAL_STREAM_FRAMES) % 100);
-    xil_printf(" Timeouts / Colapsos     : %d (0.00%%)\r\n", global_timeout);
-    xil_printf(" Total bits procesados   : %d bits (26.11 Megabits)\r\n", TOTAL_STREAM_FRAMES * 26112);
+    xil_printf(" Timeouts                : %d\r\n", global_timeout);
+    xil_printf(" Total bits procesados   : %d bits\r\n", TOTAL_STREAM_FRAMES * FRAME_BITS);
     xil_printf("====================================================================================================\r\n");
     xil_printf("[STREAM_DONE]\r\n");
 

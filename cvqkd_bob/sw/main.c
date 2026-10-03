@@ -33,18 +33,7 @@
 #include "sleep.h"
 #include "cvqkd_security.h"
 
-// Usar vectores precalculados de MATLAB
-#define USE_MATLAB_VECTORS 1
-
-#if USE_MATLAB_VECTORS
-    #if __has_include("matlab_vectors.h")
-        #include "matlab_vectors.h"
-    #else
-        #warning "matlab_vectors.h no encontrado en include path. Usando datos sinteticos."
-        #undef USE_MATLAB_VECTORS
-        #define USE_MATLAB_VECTORS 0
-    #endif
-#endif
+#include "matlab_vectors.h"   // Vectores de prueba de MATLAB (export_matlab_to_c.py)
 
 // =============================================================================
 // PARÁMETROS DEL STREAMING Y SEGURIDAD
@@ -91,13 +80,7 @@ static inline uint64_t read_global_timer(void) {
 // =============================================================================
 // DEFINICIONES DE HARDWARE Y REGISTROS
 // =============================================================================
-#if defined(XPAR_CVQKD_BOB_AXI_WRAPPER_0_BASEADDR)
-    #define BOB_BASEADDR XPAR_CVQKD_BOB_AXI_WRAPPER_0_BASEADDR
-#elif defined(XPAR_CVQKD_BOB_SUBSYSTEM_0_BASEADDR)
-    #define BOB_BASEADDR XPAR_CVQKD_BOB_SUBSYSTEM_0_BASEADDR
-#else
-    #define BOB_BASEADDR 0x40000000 // Dirección por defecto en Vivado
-#endif
+#define BOB_BASEADDR 0x40000000 // Asignada en create_bob_project.tcl
 
 // Mapa de registros de Bob (Offsets de 32 bits)
 #define BOB_REG_CTRL          0x00 // R/W: bit 0 = soft_reset, bit 1 = enable
@@ -133,21 +116,6 @@ static inline uint64_t read_global_timer(void) {
 #define KEY_BYTE_SIZE         (N_KEY_WORDS     * sizeof(uint32_t)) //   3.264 B
 #define MDR_BYTE_SIZE         (N_MDR_WORDS     * sizeof(uint32_t)) // 104.448 B
 #define SYN_BYTE_SIZE         (N_SYN_WORDS     * sizeof(uint32_t)) //   2.944 B
-
-// Estructura del paquete de reconciliación clásica que Bob enviará a Alice
-typedef struct __attribute__((packed)) {
-    uint32_t magic_header;             // 0x514B4431 ("QKD1")
-    uint32_t block_id;                 // Identificador del bloque
-    int32_t  T_final;                  // Transmitancia T (Q16.16)
-    int32_t  T_sqrt;                   // Raíz sqrt(T) (Q16.16)
-    int32_t  sigma_sq;                 // Varianza del ruido (Entero)
-    int32_t  sigma;                    // Desviación estándar (Q16.16)
-    uint32_t mask_words[N_MASK_WORDS]; // Máscara de sacrificio (816 palabras = 3.264 B)
-    uint32_t mdr_words[N_MDR_WORDS];   // Mensajes públicos MDR (3.264 bloques x 256 bits)
-    uint32_t syn_words[N_SYN_WORDS];   // Síndrome LDPC (46 filas x 512 bits)
-} bob_to_alice_packet_t;
-
-static bob_to_alice_packet_t bob_tx_alice_packet;
 
 // =============================================================================
 // BÚFERES ALINEADOS A 64 BYTES EN MEMORIA RAM DDR
@@ -219,26 +187,15 @@ static int wait_dma_done(XAxiDma *dma_inst, int direction, const char *name) {
     return XST_FAILURE;
 }
 
-// Envía búferes grandes dividiéndolos en bloques <= 16 KB (límite de 14 bits del DMA)
-static int dma_send_chunked(XAxiDma *dma, uint8_t *buf, uint32_t total_bytes, const char *name) {
-    uint32_t max_chunk = 16380; // Múltiplo de 4 bytes y < 16384
-    uint32_t bytes_left = total_bytes;
-    uint32_t offset = 0;
-
-    while (bytes_left > 0) {
-        uint32_t chunk = (bytes_left > max_chunk) ? max_chunk : bytes_left;
-        int status = XAxiDma_SimpleTransfer(dma, (UINTPTR)(buf + offset), chunk, XAXIDMA_DMA_TO_DEVICE);
-        if (status != XST_SUCCESS) {
-            xil_printf("[ERROR] Fallo transfer TX en %s (status: %d)\r\n", name, status);
-            return XST_FAILURE;
-        }
-        if (wait_dma_done(dma, XAXIDMA_DMA_TO_DEVICE, name) != XST_SUCCESS) {
-            return XST_FAILURE;
-        }
-        offset += chunk;
-        bytes_left -= chunk;
+// Envía un búfer al acelerador en una sola transferencia y espera a que salga entero.
+// (Los DMA 0 y 1 tienen el registro de longitud de 17 bits: hasta 128 KB.)
+static int dma_send(XAxiDma *dma, void *buf, uint32_t bytes, const char *name) {
+    if (XAxiDma_SimpleTransfer(dma, (UINTPTR)buf, bytes, XAXIDMA_DMA_TO_DEVICE) != XST_SUCCESS) {
+        xil_printf("[ERROR] No se pudo lanzar %s (%u B): revisa el 'Width of Buffer Length "
+                   "Register' del DMA (17 bits, create_bob_project.tcl).\r\n", name, (unsigned int)bytes);
+        return XST_FAILURE;
     }
-    return XST_SUCCESS;
+    return wait_dma_done(dma, XAXIDMA_DMA_TO_DEVICE, name);
 }
 
 // Carga la clave aleatoria u de Bob para UNA trama. El hardware consume cada byte
@@ -288,9 +245,11 @@ static int bob_process_frame(bob_frame_hw_t *hw) {
         return XST_FAILURE;
     }
 
-    if (dma_send_chunked(&DmaPqMdr, (uint8_t*)tx_adc_buf, ADC_BYTE_SIZE, "TX ADC") != XST_SUCCESS) return XST_FAILURE;
+    // La trama entera queda en la FIFO del router antes de enviar la máscara, que la
+    // reparte entre estimación (muestras de Alice) y reconciliación.
+    if (dma_send(&DmaPqMdr, tx_adc_buf, ADC_BYTE_SIZE, "TX ADC") != XST_SUCCESS) return XST_FAILURE;
     if (XAxiDma_SimpleTransfer(&DmaMask, (UINTPTR)tx_mask_buf, MASK_BYTE_SIZE, XAXIDMA_DMA_TO_DEVICE) != XST_SUCCESS) return XST_FAILURE;
-    if (dma_send_chunked(&DmaAliceSyn, (uint8_t*)tx_alice_buf, ALICE_BYTE_SIZE, "TX Alice") != XST_SUCCESS) return XST_FAILURE;
+    if (dma_send(&DmaAliceSyn, tx_alice_buf, ALICE_BYTE_SIZE, "TX Alice") != XST_SUCCESS) return XST_FAILURE;
     if (wait_dma_done(&DmaMask,     XAXIDMA_DMA_TO_DEVICE, "TX Mascara")  != XST_SUCCESS) return XST_FAILURE;
     if (wait_dma_done(&DmaPqMdr,    XAXIDMA_DEVICE_TO_DMA, "RX MDR")      != XST_SUCCESS) return XST_FAILURE;
     if (wait_dma_done(&DmaAliceSyn, XAXIDMA_DEVICE_TO_DMA, "RX Sindrome") != XST_SUCCESS) return XST_FAILURE;
@@ -373,24 +332,10 @@ int main(void) {
     init_global_timer();
 
     // 1. INICIALIZAR LOS 3 AXI DMAS
-    #if defined(XPAR_XAXIDMA_0_BASEADDR)
-        UINTPTR dma0_addr = XPAR_XAXIDMA_0_BASEADDR;
-        UINTPTR dma1_addr = XPAR_XAXIDMA_1_BASEADDR;
-        UINTPTR dma2_addr = XPAR_XAXIDMA_2_BASEADDR;
-    #elif defined(XPAR_AXI_DMA_0_BASEADDR)
-        UINTPTR dma0_addr = XPAR_AXI_DMA_0_BASEADDR;
-        UINTPTR dma1_addr = XPAR_AXI_DMA_1_BASEADDR;
-        UINTPTR dma2_addr = XPAR_AXI_DMA_2_BASEADDR;
-    #else
-        UINTPTR dma0_addr = 0x40400000;
-        UINTPTR dma1_addr = 0x40410000;
-        UINTPTR dma2_addr = 0x40420000;
-    #endif
-
     xil_printf("[INIT] Inicializando controladores AXI DMA...\r\n");
-    if (init_dma(&DmaPqMdr,    dma0_addr, "DMA_0 (ADC/MDR)")       != XST_SUCCESS) return XST_FAILURE;
-    if (init_dma(&DmaAliceSyn, dma1_addr, "DMA_1 (Alice/Sindrome)") != XST_SUCCESS) return XST_FAILURE;
-    if (init_dma(&DmaMask,     dma2_addr, "DMA_2 (Mascara)")       != XST_SUCCESS) return XST_FAILURE;
+    if (init_dma(&DmaPqMdr,    XPAR_AXI_DMA_0_BASEADDR, "DMA_0 (ADC/MDR)")        != XST_SUCCESS) return XST_FAILURE;
+    if (init_dma(&DmaAliceSyn, XPAR_AXI_DMA_1_BASEADDR, "DMA_1 (Alice/Sindrome)") != XST_SUCCESS) return XST_FAILURE;
+    if (init_dma(&DmaMask,     XPAR_AXI_DMA_2_BASEADDR, "DMA_2 (Mascara)")        != XST_SUCCESS) return XST_FAILURE;
     xil_printf("  -> Todos los DMAs configurados en modo Simple Transfer.\r\n");
 
     // 2. CONFIGURAR MÓDULO DE SEGURIDAD CUÁNTICA EN CPU
@@ -404,7 +349,6 @@ int main(void) {
                sec_params.m_samples, sec_params.n_key_bits);
 
     // 3. CARGA INICIAL DE VECTORES BASE
-#if USE_MATLAB_VECTORS
     for (int i = 0; i < N_ADC_SAMPLES; i++)   tx_adc_buf[i]   = vec_bob_adc[i];
     for (int i = 0; i < N_ALICE_SAMPLES; i++) tx_alice_buf[i] = vec_alice_data[i];
     for (int i = 0; i < N_MASK_WORDS; i++)    tx_mask_buf[i]  = vec_mask_packed[i];
@@ -426,7 +370,6 @@ int main(void) {
         xil_printf("[ERROR] Fallo de verificacion en BRAM de clave (%d errores).\r\n", key_rb_errs);
         return XST_FAILURE;
     }
-#endif
 
     // =========================================================================
     // FASE I: TRAMA DE DIAGNÓSTICO DETALLADO (FRAME 1)
@@ -579,10 +522,6 @@ int main(void) {
             attack_blocks++;
             if (!b_sec.is_secure) attack_blocks_aborted++;
         }
-        bob_tx_alice_packet.block_id     = block;
-        bob_tx_alice_packet.T_final      = T_q16_blk;
-        bob_tx_alice_packet.sigma_sq     = var_blk;
-        bob_tx_alice_packet.magic_header = b_sec.is_secure ? 0x514B4431 : 0xDEADBEEF;
     }
 
     // =========================================================================
