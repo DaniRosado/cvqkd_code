@@ -1,5 +1,7 @@
 # Medidas en Silicio: Streaming Continuo y Defensa Cuántica Activa en Bob (PYNQ-Z2)
 
+> **Nota (03/10/2026)**: medida con el firmware y el modelo de seguridad anteriores a la revisión de octubre de 2026 (evaluación trama a trama). Los resultados vigentes están en [2026-10-03_Bob_Clave_Secreta_Bloques.md](2026-10-03_Bob_Clave_Secreta_Bloques.md).
+
 > **Fecha**: 29 de septiembre de 2026  
 > **Plataforma**: PYNQ-Z2 (Zynq-7020 `XC7Z020-1CLG400C` @ 650 MHz)  
 > **Acelerador Hardware**: `cvqkd_bob_axi_wrapper` (PL Artix-7 @ 100 MHz)  
