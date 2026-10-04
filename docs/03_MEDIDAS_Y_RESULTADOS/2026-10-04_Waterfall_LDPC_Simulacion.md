@@ -32,21 +32,21 @@ por punto, tampoco convergió ninguna a 16, 18 y 20 km.
 
 ## 2. Resultados
 
-| Distancia | SNR/dim | $\beta$ | Tramas reconciliadas | Iteraciones: media (mín–máx) | Latencia media de Alice | $K_{\text{finite}}$ (bits/dim) | $(1-\text{FER}) \cdot K_{\text{finite}}$ |
-|---|---|---|---|---|---|---|---|
-| 8 km | 0,942 | 0,676 | 10/10 | 8,7 (8–10) | 1,48 ms | 0,0107 | 0,0107 |
-| 10 km | 0,859 | 0,723 | 10/10 | 12,3 (10–15) | 1,64 ms | 0,0137 | 0,0137 |
-| 11 km | 0,820 | 0,749 | 10/10 | 17,4 (13–28) | 1,86 ms | 0,0173 | 0,0173 |
-| 11,5 km | 0,802 | 0,762 | 10/10 | 23,1 (15–45) | 2,11 ms | 0,0192 | **0,0192** |
-| 12 km | 0,783 | 0,775 | 8/10 | 42,6 (19–104) | 4,35 ms | 0,0214 | 0,0171 |
-| 12,5 km | 0,766 | 0,789 | 4/10 | 90,0 (34–193) | 7,93 ms | 0,0237 | 0,0095 |
-| 13 km | 0,748 | 0,803 | 1/10 | 62 (una trama) | 9,25 ms | 0,0260 | 0,0026 |
-| 13,5 km | 0,731 | 0,817 | 0/10 | — | 9,85 ms | 0,0287 | 0 |
-| 14 km | 0,715 | 0,832 | 0/10 | — | 9,85 ms | 0,0317 | 0 |
+| Distancia | SNR/dim | $\beta$ | Tramas reconciliadas | Iteraciones: media (mín–máx) | Latencia media de Alice |
+|---|---|---|---|---|---|
+| 8 km | 0,942 | 0,676 | 10/10 | 8,7 (8–10) | 1,48 ms |
+| 10 km | 0,859 | 0,723 | 10/10 | 12,3 (10–15) | 1,64 ms |
+| 11 km | 0,820 | 0,749 | 10/10 | 17,4 (13–28) | 1,86 ms |
+| 11,5 km | 0,802 | 0,762 | 10/10 | 23,1 (15–45) | 2,11 ms |
+| 12 km | 0,783 | 0,775 | 8/10 | 42,6 (19–104) | 4,35 ms |
+| 12,5 km | 0,766 | 0,789 | 4/10 | 90,0 (34–193) | 7,93 ms |
+| 13 km | 0,748 | 0,803 | 1/10 | 62 (una trama) | 9,25 ms |
+| 13,5 km | 0,731 | 0,817 | 0/10 | — | 9,85 ms |
+| 14 km | 0,715 | 0,832 | 0/10 | — | 9,85 ms |
 
 Las columnas de tramas e iteraciones son resultados de la simulación; la latencia media
 aplica el modelo de la sección 3 a todas las tramas del punto (las que no convergen
-cuentan 200 iteraciones), y las dos últimas columnas son cálculos (sección 4).
+cuentan 200 iteraciones).
 
 - **Ninguna clave errónea**: todas las tramas en las que el LDPC convergió dieron
   exactamente la clave de Bob (0 de 68 columnas distintas). El criterio de parada
@@ -88,18 +88,38 @@ incluidas las que no convergen.
 ## 4. Consecuencia para la tasa de clave
 
 Con la tasa del código fija, al aumentar la distancia $\beta$ sube y la información de
-Eva $\chi_{BE}$ baja, así que la fracción de clave por dimensión crece. La columna
-$K_{\text{finite}}$ de la tabla está calculada con `cvqkd_security.c` (el módulo de
-seguridad del firmware de Bob) para un bloque de 1000 tramas con estimaciones ideales
-del canal. Es un cálculo, no una medida. Como las tramas que no convergen se descartan,
-la clave por trama enviada es $(1 - \text{FER}) \cdot K_{\text{finite}}$:
+Eva $\chi_{BE}$ baja, así que la fracción de clave por dimensión crece hasta que el LDPC
+deja de converger. La tabla da $K_{\text{finite}}$ calculado con `cvqkd_security.c` (el
+módulo de seguridad del firmware de Bob) para un bloque de 1000 tramas con estimaciones
+ideales del canal y dos valores del ruido en exceso: el nominal del canal (0,01 SNU) y
+el que mide Bob en placa cuando las tramas llevan ruido de fase (0,021 SNU de media,
+`2026-10-03_Bob_Clave_Secreta_Bloques.md`, sección 7). Es un cálculo, no una medida. Como
+las tramas que no convergen se descartan, la clave por trama enviada es
+$(1 - \text{FER}) \cdot K_{\text{finite}}$, con la FER de la simulación (10 tramas por punto).
 
-- crece hasta 11,5 km, donde todavía se reconcilian todas las tramas, y cae en el codo
-  de la curva;
-- el punto de trabajo de 10 km da un 30 % menos de clave por trama que el óptimo, a
-  cambio de margen frente al umbral (ninguna trama perdida) y de una latencia de Alice
-  (1,6 ms de media) por debajo de la de Bob (1,91 ms por trama en placa). A 11,5 km
-  Alice tardaría 2,1 ms de media y sería el cuello de botella del sistema.
+| Distancia | $K_{\text{finite}}$ con $\xi = 0{,}01$ | $(1-\text{FER}) K_{\text{finite}}$ | $K_{\text{finite}}$ con $\xi = 0{,}021$ | $(1-\text{FER}) K_{\text{finite}}$ |
+|---|---|---|---|---|
+| 8 km | 0,0107 | 0,0107 | −0,0025 | 0 |
+| 10 km | 0,0137 | 0,0137 | 0,0027 | 0,0027 |
+| 11 km | 0,0173 | 0,0173 | 0,0071 | 0,0071 |
+| 11,5 km | 0,0192 | **0,0192** | 0,0096 | 0,0096 |
+| 12 km | 0,0214 | 0,0171 | 0,0125 | **0,0100** |
+| 12,5 km | 0,0237 | 0,0095 | 0,0149 | 0,0060 |
+| 13 km | 0,0260 | 0,0026 | 0,0178 | 0,0018 |
+| 13,5 y 14 km | 0,029 – 0,032 | 0 | 0,021 – 0,024 | 0 |
+
+- Con el ruido en exceso medido (0,021 SNU), el punto de trabajo de 10 km da
+  $K_{\text{finite}} \approx 0{,}003$ bits/dimensión, coherente con los dos bloques medidos
+  en placa (0,0050 y 0,0012). A 8 km no habría clave: el código tiene demasiada
+  redundancia para esa SNR ($\beta = 0{,}68$).
+- La clave por trama es máxima entre 11,5 y 12 km: a 11,5 km sería unas 3,5 veces la de
+  10 km con todas las tramas reconciliadas (10 de 10 en simulación) y a 11 km, unas 2,6
+  veces.
+- La latencia de Alice crece con la distancia: 1,64 ms de media a 10 km, 1,86 ms a 11 km
+  y 2,11 ms a 11,5 km, frente a los 1,91 ms por trama de Bob. Hasta 11 km Alice no es el
+  cuello de botella.
+- Con 10 tramas por punto no se puede asegurar una FER pequeña a 11–11,5 km: antes de
+  mover el punto de trabajo habría que simular más tramas en esa zona.
 
 ---
 

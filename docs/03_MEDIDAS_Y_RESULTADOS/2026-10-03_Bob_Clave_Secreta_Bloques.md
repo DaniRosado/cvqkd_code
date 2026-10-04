@@ -64,7 +64,7 @@ El tiempo medido es solo el del acelerador (vaciado de caché, DMAs y espera). Q
 
 ## 5. Limitaciones
 
-- El canal de la fase II es sintético y no tiene ruido de fase. El DSP de recuperación de fase solo se ejercita con la trama de MATLAB de la fase I.
+- En las medidas de las secciones 3 y 6 el canal de la fase II no tenía ruido de fase y el DSP de recuperación de fase solo se ejercitaba con la trama de MATLAB de la fase I. La sección 7 repite el ensayo con ruido de fase.
 - La seguridad asume ataques colectivos y un detector de confianza ($\eta$ y $v_{el}$ calibrados). Faltan un generador de números aleatorios verdadero (TRNG), la autenticación del canal clásico y la verificación de la corrección ($\epsilon_{cor}$) con hash.
 
 ---
@@ -89,3 +89,49 @@ transferencia DMA:
 Todas las filas de la fase II (T·η/2 y σ² de las tramas mostradas) coinciden valor a
 valor con la ejecución anterior: el diseño optimizado es funcionalmente idéntico en
 placa y ocupa entre un 28 % y un 38 % menos.
+
+---
+
+## 7. Repetición con ruido de fase en las tramas (05/10/2026, commit `003544d`)
+
+Desde el commit `003544d`, `synth_frame` aplica a cada trama el ruido de fase del modelo
+de MATLAB: un proceso de Wiener (láser de 100 kHz a 1 Gbaud) más una oscilación acústica
+de 0,5 rad a 500 Hz, con fases iniciales aleatorias. La recuperación de fase de la PL
+(CORDIC, desenrollado e interpolación entre pilotos) trabaja así con 3000 tramas nuevas.
+El resto del ensayo no cambia.
+
+| Bloque | Tramas | $T$ | $\xi$ (SNU) | $\xi$ peor caso | $K_{\text{finite}}$ (bits/dim) | Bits seguros | Veredicto |
+|---|---|---|---|---|---|---|---|
+| 1 | 1–1000 | 0,6297 | 0,0191 | 0,0303 | 0,0050 | 131 134 | PASS |
+| 2 | 1001–2000 (10 atacadas) | 0,6291 | 0,0425 | 0,0538 | −0,0142 | 0 | ABORT |
+| 3 | 2001–3000 | 0,6291 | 0,0234 | 0,0347 | 0,0012 | 32 149 | PASS |
+
+| Magnitud | Sin ruido de fase (sección 6) | Con ruido de fase |
+|---|---|---|
+| $\xi$ de los bloques sin ataque | 0,0139 y 0,0111 SNU | 0,0191 y 0,0234 SNU |
+| Clave secreta neta | 581 126 bits | 163 283 bits |
+| Tasa de clave secreta en vivo | 101,1 kbps | 28,4 kbps |
+| Latencia media por trama | 1,91 ms | 1,91 ms |
+| Tasa de tramas e ingesta bruta | 521,9 tramas/s, 465,3 Mbps | 521,8 tramas/s, 465,2 Mbps |
+
+- **Recuperación de fase**: funciona con tramas nuevas. La transmitancia estimada
+  (0,629–0,630) coincide con la real (0,631), no se pierde ninguna trama y la latencia
+  no cambia.
+- **Coste del ruido de fase**: el error de fase que queda tras interpolar entre pilotos
+  se mide como ruido en exceso, unos 0,009 SNU más (de 0,0125 a 0,0213 de media).
+  Coincide con la estimación $V_A \cdot \text{Var}(\delta\varphi)$: con
+  $\sigma_w^2 = 2\pi \cdot 100\text{ kHz} \cdot 1\text{ ns} = 6{,}3 \cdot 10^{-4}$ rad² por
+  símbolo y un piloto cada 16 símbolos, el error medio de la interpolación lineal es
+  $\sigma_w^2 \cdot 16/6 = 1{,}7 \cdot 10^{-3}$ rad², que por $V_A = 5$ da 0,008 SNU; el
+  ruido de los propios pilotos añade otros 0,0005. Un modelo en el PC (el `synth_frame`
+  del firmware y las etapas de fase y estimación del benchmark, en coma flotante) predecía
+  $\xi$ entre 0,016 y 0,023 SNU.
+- **Clave**: los dos bloques sin ataque siguen siendo seguros, pero la clave baja un 72 %
+  y el margen es escaso ($K_{\text{finite}} = 0{,}0012$ en el bloque 3). Con la fluctuación
+  de $\xi$ entre bloques ($\pm 0{,}004$), en este punto de trabajo algún bloque sin ataque
+  puede llegar a abortarse.
+- **Ataque**: el bloque atacado mide $\xi = 0{,}0425$, los 0,021 del canal más los 0,02
+  del ataque, y se aborta.
+
+Con este ruido en exceso, la clave por trama sería mayor a más distancia (hasta el
+umbral del LDPC): ver la sección 4 de `2026-10-04_Waterfall_LDPC_Simulacion.md`.

@@ -99,7 +99,7 @@ pueden cambiar con `VITIS_WS` o con las opciones `--bit` y `--elf`.
 | Medida | Valor |
 | :--- | :--- |
 | Bob, latencia por trama en placa | 1,91 ms (DMA + acelerador, 522 tramas/s, 465 Mbps de ingesta) |
-| Bob, tasa de clave en vivo | 101,1 kbps (bloques de 1000 tramas, 10 km, ξ = 0,01 SNU) |
+| Bob, tasa de clave en vivo | 28,4 kbps con ruido de fase en las tramas (101,1 kbps sin él); bloques de 1000 tramas, 10 km, ξ = 0,01 SNU |
 | Bob, recursos de la Zynq-7020 | 51 % LUT, 28 % FF, 53 % BRAM, 24 % DSP |
 | Bob, ataque de interceptación y reenvío | Bloque abortado con solo un 1 % de tramas atacadas |
 | Alice, latencia por trama en placa | 41.783 ciclos: 1,67 ms a 25 MHz (13 iteraciones LDPC), igual que en simulación; 1000/1000 tramas con la misma clave y la misma latencia |
@@ -115,7 +115,7 @@ El detalle está en [docs/03_MEDIDAS_Y_RESULTADOS](docs/03_MEDIDAS_Y_RESULTADOS)
   verdadero (TRNG); queda fuera del alcance de este trabajo.
 - **Canal clásico**: falta la autenticación de los mensajes entre Alice y Bob y el hash
   de verificación de la clave ($\epsilon_{cor}$).
-- **Canal sintético**: la fase II del firmware de Bob genera las tramas en el ARM sin
-  ruido de fase; la recuperación de fase se prueba con la trama de MATLAB.
+- **Canal sintético**: no hay óptica. La fase II del firmware de Bob genera las tramas
+  en el ARM con el modelo de canal de MATLAB (ruido de fase incluido).
 - **Alice** recibe la trama de prueba precargada en el bitstream: la Nexys Video no
   tiene memoria externa conectada en este diseño.
