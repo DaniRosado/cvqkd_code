@@ -109,7 +109,8 @@ El ensayo del 29/09 (`2026-09-29_Curva_Waterfall_Factor_K.md`) variaba un $K$ co
 sobre la misma trama, lo que solo reescala los LLR: no cambia la SNR. Esta curva sí
 varía el canal y usa una trama nueva por punto. En la placa, la fase 2 del firmware de
 Alice queda como prueba de robustez y latencia: la misma trama 1000 veces con $K$
-dinámico, comprobando que todas dan la clave de la fase 1.
+dinámico. Medido el 04/10/2026: las 1000 dan la clave de la fase 1, con 41.783 ciclos
+en todas (ver `2026-09-29_Streaming_Continuo_1000.md`).
 
 ---
 

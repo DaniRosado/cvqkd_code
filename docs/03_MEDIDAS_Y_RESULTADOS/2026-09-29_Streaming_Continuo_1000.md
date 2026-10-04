@@ -50,3 +50,26 @@ R_old[i] = is_first_iter ? 8'd0 : r_read_data_flat[i*W +: W];
 - **Coste de ciclos de penalización: CERO.**
 
 Gracias a esta optimización, el acelerador puede procesar millones de tramas consecutivas con 100% de fiabilidad.
+
+---
+
+## Repetición con el firmware actual (04/10/2026)
+
+Firmware `cvqkd_alice/sw/main.c` del commit `f229038`, ejecutado con `tools/run_board.py alice`
+en el proyecto `cvqkd_alice_v2`. La fase 2 reconcilia 1000 veces la trama de MATLAB con $K$
+dinámico, compara cada clave palabra a palabra con la de la fase 1 y lee el contador de
+ciclos del acelerador (registro `0x18`):
+
+| Métrica | Valor medido |
+| :--- | :--- |
+| Fase 1: clave frente a la de Bob | 816/816 palabras, 0 bits distintos |
+| Tramas con la clave de la fase 1 | 1000 / 1000 |
+| Clave distinta / sin converger / timeouts | 0 / 0 / 0 |
+| Ciclos por trama (mín / media / máx) | 41.783 / 41.783 / 41.783 (13 iteraciones) |
+| Latencia | 1,67 ms a 25 MHz |
+| Throughput de reconciliación | 15,62 Mbps |
+
+La latencia es la misma en las 1000 tramas y coincide ciclo a ciclo con la simulación: el
+acelerador es determinista y no arrastra estado entre tramas (la corrección de `R_BRAM`
+descrita arriba sigue funcionando). Las cifras de 1,24 ms y 21,04 Mbps de la tabla inicial
+eran estimaciones; las medidas son estas.
