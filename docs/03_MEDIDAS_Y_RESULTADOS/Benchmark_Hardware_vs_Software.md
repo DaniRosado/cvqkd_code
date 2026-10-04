@@ -1,111 +1,64 @@
-# Benchmark Comparativo Global: Aceleradores Hardware FPGA vs Software en CPU
+# Benchmark: Aceleradores FPGA frente a Software en CPU
 
-> **Plataformas Evaluadas**:
-> - **FPGA Hardware RTL**: Digilent Nexys Video (Artix-7 `XC7A200T` @ 25 MHz) y PYNQ-Z2 (Zynq-7020 PL @ 100 MHz)
-> - **CPU SoC Embebida**: Xilinx PYNQ-Z2 (ARM Cortex-A9 Dual-Core @ 650 MHz, Baremetal Vitis `-O3`)
-> - **CPU Host de Escritorio**: PC x86-64 moderna (~4.0 GHz, Linux GCC 16.2.1 `-O3`)
->
-> **Subsistemas Comparados**:
-> 1. **Alice**: Decodificador QC-LDPC 5G-NR ($N=26.112\text{ bits}$, $Z=384$, Base Graph 1, 7 iteraciones).
-> 2. **Bob**: Pipeline completo (Compensación de Fase + Estimación de Parámetros + Proyección MDR 8D + Síndrome LDPC + Cota de Holevo).
+> **Programas**: `benchmark/cvqkd_cpu_benchmark.c` (Alice: decodificador LDPC) y `benchmark/cvqkd_bob_cpu_benchmark.c` (Bob: cadena completa), en C con `-O3`  
+> **CPU**: ARM Cortex-A9 del Zynq-7020 (PYNQ-Z2) a 650 MHz, *baremetal*, temporizador global del SCU; Intel Core i7-8665U del PC (portátil, 1,9 GHz nominales y hasta 4,8 GHz en turbo, Linux, `clock_gettime`)  
+> **FPGA**: Alice en la Nexys Video a 25 MHz (contador de ciclos del acelerador); Bob en la PL de la PYNQ-Z2 a 71,4 MHz (DMA incluido)
 
-> **Nota (03/10/2026)**: las cifras de la FPGA de esta tabla no son medidas. Alice: latencia estimada con el número de sondeos (1,24 ms); con el contador de ciclos del wrapper la trama tarda 41.783 ciclos = **1,67 ms** a 25 MHz (simulación). Bob: 1,50 ms a 100 MHz era un valor nominal; medido en la PYNQ-Z2 es **1,91 ms por trama** con el PL a 71,4 MHz (DMA incluido; 1,94 ms antes de las optimizaciones). Los speedups cambian en proporción (por ejemplo, ARM frente a FPGA: 66,9× en Alice y 9,4× en Bob).
+> **Revisión (04/10/2026)**: la versión anterior de este informe comparaba el tiempo del decodificador en CPU (LDPC solo, 7 iteraciones, trama de septiembre) con una latencia de la FPGA que no estaba medida (1,24 ms) y daba 90× / 4,18× en Alice y 12× / 1,74× en Bob. Además, el "PC de sobremesa a ~4 GHz" es el portátil i7-8665U. Las cifras de abajo son las medidas actuales.
 
 ---
 
-## 🎯 1. Resumen Ejecutivo y Comparativa Global de Rendimiento
+## 1. Alice: decodificador LDPC
 
-| Subsistema / Función | Plataforma / Arquitectura | Frecuencia de Reloj | Latencia Trama ($T_{\text{frame}}$) | Throughput (Tramas/s) | Tasa de Datos (Mbps) | Speedup vs FPGA ($S$) |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **ALICE: Decodificación LDPC** | Python 3.12 (Host x86-64) | ~4.0 GHz | **611.00 ms** | 1.6 fps | 0.043 Mbps | **$492.7\times$ más lento** |
-| | ARM Cortex-A9 (PYNQ-Z2) | 650 MHz | **111.66 ms** | 8.96 fps | 0.234 Mbps | **$90.0\times$ más lento** |
-| | C nativo GCC `-O3` (Host x86-64) | ~4.0 GHz | **5.19 ms** | 192.7 fps | 5.034 Mbps | **$4.18\times$ más lento** |
-| | **Acelerador FPGA (Artix-7)** | **25 MHz** | **1.24 ms** | **805.8 fps** | **21.04 Mbps** | **$1.00\times$ (Referencia)** |
-| **BOB: Pipeline Completo** | ARM Cortex-A9 (PYNQ-Z2) | 650 MHz | **17.97 ms** | 55.62 fps | 49.58 Mbps (ADC) | **$12.0\times$ más lento** |
-| | C nativo GCC `-O3` (Host x86-64) | ~4.0 GHz | **2.61 ms** | 381.78 fps | 340.33 Mbps (ADC) | **$1.74\times$ más lento** |
-| | **Acelerador FPGA (Artix-7)** | **100 MHz** | **1.50 ms** | **666.67 fps** | **594.30 Mbps (ADC)** | **$1.00\times$ (Referencia)** |
+El programa decodifica una trama fija con el mismo algoritmo que la RTL (*layered scaled min-sum*, α = 0,75) y converge en 7 iteraciones. El trabajo de una iteración no depende de la trama, así que se compara el tiempo por iteración con el de la FPGA, que es de 1.094 ciclos (medido con el contador del acelerador, ver `2026-10-04_Waterfall_LDPC_Simulacion.md`).
 
----
+| Plataforma | Trama del benchmark (7 iteraciones) | Por iteración | Aceleración de la FPGA |
+|---|---|---|---|
+| ARM Cortex-A9, 650 MHz (medido el 29/09, mismo programa y datos) | 111,66 ms | 15,95 ms | **364×** |
+| Intel Core i7-8665U (medido el 04/10, media de 50 tramas) | 5,02 ms | 0,72 ms | **16,4×** |
+| FPGA Artix-7, 25 MHz | — | 43,76 µs | — |
 
-## 🔬 2. Análisis Detallado: Subsistema Bob (Ingesta, DSP y Reconciliación)
-
-En el subsistema de Bob, el benchmark por software ([`benchmark/cvqkd_bob_cpu_benchmark.c`](../../benchmark/cvqkd_bob_cpu_benchmark.c)) desglosa el tiempo empleado por cada etapa:
-
-```
-                                  DESGLOSE DE LATENCIA DE BOB
-  +-------------------------------------+-----------------+-----------------+-----------------+
-  | Etapa del Pipeline                  | ARM Cortex-A9   | Host x86-64     | FPGA Artix-7    |
-  |                                     | (@ 650 MHz)     | (@ ~4.0 GHz)    | (Pipelined PL)  |
-  +-------------------------------------+-----------------+-----------------+-----------------+
-  | 1. Compensación Fase (CORDIC/Trig)  | 11.27 ms (62.6%)| 0.98 ms (37.7%) |                 |
-  | 2. Criba & Estimación (T, sigma^2)  |  1.06 ms  (5.9%)| 0.29 ms (11.0%) |  1.50 ms TOTAL  |
-  | 3. Proyección MDR 8D (3.264 blks)   |  5.51 ms (30.6%)| 1.32 ms (50.6%) | (Pipelined a    |
-  | 4. Síndrome LDPC (46x384 checks)    |  0.11 ms  (0.6%)| 0.01 ms  (0.4%) |  100 MHz en PL) |
-  | 5. Seguridad Cuántica (Holevo C)    |  0.007 ms (0.0%)| 0.002 ms (0.0%) |                 |
-  +-------------------------------------+-----------------+-----------------+-----------------+
-  | TOTAL LATENCIA POR TRAMA            | 17.97 ms        | 2.61 ms         | 1.50 ms         |
-  | SPEEDUP DEL ACELERADOR HARDWARE     | 11.98x          | 1.74x           | 1.00x (Ref)     |
-  +-------------------------------------+-----------------+-----------------+-----------------+
-```
-
-### Hallazgos de Ingeniería en Bob:
-1. **El cuello de botella software de Bob es la trigonometría**:
-   - En la CPU ARM, la compensación de deriva de fase de $27.857$ pulsos ópticos insume **$11.27\text{ ms}$ ($62.6\%$ del tiempo total)** debido a las funciones trascendentes (`atan2`, `sin`, `cos`, interpolación).
-   - En la FPGA, dos núcleos **CORDIC pipelinizados** procesan las muestras al vuelo ciclo a ciclo a 100 MHz sin consumo de CPU.
-2. **La proyección MDR 8D es altamente acelerable en FPGA**:
-   - Requiere normalización euclídea y rotaciones ortogonales de Hurwitz-Radon sobre $3.264$ bloques. En la CPU toma **$5.51\text{ ms}$**, mientras que en la FPGA se computa mediante un datapath de 9 etapas de registros multiplexores y sumadores sin divisiones en punto flotante.
-3. **El cómputo de síndrome y la cota de Holevo son ligeros**:
-   - El cálculo del síndrome LDPC toma **$0.11\text{ ms}$** gracias al algoritmo rápido de desplazamiento circular de palabras de 384 bits.
-   - La evaluación de seguridad cuántica (Holevo) toma solo **$7\ \mu\text{s}$**, lo que confirma que **ejecutar la seguridad cuántica en software (CPU) dentro del co-diseño es la partición arquitectónica ideal**, liberando recursos de lógica para el procesamiento masivo de datos.
+La FPGA reconcilia la trama completa del punto de trabajo (síndrome, MDR, 13 iteraciones y extracción de la clave) en 1,67 ms medidos en placa. Las 13 iteraciones del LDPC solas llevarían unos 207 ms en el ARM y 9,3 ms en el i7.
 
 ---
 
-## ⚡ 3. Eficiencia por Ciclo de Reloj y Normalización Arquitectónica
+## 2. Bob: cadena completa
 
-Al contrastar la frecuencia de reloj frente a la latencia obtenida, se evidencia la superioridad del paralelismo espacial (hardware) frente a la ejecución temporal secuencial (CPU):
+El programa ejecuta la compensación de fase, la criba y estimación, el MDR 8D, el síndrome y la evaluación de seguridad sobre la trama de MATLAB (vectores heterodinos actuales). La FPGA hace lo mismo salvo la seguridad, que sigue en el ARM.
 
-| Módulo | Plataforma CPU | Relación Frecuencias ($F_{\text{CPU}} / F_{\text{FPGA}}$) | Speedup Bruto | Speedup Normalizado (Trabajo / Ciclo) |
-| :--- | :--- | :---: | :---: | :---: |
-| **Alice (LDPC)** | ARM Cortex-A9 (650 MHz) vs Artix-7 (25 MHz) | $26.0\times$ | **$90.0\times$** | **$\mathbf{2.340\times}$ más trabajo por ciclo** |
-| | Host x86-64 (4.0 GHz) vs Artix-7 (25 MHz) | $160.0\times$ | **$4.18\times$** | **$\mathbf{668.8\times}$ más trabajo por ciclo** |
-| **Bob (DSP+MDR)** | ARM Cortex-A9 (650 MHz) vs Artix-7 (100 MHz) | $6.5\times$ | **$12.0\times$** | **$\mathbf{77.9\times}$ más trabajo por ciclo** |
-| | Host x86-64 (4.0 GHz) vs Artix-7 (100 MHz) | $40.0\times$ | **$1.74\times$** | **$\mathbf{69.6\times}$ más trabajo por ciclo** |
+| Etapa | ARM Cortex-A9 | Intel Core i7-8665U (04/10) |
+|---|---|---|
+| Compensación de fase | pendiente | 0,56 ms (41,9 %) |
+| Criba y estimación | pendiente | 0,14 ms (10,6 %) |
+| MDR 8D (3.264 bloques) | pendiente | 0,63 ms (46,9 %) |
+| Síndrome LDPC | pendiente | 5 µs (0,4 %) |
+| Seguridad (Holevo) | pendiente | ~1 µs |
+| **Total por trama** | **pendiente** | **1,34 ms** |
+| FPGA (placa, con DMA) | 1,91 ms | 1,91 ms |
 
----
-
-## 🔋 4. Eficiencia Energética y Consumo
-
-| Subsistema / Plataforma | Consumo de Potencia (W) | Latencia Trama (ms) | Energía por Trama ($E = P \cdot t$) | Eficiencia Energética ($\text{kbits/J}$) |
-| :--- | :---: | :---: | :---: | :---: |
-| **Alice: ARM Cortex-A9** | $\sim 2.5\text{ W}$ | $111.66\text{ ms}$ | $279.15\text{ mJ}$ | $93.6\text{ kbits/J}$ |
-| **Alice: Host PC x86-64** | $\sim 65.0\text{ W}$ | $5.19\text{ ms}$ | $337.35\text{ mJ}$ | $77.4\text{ kbits/J}$ |
-| **Alice: FPGA Artix-7 (@ 25 MHz)** | **$\sim 1.5\text{ W}$** | **$1.24\text{ ms}$** | **$\mathbf{1.86\text{ mJ}}$** | **$\mathbf{14.026\text{ kbits/J}}$** |
-| **Bob: ARM Cortex-A9** | $\sim 2.5\text{ W}$ | $17.97\text{ ms}$ | $44.93\text{ mJ}$ | $581.2\text{ kbits/J}$ |
-| **Bob: Host PC x86-64** | $\sim 65.0\text{ W}$ | $2.61\text{ ms}$ | $169.65\text{ mJ}$ | $153.9\text{ kbits/J}$ |
-| **Bob: FPGA Artix-7 (@ 100 MHz)** | **$\sim 2.0\text{ W}$** | **$1.50\text{ ms}$** | **$\mathbf{3.00\text{ mJ}}$** | **$\mathbf{8.704\text{ kbits/J}}$** |
-
-> **Conclusión Energética**:
-> - En **Alice**, la FPGA es **$\mathbf{149.8\times}$ más eficiente** que el ARM Cortex-A9 y **$\mathbf{181.2\times}$ más eficiente** que la CPU x86-64.
-> - En **Bob**, la FPGA es **$\mathbf{15.0\times}$ más eficiente** que el ARM Cortex-A9 y **$\mathbf{56.5\times}$ más eficiente** que la CPU x86-64.
+El i7 es más rápido que la PL (1,34 ms frente a 1,91 ms): la PL procesa una muestra por ciclo a 71,4 MHz y el tiempo medido incluye el vaciado de caché y los DMA. El acelerador libera al ARM, que solo evalúa la seguridad. La cifra del ARM (17,97 ms el 29/09) se midió con los vectores anteriores al modelo heterodino y hay que repetirla (`tools/run_board.py bench-bob`).
 
 ---
 
-## 🚀 5. Scripts de Reproducción de los Benchmarks
+## 3. Energía (estimación)
 
-### 5.1. Para Alice (Decodificador LDPC)
+No se ha medido la potencia. Estimación de `report_power` de Vivado tras el rutado (sin vectores de actividad): diseño de Alice 1,26 W; Zynq-7020 de Bob 1,74 W, de los que 1,26 W son del PS7. Para el i7 se usa su TDP, 15 W.
+
+| | Potencia | Alice: energía por iteración LDPC | Bob: energía por trama |
+|---|---|---|---|
+| ARM Cortex-A9 (PS7) | 1,26 W | 20,1 mJ | pendiente |
+| Intel Core i7-8665U | 15 W (TDP) | 10,8 mJ | 20,1 mJ |
+| FPGA de Alice | 1,26 W | 55 µJ | — |
+| Zynq-7020 de Bob (PS + PL) | 1,74 W | — | 3,32 mJ |
+
+---
+
+## 4. Reproducción
+
 ```bash
 cd benchmark
-# En PC Host:
-make host && ./bench_host
-# En PYNQ-Z2 (ARM):
-make arm && ../tools/run_board.py bench-alice
-```
-
-### 5.2. Para Bob (Pipeline Completo)
-```bash
-cd benchmark
-# En PC Host:
-make bob_host && ./bench_bob_host
-# En PYNQ-Z2 (ARM):
-make bob_arm && ../tools/run_board.py bench-bob
+make host bob_host && ./bench_host && ./bench_bob_host   # PC
+make arm bob_arm                                          # ELF para el ARM
+../tools/run_board.py bench-alice
+../tools/run_board.py bench-bob
 ```

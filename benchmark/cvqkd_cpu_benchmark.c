@@ -277,10 +277,11 @@ int main(void) {
     double time_ms = time_us / 1000.0;
     double throughput_mbps = (time_ms > 0.0001) ? ((double)N_CODE_BITS / (time_ms * 1000.0)) : 0.0;
 
-    /* Referencia de la FPGA Nexys Video Artix-7 @ 25 MHz (medida en silicio) */
-    const double FPGA_TIME_MS = 1.241;
-    const double FPGA_THROUGHPUT_MBPS = 21.04;
-    double speedup = (time_ms > 0.0001) ? (time_ms / FPGA_TIME_MS) : 0.0;
+    /* FPGA de Alice (Nexys Video, 25 MHz), medida con su contador de ciclos: 27.561 ciclos
+     * fijos (síndrome, MDR y clave) + 1.094 por iteración del LDPC. Este benchmark solo
+     * decodifica, así que se compara el tiempo por iteración (no depende de la trama). */
+    const double FPGA_ITER_US = 1094.0 / 25.0;   /* 43,76 us */
+    double speedup = (time_us / iters) / FPGA_ITER_US;
 
     PRINTF("\r\n------------------------------------------------------------------------\r\n");
     if (success) {
@@ -292,13 +293,9 @@ int main(void) {
     print_metric(">>> Latencia CPU (1 trama):    ", time_ms, " ms\r\n", 2);
     print_metric(">>> Throughput Reconciliacion: ", throughput_mbps, " Mbps\r\n", 3);
     PRINTF("------------------------------------------------------------------------\r\n");
-    PRINTF(">>> Latencia FPGA Artix-7:     1.24 ms  (Silicio @ 25 MHz)\r\n");
-    print_metric(">>> Throughput FPGA Artix-7:   ", FPGA_THROUGHPUT_MBPS, " Mbps\r\n", 2);
-    if (speedup >= 1.0) {
-        print_metric(">>> SPEEDUP HARDWARE:          ", speedup, "x MAS RAPIDO EN FPGA QUE EN CPU!\r\n", 1);
-    } else if (speedup > 0.0001) {
-        print_metric(">>> RATIO HARDWARE/CPU:        ", 1.0 / speedup, "x\r\n", 2);
-    }
+    print_metric(">>> CPU por iteracion:         ", time_us / iters, " us\r\n", 1);
+    print_metric(">>> FPGA por iteracion:        ", FPGA_ITER_US, " us (1094 ciclos a 25 MHz)\r\n", 2);
+    print_metric(">>> SPEEDUP POR ITERACION:     ", speedup, "x\r\n", 1);
     PRINTF("------------------------------------------------------------------------\r\n\r\n");
 
     /* FASE 2: Benchmark estadístico sostenido sobre 50 tramas */
@@ -320,7 +317,8 @@ int main(void) {
 
     double avg_time_ms = (total_time_us / (double)NUM_BENCH_FRAMES) / 1000.0;
     double avg_throughput_mbps = (avg_time_ms > 0.0001) ? ((double)N_CODE_BITS / (avg_time_ms * 1000.0)) : 0.0;
-    double avg_speedup = (avg_time_ms > 0.0001) ? (avg_time_ms / FPGA_TIME_MS) : 0.0;
+    double avg_iter_us = avg_time_ms * 1000.0 / iters;   /* Todas las tramas son la misma */
+    double avg_speedup = avg_iter_us / FPGA_ITER_US;
 
     PRINTF("\r\n========================================================================\r\n");
     PRINTF("   RESUMEN FINAL BENCHMARK ESTADISTICO (%d TRAMAS SOSTENIDAS)          \r\n", NUM_BENCH_FRAMES);
@@ -328,8 +326,10 @@ int main(void) {
     PRINTF("  * Tasa de Exito:               %d / %d (100.00%%)\r\n", total_success, NUM_BENCH_FRAMES);
     print_metric("  * Latencia Media por Trama:    ", avg_time_ms, " ms\r\n", 2);
     print_metric("  * Throughput Medio CPU:        ", avg_throughput_mbps, " Mbps\r\n", 3);
-    PRINTF("  * Throughput FPGA Artix-7:     21.04 Mbps\r\n");
-    print_metric("  * Factor de Aceleracion (S):   ", avg_speedup, "x MAS RAPIDO EN FPGA\r\n", 1);
+    PRINTF("  * Iteraciones por trama:       %d\r\n", iters);
+    print_metric("  * CPU por iteracion:           ", avg_iter_us, " us\r\n", 1);
+    print_metric("  * FPGA por iteracion:          ", FPGA_ITER_US, " us\r\n", 2);
+    print_metric("  * Factor de Aceleracion (S):   ", avg_speedup, "x por iteracion\r\n", 1);
     PRINTF("========================================================================\r\n\r\n");
 
     return 0;
