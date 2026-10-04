@@ -26,17 +26,19 @@ La FPGA reconcilia la trama completa del punto de trabajo (síndrome, MDR, 13 it
 
 El programa ejecuta la compensación de fase, la criba y estimación, el MDR 8D, el síndrome y la evaluación de seguridad sobre la trama de MATLAB (vectores heterodinos actuales). La FPGA hace lo mismo salvo la seguridad, que sigue en el ARM.
 
-| Etapa | ARM Cortex-A9 | Intel Core i7-8665U (04/10) |
+| Etapa | ARM Cortex-A9 (04/10) | Intel Core i7-8665U (04/10) |
 |---|---|---|
-| Compensación de fase | pendiente | 0,56 ms (41,9 %) |
-| Criba y estimación | pendiente | 0,14 ms (10,6 %) |
-| MDR 8D (3.264 bloques) | pendiente | 0,63 ms (46,9 %) |
-| Síndrome LDPC | pendiente | 5 µs (0,4 %) |
-| Seguridad (Holevo) | pendiente | ~1 µs |
-| **Total por trama** | **pendiente** | **1,34 ms** |
-| FPGA (placa, con DMA) | 1,91 ms | 1,91 ms |
+| Compensación de fase | 15,19 ms (69,4 %) | 0,56 ms (41,9 %) |
+| Criba y estimación | 1,04 ms (4,7 %) | 0,14 ms (10,6 %) |
+| MDR 8D (3.264 bloques) | 5,51 ms (25,2 %) | 0,63 ms (46,9 %) |
+| Síndrome LDPC | 0,11 ms (0,5 %) | 5 µs (0,4 %) |
+| Seguridad (Holevo) | 8 µs | ~1 µs |
+| **Total por trama** | **21,87 ms** | **1,34 ms** |
+| FPGA (placa, con DMA) | 1,91 ms: **11,5×** | 1,91 ms: 0,70× |
 
-El i7 es más rápido que la PL (1,34 ms frente a 1,91 ms): la PL procesa una muestra por ciclo a 71,4 MHz y el tiempo medido incluye el vaciado de caché y los DMA. El acelerador libera al ARM, que solo evalúa la seguridad. La cifra del ARM (17,97 ms el 29/09) se midió con los vectores anteriores al modelo heterodino y hay que repetirla (`tools/run_board.py bench-bob`).
+Medias de 50 tramas. En el ARM, la compensación de fase y el MDR suman el 95 % del tiempo: son las etapas que hace la PL. Frente al ARM, la FPGA es 11,5× más rápida (unas 104 veces más trabajo por ciclo, con la PL a 71,4 MHz frente a 650 MHz). El i7 es más rápido que la PL (1,34 ms frente a 1,91 ms): la PL procesa una muestra por ciclo a 71,4 MHz y el tiempo medido incluye el vaciado de caché y los DMA. El acelerador libera al ARM, que solo evalúa la seguridad (8 µs por bloque).
+
+La cifra del 29/09 (17,97 ms) se midió con los vectores anteriores al modelo heterodino; la compensación de fase es la etapa que ha crecido (11,27 → 15,19 ms). El benchmark usaba además $V_A = 4$ SNU (40.000 cuentas) en lugar de 5: no cambia los tiempos, pero su comprobación de la estimación no coincidía con el hardware. Corregido el 04/10.
 
 ---
 
@@ -46,7 +48,7 @@ No se ha medido la potencia. Estimación de `report_power` de Vivado tras el rut
 
 | | Potencia | Alice: energía por iteración LDPC | Bob: energía por trama |
 |---|---|---|---|
-| ARM Cortex-A9 (PS7) | 1,26 W | 20,1 mJ | pendiente |
+| ARM Cortex-A9 (PS7) | 1,26 W | 20,1 mJ | 27,6 mJ |
 | Intel Core i7-8665U | 15 W (TDP) | 10,8 mJ | 20,1 mJ |
 | FPGA de Alice | 1,26 W | 55 µJ | — |
 | Zynq-7020 de Bob (PS + PL) | 1,74 W | — | 3,32 mJ |

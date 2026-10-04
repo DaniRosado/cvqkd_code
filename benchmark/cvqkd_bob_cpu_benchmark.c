@@ -11,7 +11,7 @@
  *    - Etapa 5: Evaluación de seguridad cuántica en tiempo real (Cota de Holevo)
  *
  *  Permite medir con precisión de microsegundos la latencia por etapa en:
- *    - CPU Host (x86-64 @ ~4.0 GHz)
+ *    - CPU del PC (x86-64, Linux)
  *    - CPU ARM Cortex-A9 (Zynq-7020 @ 650 MHz en PYNQ-Z2)
  *  y contrastarlo con el rendimiento del Acelerador Hardware FPGA.
  ******************************************************************************/
@@ -339,7 +339,7 @@ int main(void) {
 #if IS_XILINX_BAREMETAL
     PRINTF("   BENCHMARK SOFTWARE BOB: ARM CORTEX-A9 @ 650 MHz (PYNQ-Z2)\r\n");
 #else
-    PRINTF("   BENCHMARK SOFTWARE BOB: CPU HOST x86-64 @ ~4.0 GHz (Linux)\r\n");
+    PRINTF("   BENCHMARK SOFTWARE BOB: CPU HOST x86-64 (Linux)\r\n");
 #endif
     PRINTF("   Pipeline Completo: Fase -> Estimacion -> MDR 8D -> Sindrome -> Holevo\r\n");
     PRINTF("========================================================================\r\n");
@@ -356,7 +356,7 @@ int main(void) {
 
     int32_t T_est = 0, sigma_sq = 0;
     stage2_param_estimation(comp_p, comp_q, vec_mask_packed, vec_alice_data,
-                            N_DATA_SYMBOLS, N_SACRIFICE_SAMPLES, 40000,
+                            N_DATA_SYMBOLS, N_SACRIFICE_SAMPLES, 50000,
                             &T_est, &sigma_sq);
 
     stage3_mdr_8d(comp_p, comp_q, vec_bob_random_bits, N_MDR_BLOCKS, mdr_out);
@@ -379,11 +379,11 @@ int main(void) {
     }
     double norm_sq_val = (double)norm_sq_q48 / (double)(1ULL << 48);
 
-    PRINTF("  * Sindrome LDPC:       %s (0/%d discrepancias bit a bit)\r\n",
-           (syn_errors == 0) ? "[ OK: 100% COINCIDENCIA ]" : "[ FALLO ]", N_SYN_WORDS);
+    PRINTF("  * Sindrome LDPC:       %s (%d/%d palabras distintas)\r\n",
+           (syn_errors == 0) ? "[ OK: 100% COINCIDENCIA ]" : "[ FALLO ]", syn_errors, N_SYN_WORDS);
     PRINTF("  * Norma MDR Bloque 0:  ||m||^2 = %d.%04d (Teorico: 8.0000)\r\n",
            (int)norm_sq_val, (int)((norm_sq_val - (int)norm_sq_val) * 10000));
-    PRINTF("  * Transmitancia T*eta: 0x%08X (Hardware: 0x%08X)\r\n", T_est, EXP_T_FINAL);
+    PRINTF("  * t^2 = T*eta/2:       0x%08X (Hardware: 0x%08X)\r\n", T_est, EXP_T_FINAL);
     PRINTF("  * Ruido sigma^2:       %d cuentas (Hardware: %d)\r\n", sigma_sq, (int)EXP_SIGMA_SQ);
     PRINTF("  * Cota de Holevo:      chi(B;E) = %d.%03d | K = %d.%04d [%s]\r\n",
            (int)sec_res.chi_BE, (int)((sec_res.chi_BE - (int)sec_res.chi_BE) * 1000),
@@ -413,7 +413,7 @@ int main(void) {
 
         uint64_t t1 = read_timer_ticks();
         stage2_param_estimation(comp_p, comp_q, vec_mask_packed, vec_alice_data,
-                                N_DATA_SYMBOLS, N_SACRIFICE_SAMPLES, 40000,
+                                N_DATA_SYMBOLS, N_SACRIFICE_SAMPLES, 50000,
                                 &T_est, &sigma_sq);
 
         uint64_t t2 = read_timer_ticks();
@@ -492,19 +492,19 @@ int main(void) {
            (int)fps, (int)((fps - (int)fps) * 100));
     PRINTF("  * TASA DE DATOS BRUTA (ADC):       %d.%02d Mbps\r\n",
            (int)throughput_raw_mbps, (int)((throughput_raw_mbps - (int)throughput_raw_mbps) * 100));
-    PRINTF("  * TASA DE CLAVE UTIL:              %d.%02d Mbps\r\n",
+    PRINTF("  * TASA DE BITS DE CLAVE BRUTA:     %d.%02d Mbps\r\n",
            (int)throughput_data_mbps, (int)((throughput_data_mbps - (int)throughput_data_mbps) * 100));
 
-    double speedup = avg_ms_tot / fpga_hw_ms;
+    /* Redondeo a centésimas (xil_printf no imprime double) */
+    int cpu_c   = (int)(avg_ms_tot * 100.0 + 0.5);
+    int fpga_c  = (int)(fpga_hw_ms * 100.0 + 0.5);
+    int speed_d = (int)(avg_ms_tot / fpga_hw_ms * 10.0 + 0.5);
     PRINTF("\r\n========================================================================\r\n");
     PRINTF("         COMPARATIVA: CPU SOFTWARE VS FPGA HARDWARE (BOB)               \r\n");
     PRINTF("========================================================================\r\n");
-    PRINTF("  * Latencia Software CPU:           %d.%02d ms / trama\r\n",
-           (int)avg_ms_tot, (int)((avg_ms_tot - (int)avg_ms_tot) * 100));
-    PRINTF("  * Latencia Hardware FPGA (placa):  %d.%02d ms / trama\r\n",
-           (int)fpga_hw_ms, (int)((fpga_hw_ms - (int)fpga_hw_ms) * 100));
-    PRINTF("  * SPEEDUP ACELERADOR FPGA:         %d.%01dx mas rapido que esta CPU\r\n",
-           (int)speedup, (int)((speedup - (int)speedup) * 10));
+    PRINTF("  * Latencia Software CPU:           %d.%02d ms / trama\r\n", cpu_c / 100, cpu_c % 100);
+    PRINTF("  * Latencia Hardware FPGA (placa):  %d.%02d ms / trama\r\n", fpga_c / 100, fpga_c % 100);
+    PRINTF("  * SPEEDUP ACELERADOR FPGA:         %d.%01dx (latencia CPU / FPGA)\r\n", speed_d / 10, speed_d % 10);
     PRINTF("========================================================================\r\n\r\n");
 
     return 0;
