@@ -76,3 +76,6 @@ En la práctica, la comprobación de cada fila se hace al vuelo, justo después 
 | $L_q$ exacto en el camino de escritura | Complemento a 2 de $WL+1$ bits | $L_{\text{write}} = L_q + R_{\text{new}}$ sin perder la confianza acumulada |
 
 Con la trama de MATLAB del punto de trabajo (10 km), el decodificador converge en 13 iteraciones.
+Cada iteración cuesta 1.094 ciclos: la latencia de Alice es $27\,561 + 1\,094 \cdot it$ ciclos
+(1,67 ms con 13 iteraciones a 25 MHz y 9,85 ms si agota las 200). La tasa de éxito frente a la
+SNR está en [la curva waterfall](../03_MEDIDAS_Y_RESULTADOS/2026-10-04_Waterfall_LDPC_Simulacion.md).

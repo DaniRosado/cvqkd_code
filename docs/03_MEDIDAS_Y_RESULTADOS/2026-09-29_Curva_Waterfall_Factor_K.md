@@ -5,7 +5,9 @@
 > **Firmware**: MicroBlaze enlazado con telemetría de iteraciones en `REG_STATUS[15:8]`  
 > **Total tramas evaluadas**: 1.000 tramas (10 escalones de SNR $\times$ 100 tramas/escalón)  
 
-> **Nota (03/10/2026)**: las latencias y throughputs de Alice de este informe se estimaron con el número de sondeos del MicroBlaze (`polls × 0,72 µs`, con 1250 µs fijos si salía 0), no se midieron. El wrapper de Alice incluye ahora un contador de ciclos (registro `0x18`): en simulación, una trama del punto de trabajo (13 iteraciones) tarda **41.783 ciclos = 1,67 ms a 25 MHz (15,6 Mbps)**, frente a los 1,24 ms / 21,04 Mbps estimados. Hay que repetir la medida en placa con el firmware actual (`tools/run_board.py alice`).
+> **Nota (04/10/2026), validez del barrido**: este ensayo reprocesa siempre la misma trama (la que guardan las BRAM de Alice) y solo cambia el factor $K$, es decir, la escala de los LLR. No es un barrido de SNR: las etiquetas de distancia ("Fibra ~30 km", etc.) no corresponden a ningún canal. Además, la tasa del código es $22/68 \approx 0{,}32$ (las 46 filas de paridad son el síndrome), no $46/68$. Con los vectores heterodinos actuales (10 km, SNR $\approx 0{,}86$, cerca del umbral del LDPC) un $K$ constante pierde la ponderación por $\lVert y \rVert$ de cada bloque y ninguna trama converge, mientras que el $K$ dinámico sí lo hace (13 iteraciones). La curva real de éxito frente a la SNR, con tramas nuevas y la RTL de Alice, está en `2026-10-04_Waterfall_LDPC_Simulacion.md`.
+
+> **Nota (03/10/2026)**: las latencias y throughputs de Alice de este informe se estimaron con el número de sondeos del MicroBlaze (`polls × 0,72 µs`, con 1250 µs fijos si salía 0), no se midieron. El wrapper de Alice incluye ahora un contador de ciclos (registro `0x18`): en simulación, una trama del punto de trabajo (13 iteraciones) tarda **41.783 ciclos = 1,67 ms a 25 MHz (15,6 Mbps)**, frente a los 1,24 ms / 21,04 Mbps estimados. Medido en placa el 04/10/2026 (`tools/run_board.py alice`): los mismos 41.783 ciclos que en simulación y la clave idéntica a la de Bob.
 
 ---
 

@@ -75,7 +75,7 @@ bitstream) para obtener el `.xsa`.
 
 ```bash
 tools/run_board.py bob           # PYNQ-Z2: verificación con MATLAB (fase I) y streaming por bloques (fase II)
-tools/run_board.py alice         # Nexys Video: compara la clave reconciliada con la de Bob, bit a bit
+tools/run_board.py alice         # Nexys Video: clave reconciliada frente a la de Bob, bit a bit, y latencia en 1000 tramas
 tools/run_board.py bench-bob     # Cadena de Bob en software en el ARM (benchmark/)
 ```
 
@@ -90,6 +90,8 @@ pueden cambiar con `VITIS_WS` o con las opciones `--bit` y `--elf`.
 | `cvqkd_matlab/scripts/tb_generador_master.m` | Canal, DSP, estimación, MDR y LDPC de referencia: `cvqkd_matlab/data/*` y `cvqkd_alice/rtl/bg1_rom_pkg.sv` |
 | `cvqkd_matlab/scripts/evaluador_newton_raphson.m` | Estudio de la raíz inversa del MDR y `cvqkd_mdr/rtl/mdr_rom_pkg.sv` |
 | `cvqkd_bob/sw/export_matlab_to_c.py` | `matlab_vectors.h` para el firmware de Bob |
+| `tools/waterfall_ldpc.sh` | Curva waterfall: tramas nuevas a varias distancias por la RTL de Alice (`build/waterfall/*.csv`) |
+| `cvqkd_matlab/scripts/plot_waterfall.m` | Figura de la curva waterfall (`build/waterfall/fig_waterfall.pdf`) |
 
 ## Resultados principales
 
@@ -99,7 +101,8 @@ pueden cambiar con `VITIS_WS` o con las opciones `--bit` y `--elf`.
 | Bob, tasa de clave en vivo | 101,1 kbps (bloques de 1000 tramas, 10 km, ξ = 0,01 SNU) |
 | Bob, recursos de la Zynq-7020 | 51 % LUT, 28 % FF, 53 % BRAM, 24 % DSP |
 | Bob, ataque de interceptación y reenvío | Bloque abortado con solo un 1 % de tramas atacadas |
-| Alice, latencia por trama (simulación) | 41.783 ciclos: 1,67 ms a 25 MHz (13 iteraciones LDPC) |
+| Alice, latencia por trama en placa | 41.783 ciclos: 1,67 ms a 25 MHz (13 iteraciones LDPC), igual que en simulación |
+| Alice, umbral del LDPC (RTL en simulación) | 100 % de tramas reconciliadas hasta 11,5 km (SNR 0,80, β = 0,76); ninguna desde 13,5 km |
 | Verificación | Estimación y síndrome de Bob idénticos a MATLAB; clave de Alice idéntica a la de Bob |
 
 El detalle está en [docs/03_MEDIDAS_Y_RESULTADOS](docs/03_MEDIDAS_Y_RESULTADOS).

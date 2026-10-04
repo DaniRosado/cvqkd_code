@@ -22,9 +22,10 @@ octubre de 2026 y llevan una nota con lo que ha cambiado.
 
 | Fecha | Informe |
 | :--- | :--- |
+| 04/10/2026 | [Alice: curva waterfall con la RTL (simulación)](03_MEDIDAS_Y_RESULTADOS/2026-10-04_Waterfall_LDPC_Simulacion.md) |
 | 03/10/2026 | [Bob: clave secreta con evaluación por bloques](03_MEDIDAS_Y_RESULTADOS/2026-10-03_Bob_Clave_Secreta_Bloques.md) |
 | 29/09/2026 | [Alice: verificación de la clave bit a bit](03_MEDIDAS_Y_RESULTADOS/2026-09-29_Verificacion_Clave_Dorada.md) |
 | 29/09/2026 | [Alice: streaming de 1000 tramas](03_MEDIDAS_Y_RESULTADOS/2026-09-29_Streaming_Continuo_1000.md) |
-| 29/09/2026 | [Alice: curva waterfall frente al factor K](03_MEDIDAS_Y_RESULTADOS/2026-09-29_Curva_Waterfall_Factor_K.md) |
+| 29/09/2026 | [Alice: barrido del factor K (no es un barrido de SNR)](03_MEDIDAS_Y_RESULTADOS/2026-09-29_Curva_Waterfall_Factor_K.md) |
 | 29/09/2026 | [Bob: streaming de 50 tramas (modelo anterior)](03_MEDIDAS_Y_RESULTADOS/2026-09-29_Bob_Streaming_Seguridad_Silicio.md) |
 | — | [Benchmark FPGA frente a CPU](03_MEDIDAS_Y_RESULTADOS/Benchmark_Hardware_vs_Software.md) |
