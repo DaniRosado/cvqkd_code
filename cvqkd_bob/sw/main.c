@@ -294,21 +294,32 @@ static double randn(void) {
 }
 
 // Canal sintético de la fase II: cada trama es una realización nueva del modelo de
-// tb_generador_master.m, sin ruido de fase. Un piloto (20000, 0) cada 16 símbolos,
-// datos x ~ N(0, V_A) y en cada cuadratura y = sqrt(T*eta/2)*x + z con
-// Var(z) = 1 + v_el + T*eta*xi/2, todo en cuentas de ADC (1 SNU = N0).
-// Rellena tx_adc_buf y, según la máscara, las muestras de sacrificio de Alice.
+// tb_generador_master.m. Un piloto (20000, 0) cada 16 símbolos, datos x ~ N(0, V_A) y en
+// cada cuadratura y = sqrt(T*eta/2)*R(phi)*x + z con Var(z) = 1 + v_el + T*eta*xi/2, todo
+// en cuentas de ADC (1 SNU = N0). El ruido de fase phi es el de MATLAB (Wiener de un
+// láser de 100 kHz a 1 Gbaud más una oscilación acústica de 0,5 rad a 500 Hz), con fases
+// iniciales aleatorias; pilotos y datos giran igual y el DSP de Bob lo corrige con los
+// pilotos. Rellena tx_adc_buf y, según la máscara, las muestras de sacrificio de Alice.
+#define PHASE_WIENER_SD   0.0250663   // sqrt(2*pi*100 kHz * 1 ns), rad por símbolo
+#define PHASE_ACOUSTIC    0.5         // Amplitud de la oscilación acústica (rad)
+#define PHASE_ACOUSTIC_W  3.14159e-6  // 2*pi*500 Hz * 1 ns, rad por símbolo
+
 static void synth_frame(const cvqkd_security_params_t *p, double T, double xi) {
     const double t    = sqrt(T * p->eta / 2.0);
     const double sd_x = sqrt(p->V_A * p->N0_adc_var);
     const double sd_z = sqrt((1.0 + p->v_el + T * p->eta * xi / 2.0) * p->N0_adc_var);
+    double wiener = 2.0 * M_PI * rand() / RAND_MAX;
+    const double acoustic0 = 2.0 * M_PI * rand() / RAND_MAX;
     int d = 0, j = 0;   // Índice de dato de Bob y de muestra de sacrificio
     for (int k = 0; k < N_ADC_SAMPLES; k++) {
         bool pilot = (k % 16 == 0);
         int16_t xp = pilot ? 20000 : (int16_t)lround(sd_x * randn());
         int16_t xq = pilot ? 0     : (int16_t)lround(sd_x * randn());
-        int16_t yp = (int16_t)lround(t * xp + sd_z * randn());
-        int16_t yq = (int16_t)lround(t * xq + sd_z * randn());
+        wiener += PHASE_WIENER_SD * randn();
+        double phi = wiener + PHASE_ACOUSTIC * sin(PHASE_ACOUSTIC_W * k + acoustic0);
+        double c = cos(phi), s = sin(phi);
+        int16_t yp = (int16_t)lround(t * (xp * c - xq * s) + sd_z * randn());
+        int16_t yq = (int16_t)lround(t * (xp * s + xq * c) + sd_z * randn());
         tx_adc_buf[k] = ((uint32_t)(uint16_t)yq << 16) | (uint16_t)yp;
         if (!pilot && d < N_TOTAL_DATA_SYMBOLS) {
             if ((tx_mask_buf[d >> 5] >> (d & 31)) & 1u)
@@ -454,7 +465,7 @@ int main(void) {
     xil_printf("\r\n========================================================================\r\n");
     xil_printf("   FASE II: STREAMING CONTINUO (%d TRAMAS EN %d BLOQUES DE %d)\r\n",
                NUM_STREAM_FRAMES, NUM_BLOCKS, FRAMES_PER_BLOCK);
-    xil_printf("   - Canal sintetico, trama nueva cada vez: L = 10 km, xi = 0.010 SNU\r\n");
+    xil_printf("   - Canal sintetico, trama nueva cada vez: L = 10 km, xi = 0.010 SNU, ruido de fase\r\n");
     xil_printf("   - Tramas %d a %d: Eva intercepta y reenvia (xi = 2 SNU, bloque 2)\r\n",
                ATTACK_START_FRAME, ATTACK_END_FRAME);
     xil_printf("   - Se muestra una fila cada 100 tramas y las tramas atacadas (tarda unos minutos)\r\n");
