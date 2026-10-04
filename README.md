@@ -77,6 +77,7 @@ bitstream) para obtener el `.xsa`.
 tools/run_board.py bob           # PYNQ-Z2: verificación con MATLAB (fase I) y streaming por bloques (fase II)
 tools/run_board.py alice         # Nexys Video: clave reconciliada frente a la de Bob, bit a bit, y latencia en 1000 tramas
 tools/run_board.py bench-bob     # Cadena de Bob en software en el ARM (benchmark/)
+tools/alice_frames.py            # Nexys Video: 90 tramas nuevas cargadas por JTAG, comparadas con la simulación
 ```
 
 Programa la FPGA y carga el ELF con `xsdb` (variable `XILINX_VITIS` o `xsdb` en el

@@ -111,10 +111,10 @@ def open_uart(port, baud):
     return os.fdopen(fd, "r", encoding="utf-8", errors="ignore")
 
 
-def golden_key_words():
+def golden_key_words(path=os.path.join(REPO, "cvqkd_matlab", "data", "block_bits.txt")):
     """Clave de Bob (block_bits.txt: 68 columnas de 384 bits) en las 816 palabras que lee Alice."""
     words = []
-    with open(os.path.join(REPO, "cvqkd_matlab", "data", "block_bits.txt")) as f:
+    with open(path) as f:
         for col in (line.strip() for line in f if line.strip()):
             bits = col[::-1]  # bit 0 de la columna = último carácter
             words += [int(bits[32 * w:32 * w + 32][::-1], 2) for w in range(12)]

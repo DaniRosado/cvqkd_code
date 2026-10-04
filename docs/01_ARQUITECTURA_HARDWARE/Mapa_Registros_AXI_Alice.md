@@ -15,11 +15,15 @@
 | **`0x04`** | **`REG_STATUS`** | RO | 32 b | Registro de estado, banderas de finalización y telemetría de iteraciones |
 | **`0x08`** | **`REG_K_FACTOR`** | R/W | 32 b | Factor escalar $K$ de calibración de canal (formato Q10) |
 | **`0x0C`** | **`REG_K_MODE`** | R/W | 32 b | Selector de modo de $K$: `0 = Escalar manual`, `1 = Dinámico de ram_k` |
-| **`0x10`** | **`REG_X_BLOCKS_RX`**| RO | 32 b | Contador de bloques recibidos por el streaming de $X$ (0 a 3.264) |
-| **`0x14`** | **`REG_M_BLOCKS_RX`**| RO | 32 b | Contador de bloques recibidos por el streaming de $m$ (0 a 3.264) |
+| **`0x10`** | **`REG_X_BLOCKS_RX`**| RO | 32 b | Bloques de $X$ recibidos (por AXI-Stream o por la ventana de carga, 0 a 3.264) |
+| **`0x14`** | **`REG_M_BLOCKS_RX`**| RO | 32 b | Bloques de $m$ recibidos (0 a 3.264) |
 | **`0x18`** | **`REG_CYCLES`** | RO | 32 b | Ciclos de reloj de la última ejecución (del arranque al final): latencia medida en hardware |
+| **`0x1C`** | **`REG_K_BLOCKS_RX`**| RO | 32 b | Factores $K$ recibidos por la ventana de carga (0 a 3.264) |
 | **`0x100` – `0x99C`**| **`syn_bram`** | R/W | 32 b | **Memoria de Síndrome de Bob**: 552 palabras de 32 bits ($17.664$ bits) |
 | **`0xA00` – `0x16BC`**| **`key_bram`** | RO | 32 b | **Memoria de Clave Reconciliada**: 816 palabras de 32 bits ($26.112$ bits) |
+| **`0x1800` – `0x1BFF`**| **Carga de $X$** | WO | 32 b | Cada escritura entrega una palabra al deserializador de $X$ (4 por bloque) |
+| **`0x1C00` – `0x1DFF`**| **Carga de $m$** | WO | 32 b | Cada escritura entrega una palabra al deserializador de $m$ (8 por bloque) |
+| **`0x1E00` – `0x1FFF`**| **Carga de $K$** | WO | 32 b | Cada escritura guarda un factor $K$ (Q10) en `ram_k` (1 por bloque) |
 
 ---
 
@@ -90,7 +94,24 @@
 
 ---
 
-### 6. Memoria de Clave `key_bram` (Offset `0x0A00` a `0x16BC`)
+### 6. Ventanas de carga de la trama (Offsets `0x1800` a `0x1FFF`)
+
+Las BRAM de entrada (`ram_x`, `ram_m`, `ram_k`) vienen inicializadas con la trama de
+MATLAB en el bitstream. Para procesar otra trama se cargan por AXI-Lite:
+
+1. Reset por software (`REG_CTRL = 0x01` y `0x00`): pone a 0 los contadores de bloques.
+2. Síndrome en `syn_bram` (552 palabras desde `0x100`).
+3. Factores $K$, coordenadas $X$ y mensajes $m$ por sus ventanas, en orden de bloque y, dentro
+   de cada bloque, de la palabra baja a la alta. La dirección dentro de la ventana no importa:
+   una escritura de direcciones consecutivas (por ejemplo, `mwr` de xsdb) entrega palabras
+   seguidas, así que basta con trocear los datos en tramos del tamaño de la ventana.
+4. Comprobar que `0x10`, `0x14` y `0x1C` valen 3.264 y lanzar la reconciliación (`REG_CTRL = 0x0A`).
+
+`tools/alice_frames.py` hace esta carga por JTAG para probar en placa tramas nuevas.
+
+---
+
+### 7. Memoria de Clave `key_bram` (Offset `0x0A00` a `0x16BC`)
 
 - Capacidad: **816 palabras de 32 bits** ($816 \times 32 = 26.112\text{ bits}$).
 - La clave está formada por 68 columnas del código LDPC, donde cada columna tiene $Z = 384$ bits ($12$ palabras de 32 bits): $68 \times 12 = 816$ palabras.

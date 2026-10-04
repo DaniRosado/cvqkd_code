@@ -5,6 +5,8 @@
 // Proyecto:     CV-QKD Hardware Accelerator - Subsistema Alice
 // Descripción:  Wrapper AXI4-Lite y AXI4-Stream que encapsula el subsistema
 //               completo de post-procesamiento de Alice (MDR + LDPC Decoder).
+//               La trama (X, m, K y síndrome) viene precargada en el bitstream y
+//               también se puede cargar por AXI-Lite (ventanas de carga).
 //               Optimizado con Block RAMs síncronas de 32 bits para
 //               el Síndrome de Bob y la Clave final b_hat, eliminando 43.776
 //               flip-flops y la congestión crítica de multiplexado global.
@@ -66,15 +68,25 @@ module cvqkd_alice_axi_wrapper #(
     // 0x04: reg_status [0: mdr_done, 1: ldpc_done, 2: ldpc_success, 3: key_ready, 4: busy]
     // 0x08: reg_k_factor (Formato Q10)
     // 0x0C: reg_k_mode   (0: estático reg_k_factor, 1: dinámico ram_k)
-    // 0x10: reg_x_blocks_rx (bloques X recibidos por DMA)
-    // 0x14: reg_m_blocks_rx (bloques m recibidos por DMA)
+    // 0x10: reg_x_blocks_rx (bloques X recibidos)
+    // 0x14: reg_m_blocks_rx (bloques m recibidos)
     // 0x18: reg_cycles      (ciclos de reloj de la última ejecución: latencia medida)
+    // 0x1C: reg_k_blocks_rx (factores K recibidos)
+    // Ventanas de carga de la trama: cada escritura entrega una palabra de 32 bits
+    // al deserializador correspondiente (como un beat del AXI-Stream) y la dirección
+    // dentro de la ventana no importa, así que una escritura de direcciones
+    // consecutivas carga palabras seguidas. El reset por software pone a 0 los
+    // contadores de bloques.
+    //   0x1800-0x1BFF: X (4 palabras por bloque)
+    //   0x1C00-0x1DFF: m (8 palabras por bloque)
+    //   0x1E00-0x1FFF: K (1 palabra por bloque, Q10)
     // =========================================================================
     reg [31:0] reg_ctrl;
     reg [31:0] reg_k_factor;
     reg [31:0] reg_k_mode;
     reg [13:0] reg_x_blocks_rx;
     reg [13:0] reg_m_blocks_rx;
+    reg [13:0] reg_k_blocks_rx;
     reg [31:0] reg_cycles;
 
     wire soft_reset = reg_ctrl[0];
@@ -163,11 +175,24 @@ module cvqkd_alice_axi_wrapper #(
     wire [9:0] key_rd_idx = (rd_addr_mux - 13'h0A00) >> 2;
 
     // Escritura en syn_bram desde AXI-Lite
+    wire axi_wr = axi_awready && s_axi_awvalid && axi_wready && s_axi_wvalid;
     always @(posedge aclk) begin
-        if (axi_awready && s_axi_awvalid && axi_wready && s_axi_wvalid) begin
-            if (is_syn_wr && (syn_wr_idx < 552)) begin
-                syn_bram[syn_wr_idx] <= s_axi_wdata;
-            end
+        if (axi_wr && is_syn_wr && (syn_wr_idx < 552)) begin
+            syn_bram[syn_wr_idx] <= s_axi_wdata;
+        end
+    end
+
+    // Ventanas de carga de X, m y K
+    wire axi_x_push = axi_wr && (axi_awaddr[12:10] == 3'b110);  // 0x1800 - 0x1BFF
+    wire axi_m_push = axi_wr && (axi_awaddr[12:9]  == 4'b1110); // 0x1C00 - 0x1DFF
+    wire axi_k_push = axi_wr && (axi_awaddr[12:9]  == 4'b1111); // 0x1E00 - 0x1FFF
+
+    always @(posedge aclk) begin
+        if (!aresetn || soft_reset) begin
+            reg_k_blocks_rx <= 14'd0;
+        end else if (axi_k_push) begin
+            ram_k[reg_k_blocks_rx] <= s_axi_wdata;
+            reg_k_blocks_rx        <= reg_k_blocks_rx + 1;
         end
     end
 
@@ -279,6 +304,7 @@ module cvqkd_alice_axi_wrapper #(
                         6'h04: axi_rdata <= {18'd0, reg_x_blocks_rx};
                         6'h05: axi_rdata <= {18'd0, reg_m_blocks_rx};
                         6'h06: axi_rdata <= reg_cycles;
+                        6'h07: axi_rdata <= {18'd0, reg_k_blocks_rx};
                         default: axi_rdata <= 32'd0;
                     endcase
                 end else begin
@@ -291,11 +317,14 @@ module cvqkd_alice_axi_wrapper #(
     end
 
     // =========================================================================
-    // DESERIALIZADOR Y RECEPTOR DE COORDENADAS X (s_axis_x: 32b -> 128b)
-    // 4 beats de 32 bits = 1 bloque de 128 bits (8 coordenadas de 16b)
+    // DESERIALIZADOR Y RECEPTOR DE COORDENADAS X (32b -> 128b, por s_axis_x o
+    // por la ventana de carga). 4 palabras de 32 bits = 1 bloque de 128 bits
+    // (8 coordenadas de 16b)
     // =========================================================================
     reg [95:0] x_pack_reg;
     reg [1:0]  x_beat_cnt;
+    wire        x_valid = s_axis_x_tvalid | axi_x_push;
+    wire [31:0] x_word  = axi_x_push ? s_axi_wdata : s_axis_x_tdata;
     assign s_axis_x_tready = 1'b1;
 
     always @(posedge aclk) begin
@@ -303,24 +332,27 @@ module cvqkd_alice_axi_wrapper #(
             x_beat_cnt      <= 2'd0;
             x_pack_reg      <= 96'd0;
             reg_x_blocks_rx <= 14'd0;
-        end else if (s_axis_x_tvalid) begin
+        end else if (x_valid) begin
             if (x_beat_cnt == 2'd3) begin
-                ram_x[reg_x_blocks_rx] <= {s_axis_x_tdata, x_pack_reg};
+                ram_x[reg_x_blocks_rx] <= {x_word, x_pack_reg};
                 reg_x_blocks_rx        <= reg_x_blocks_rx + 1;
                 x_beat_cnt             <= 2'd0;
             end else begin
-                x_pack_reg[(x_beat_cnt * 32) +: 32] <= s_axis_x_tdata;
+                x_pack_reg[(x_beat_cnt * 32) +: 32] <= x_word;
                 x_beat_cnt                          <= x_beat_cnt + 1;
             end
         end
     end
 
     // =========================================================================
-    // DESERIALIZADOR Y RECEPTOR DE MENSAJES m (s_axis_m: 32b -> 256b)
-    // 8 beats de 32 bits = 1 bloque de 256 bits (8 coordenadas Q24)
+    // DESERIALIZADOR Y RECEPTOR DE MENSAJES m (32b -> 256b, por s_axis_m o por
+    // la ventana de carga). 8 palabras de 32 bits = 1 bloque de 256 bits
+    // (8 coordenadas Q24)
     // =========================================================================
     reg [223:0] m_pack_reg;
     reg [2:0]   m_beat_cnt;
+    wire        m_valid = s_axis_m_tvalid | axi_m_push;
+    wire [31:0] m_word  = axi_m_push ? s_axi_wdata : s_axis_m_tdata;
     assign s_axis_m_tready = 1'b1;
 
     always @(posedge aclk) begin
@@ -328,13 +360,13 @@ module cvqkd_alice_axi_wrapper #(
             m_beat_cnt      <= 3'd0;
             m_pack_reg      <= 224'd0;
             reg_m_blocks_rx <= 14'd0;
-        end else if (s_axis_m_tvalid) begin
+        end else if (m_valid) begin
             if (m_beat_cnt == 3'd7) begin
-                ram_m[reg_m_blocks_rx] <= {s_axis_m_tdata, m_pack_reg};
+                ram_m[reg_m_blocks_rx] <= {m_word, m_pack_reg};
                 reg_m_blocks_rx        <= reg_m_blocks_rx + 1;
                 m_beat_cnt             <= 3'd0;
             end else begin
-                m_pack_reg[(m_beat_cnt * 32) +: 32] <= s_axis_m_tdata;
+                m_pack_reg[(m_beat_cnt * 32) +: 32] <= m_word;
                 m_beat_cnt                          <= m_beat_cnt + 1;
             end
         end

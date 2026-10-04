@@ -3,9 +3,10 @@
 // ============================================================================
 // Módulo:       tb_cvqkd_alice_axi_wrapper
 // Proyecto:     CV-QKD Hardware Accelerator - Subsistema Alice
-// Descripción:  Testbench de integración del wrapper AXI de Alice.
-//               Emula el procesador ARM Zynq y los controladores DMA:
-//               1. Inyecta 3.264 bloques de X (DMA 0) y m (DMA 1) por AXI-Stream.
+// Descripción:  Testbench de integración del wrapper AXI de Alice:
+//               1. Carga la trama por AXI-Lite, como tools/alice_frames.py por
+//                  JTAG: síndrome (0x100) y X, m y K por las ventanas de carga.
+//                  Comprueba los contadores de bloques y el contenido de las BRAM.
 //               2. Dispara MDR y decodificación LDPC por AXI-Lite.
 //               3. Lee la clave reconciliada de 26.112 bits de la BRAM AXI-Lite.
 //               4. Verifica coincidencia del 100% contra los bits de Bob.
@@ -89,12 +90,16 @@ module tb_cvqkd_alice_axi_wrapper();
     // Memorias de prueba cargadas desde MATLAB
     logic [127:0] mem_x_raw [0:TOTAL_BLOCKS-1];
     logic [255:0] mem_m_raw [0:TOTAL_BLOCKS-1];
+    logic [31:0]  mem_k     [0:TOTAL_BLOCKS-1];
+    logic [31:0]  mem_syn   [0:551];
     logic [383:0] mem_block_bits [0:67];
 
     initial begin
-        $readmemh("alice_mdr_inputs.txt",    mem_x_raw);
-        $readmemh("expected_m_messages.txt", mem_m_raw);
-        $readmemb("block_bits.txt",          mem_block_bits);
+        $readmemh("alice_mdr_inputs.txt",        mem_x_raw);
+        $readmemh("expected_m_messages.txt",     mem_m_raw);
+        $readmemh("alice_k_dynamic.txt",         mem_k);
+        $readmemh("expected_syndrome_words.hex", mem_syn);
+        $readmemb("block_bits.txt",              mem_block_bits);
     end
 
     // Reloj
@@ -142,6 +147,8 @@ module tb_cvqkd_alice_axi_wrapper();
     // Secuencia de prueba
     logic [31:0] status_val;
     logic [31:0] cycles_val;
+    logic [31:0] n_x, n_m, n_k;
+    int load_errors = 0;
     int key_errors = 0;
 
     initial begin
@@ -170,35 +177,33 @@ module tb_cvqkd_alice_axi_wrapper();
         $display("[TB-ALICE-AXI] TEST DE INTEGRACION DEL WRAPPER AXI4-LITE / AXI4-STREAM");
         $display("=========================================================================");
 
-        // 1. Inyección de datos X (DMA 0 MM2S: 3.264 bloques x 4 palabras = 13.056 palabras)
-        $display("[DMA 0] Transmitiendo coordenadas X de Alice (52.2 KB)...");
-        for (int blk = 0; blk < TOTAL_BLOCKS; blk++) begin
-            for (int w = 0; w < 4; w++) begin
-                @(posedge aclk);
-                s_axis_x_tvalid <= 1'b1;
-                s_axis_x_tdata  <= mem_x_raw[blk][(w * 32) +: 32];
-                s_axis_x_tlast  <= (blk == TOTAL_BLOCKS-1 && w == 3);
-            end
-        end
-        @(posedge aclk);
-        s_axis_x_tvalid <= 1'b0;
-        s_axis_x_tlast  <= 1'b0;
-        $display("  -> Coordenadas X recibidas en la BRAM interna.");
+        // 1. Carga de la trama por AXI-Lite. Las BRAM ya traen la misma trama del
+        //    bitstream: los contadores prueban que se han escrito todos los bloques y
+        //    la comparación, que cada palabra ha ido a su sitio.
+        $display("[CARGA] Sindrome, K, X y m por AXI-Lite (ventanas de carga)...");
+        axi_write(13'h0000, 32'h00000001);   // Reset por software: contadores a 0
+        axi_write(13'h0000, 32'h00000000);
+        for (int i = 0; i < 552; i++)              axi_write(13'h0100 + i * 4, mem_syn[i]);
+        for (int i = 0; i < TOTAL_BLOCKS; i++)     axi_write(13'h1E00 + (i % 128) * 4, mem_k[i]);
+        for (int i = 0; i < TOTAL_BLOCKS * 4; i++) axi_write(13'h1800 + (i % 256) * 4, mem_x_raw[i / 4][(i % 4) * 32 +: 32]);
+        for (int i = 0; i < TOTAL_BLOCKS * 8; i++) axi_write(13'h1C00 + (i % 128) * 4, mem_m_raw[i / 8][(i % 8) * 32 +: 32]);
 
-        // 2. Inyección de datos m de Bob (DMA 1 MM2S: 3.264 bloques x 8 palabras = 26.112 palabras)
-        $display("[DMA 1] Transmitiendo mensaje publico m de Bob (104.4 KB)...");
-        for (int blk = 0; blk < TOTAL_BLOCKS; blk++) begin
-            for (int w = 0; w < 8; w++) begin
-                @(posedge aclk);
-                s_axis_m_tvalid <= 1'b1;
-                s_axis_m_tdata  <= mem_m_raw[blk][(w * 32) +: 32];
-                s_axis_m_tlast  <= (blk == TOTAL_BLOCKS-1 && w == 7);
-            end
+        axi_read(13'h0010, n_x);
+        axi_read(13'h0014, n_m);
+        axi_read(13'h001C, n_k);
+        for (int b = 0; b < TOTAL_BLOCKS; b++) begin
+            if (dut.ram_x[b] !== mem_x_raw[b]) load_errors++;
+            if (dut.ram_m[b] !== mem_m_raw[b]) load_errors++;
+            if (dut.ram_k[b] !== mem_k[b])     load_errors++;
         end
-        @(posedge aclk);
-        s_axis_m_tvalid <= 1'b0;
-        s_axis_m_tlast  <= 1'b0;
-        $display("  -> Mensajes m de Bob recibidos en la BRAM interna.");
+        for (int i = 0; i < 552; i++) if (dut.syn_bram[i] !== mem_syn[i]) load_errors++;
+        $display("  -> Bloques recibidos: X = %0d, m = %0d, K = %0d. Palabras distintas de MATLAB: %0d",
+                 n_x, n_m, n_k, load_errors);
+        if (n_x != TOTAL_BLOCKS || n_m != TOTAL_BLOCKS || n_k != TOTAL_BLOCKS || load_errors != 0) begin
+            $display("[ERROR FATAL] La carga por AXI-Lite no ha dejado la trama en las BRAM.");
+            $display("RESULTADO: FAIL");
+            $finish;
+        end
 
         #(CLK_PERIOD * 10);
 
