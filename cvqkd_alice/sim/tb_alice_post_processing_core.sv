@@ -29,6 +29,7 @@ module tb_alice_post_processing_core();
     logic mdr_done;
     logic ldpc_done;
     logic ldpc_success;
+    logic [7:0] iter_count;
 
     // Buses de Memoria de Entrada
     logic         ram_x_en;
@@ -93,6 +94,7 @@ module tb_alice_post_processing_core();
         .mdr_done         (mdr_done),
         .ldpc_done        (ldpc_done),
         .ldpc_success     (ldpc_success),
+        .iter_count       (iter_count),
 
         // Interfaz de Memoria
         .ram_x_en         (ram_x_en),
@@ -119,6 +121,7 @@ module tb_alice_post_processing_core();
     end
 
     int   key_errors;
+    int   iterations;
     logic converged;
 
     initial begin
@@ -165,7 +168,8 @@ module tb_alice_post_processing_core();
         // Esperamos a que la matriz converja o se rinda tras el límite de iteraciones
         wait(ldpc_done == 1'b1);
 
-        converged = ldpc_success;   // Se captura con ldpc_done (después vuelve a 0)
+        converged  = ldpc_success;  // Se capturan con ldpc_done (después vuelven a 0)
+        iterations = iter_count;
 
         // --- 4.4 Comparación de la clave reconciliada con la de Bob ---
         key_errors = 0;
@@ -182,9 +186,10 @@ module tb_alice_post_processing_core();
         // --- 4.5 Veredicto Final ---
         $display("---------------------------------------------------");
         if (converged) begin
-            $display("  El LDPC ha convergido. Columnas de clave distintas de Bob: %0d/68", key_errors);
+            $display("  El LDPC ha convergido en %0d iteraciones. Columnas de clave distintas de Bob: %0d/68",
+                     iterations, key_errors);
         end else begin
-            $display("  [XXX] FALLO: El decodificador ha agotado las iteraciones ");
+            $display("  [XXX] FALLO: El decodificador ha agotado las %0d iteraciones", iterations);
             $display("        sin alcanzar un síndrome válido. Clave descartada.");
         end
         if (converged && key_errors == 0) $display("RESULTADO: PASS");

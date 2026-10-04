@@ -137,5 +137,5 @@ for t in "${SELECTED[@]}"; do
 done
 
 echo "--------------------------------------------------"
-echo "Tests: $((passed + failed))  PASS: $passed  FAIL: $failed   (logs en build/sim)"
+echo "Tests: $((passed + failed))  PASS: $passed  FAIL: $failed   (logs en $BUILD)"
 [ $failed -eq 0 ]

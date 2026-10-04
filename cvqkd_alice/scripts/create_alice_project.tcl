@@ -43,7 +43,6 @@ add_files -fileset sim_1 [glob $repo_dir/cvqkd_alice/sim/*.sv]
 set sim_mem [add_files -fileset sim_1 -norecurse [list \
     $data_dir/u_bits.txt \
     $data_dir/expected_syndrome.txt \
-    $data_dir/expected_L_write_all.txt \
     $data_dir/block_bits.txt]]
 set_property file_type {Memory Initialization Files} $sim_mem
 set_property top tb_alice_post_processing_core [get_filesets sim_1]

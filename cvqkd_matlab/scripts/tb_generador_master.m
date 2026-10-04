@@ -2,13 +2,26 @@
 %  MASTER TESTBENCH: END-TO-END CV-QKD (Láser -> Fibra -> DSP -> Math)
 % ========================================================================
 clear; clc; close all;
-rng(2026); % Vectores de test reproducibles
+
+% Parámetros opcionales por variables de entorno (las usa el barrido waterfall,
+% tools/waterfall_ldpc.sh). Sin ellas se generan los vectores de referencia.
+%   CVQKD_L_KM        distancia de fibra en km (por defecto 10)
+%   CVQKD_SEED        semilla del generador aleatorio (por defecto 2026)
+%   CVQKD_DATA_OUT    directorio de salida de los vectores (por defecto ../data)
+%   CVQKD_SOLO_ALICE  1 = sin el decodificador LDPC de MATLAB ni la ROM del BG1
+L_KM       = str2double(getenv('CVQKD_L_KM'));   if isnan(L_KM), L_KM = 10;   end
+SEED       = str2double(getenv('CVQKD_SEED'));   if isnan(SEED), SEED = 2026; end
+SOLO_ALICE = strcmp(getenv('CVQKD_SOLO_ALICE'), '1');
+rng(SEED); % Vectores de test reproducibles
 
 %% 0. RUTAS DEL PROYECTO (ajusta si mueves el script)
 SCRIPT_DIR = fileparts(mfilename('fullpath'));
 if isempty(SCRIPT_DIR), SCRIPT_DIR = pwd(); end
 addpath(SCRIPT_DIR);
 DATA_DIR   = fullfile(SCRIPT_DIR, '..', 'data');                     % Vectores de test (y matriz base BG1)
+OUT_DIR    = getenv('CVQKD_DATA_OUT');                                % Salida de los vectores
+if isempty(OUT_DIR), OUT_DIR = DATA_DIR; end
+if ~exist(OUT_DIR, 'dir'), mkdir(OUT_DIR); end
 RTL_DIR    = fullfile(SCRIPT_DIR, '..', '..', 'cvqkd_alice', 'rtl');  % Destino de bg1_rom_pkg.sv
 
 %% 0.1. PARÁMETROS DEL SISTEMA
@@ -26,7 +39,7 @@ N_FIBER     = N_FRAMES * L_trama + 1;
 
 % --- Parámetros Físicos del Canal (receptor heterodino: P y Q a la vez) ---
 Ts           = 1e-9;   % Tiempo de símbolo (1 Gbaud)
-T_real       = 10^(-0.2); % Transmitancia: bobina de 10 km a 0.2 dB/km
+T_real       = 10^(-0.2 * L_KM / 10); % Transmitancia: fibra de L_KM km a 0.2 dB/km
 xi_real      = 0.01;   % Ruido en exceso referido a la entrada del canal (SNU)
 V_A_snu      = 5.0;    % Varianza de Alice (SNU): SNR/dim ~0.86 -> el LDPC (tasa 0.32) converge con beta ~0.72
 V_elec_snu   = 0.1;    % Ruido electrónico de cada detector (SNU de ese detector)
@@ -77,6 +90,8 @@ Q_A_tx(idx_pilotos) = 0;
 disp('3. La fibra atenúa e inyecta AWGN (deteccion heterodina)...');
 Ruido_Total_snu = 1.0 + V_elec_snu + (T_real * eta_detector * xi_real / 2);
 Ruido_Total_adc = Ruido_Total_snu * N0_adc_var;
+SNR_dim = (T_real * eta_detector / 2) * V_A_snu / Ruido_Total_snu;
+fprintf('   Fibra de %g km: T = %.4f, SNR por dimension = %.4f\n', L_KM, T_real, SNR_dim);
 
 Z_noise_P = sqrt(Ruido_Total_adc) * randn(N_FIBER, 1);
 Z_noise_Q = sqrt(Ruido_Total_adc) * randn(N_FIBER, 1);
@@ -282,7 +297,7 @@ if ENABLE_EXPORT_VIVADO
     disp('   -> Exportando archivos para el Datapath de Alice...');
 
     % 1. Entradas X crudas de Alice (128 bits por línea)
-    fid_alice_in = fopen(fullfile(DATA_DIR, 'alice_mdr_inputs.txt'), 'w');
+    fid_alice_in = fopen(fullfile(OUT_DIR, 'alice_mdr_inputs.txt'), 'w');
     for blk = 1:N_bloques
         X_int16 = int16(X(:, blk));
         bin_str = '';
@@ -295,7 +310,7 @@ if ENABLE_EXPORT_VIVADO
 
     % 2. Factor K dinámico del ARM (Formato Q10 para balancear bits, 1 por línea)
     % Usamos Q10 porque K_dyn suele ser un número grande (decenas de miles)
-    fid_k = fopen(fullfile(DATA_DIR, 'alice_k_dynamic.txt'), 'w');
+    fid_k = fopen(fullfile(OUT_DIR, 'alice_k_dynamic.txt'), 'w');
     for blk = 1:N_bloques
         k_q10 = int32(round(K_dyn_all(blk) * 2^10));
         fprintf(fid_k, '%08X\n', typecast(k_q10, 'uint32'));
@@ -303,7 +318,7 @@ if ENABLE_EXPORT_VIVADO
     fclose(fid_k);
 
     % 3. LLRs Esperados en formato Signo-Magnitud 8-bits
-    fid_llr_hw = fopen(fullfile(DATA_DIR, 'expected_llrs_hardware.txt'), 'w');
+    fid_llr_hw = fopen(fullfile(OUT_DIR, 'expected_llrs_hardware.txt'), 'w');
     for blk = 1:N_bloques
         for dim = 1:8
             val = round(LLR_all(dim, blk));
@@ -356,7 +371,7 @@ fprintf('   9.3. [!] Bits de Síndrome activos (Ecuaciones fallidas): %d / %d\n'
 disp('10. Iniciando decodificacion LDPC (scaled min-sum)...');
 
 alpha = 0.75;
-max_iter = 100; % Limitado a 2 iteraciones para verificar el cambio de iteración
+max_iter = 100; % Iteraciones máximas de la decodificación de referencia en MATLAB
 llr_scale = 1;
 
 % 1. Cálculo en flotante
@@ -372,6 +387,7 @@ llr_ch_int(llr_ch_int < -127) = -127;
 % 4. Inyectamos la versión "hardware" al decodificador
 llr_ch = llr_ch_int;
 
+if ~SOLO_ALICE   % Decodificación de referencia en MATLAB y ROM del BG1
 % Construir listas de vecinos a partir de H
 [rows_h, cols_h] = find(H);
 num_edges = length(rows_h);
@@ -407,11 +423,7 @@ iter_converged = 0;
 % Cada fila del base graph se procesa completamente (CN update + VN update
 % inmediato) antes de pasar a la siguiente. Así la fila N+1 lee los LLR
 % ya actualizados por la fila N, igual que el hardware escribe en L_BRAM.
-%
-% L_write_history: captura lo que el hardware escribiría en L_BRAM en cada
-% edge, en el mismo orden que EDGE_ROM (para el auto-checker de Vivado).
 % =========================================================================
-L_write_history = cell(0, 1); % Cada celda = vector de Z valores (un edge)
 
 for iter = 1:max_iter
 
@@ -495,9 +507,6 @@ for iter = 1:max_iter
                 if L_write_block(z) > 127, L_write_block(z) = 127; end
                 if L_write_block(z) < -127, L_write_block(z) = -127; end
             end
-
-            % Capturar para el auto-checker
-            L_write_history{end+1, 1} = L_write_block;
 
             % Actualizar msg_v2c para que la siguiente fila lea valores frescos
             % Saturar a ±127 como hace el VNU en hardware (L_q = L_read - R_old)
@@ -607,6 +616,8 @@ fprintf(fileID, 'endpackage\n');
 fclose(fileID);
 disp('   ¡Archivo bg1_rom_pkg.sv generado con éxito!');
 
+end % ~SOLO_ALICE
+
 %% 12. TABLA DE RESULTADOS Y EXPORTACIÓN
 disp('============================================================================');
 disp('   MÉTRICA            |   FLOTANTE (Ideal)  |   PUNTO FIJO (FPGA) |  ERROR  ');
@@ -625,7 +636,7 @@ if ENABLE_EXPORT_VIVADO
     % =====================================================================
     block_matrix = reshape(block_1, Z, nb).';
     
-    fid_bb = fopen(fullfile(DATA_DIR, 'block_bits.txt'), 'w');
+    fid_bb = fopen(fullfile(OUT_DIR, 'block_bits.txt'), 'w');
     for c = 1:nb
         % Escribimos al revés (Z bajando a 1) para el Endianness de SystemVerilog
         fprintf(fid_bb, '%d', block_matrix(c, Z:-1:1));
@@ -637,7 +648,7 @@ if ENABLE_EXPORT_VIVADO
     fase_estimada_datos = fase_estimada(idx_datos);
     fase_est_q15 = int32(round(fase_estimada_datos * 32768));
 
-    fid_est = fopen(fullfile(DATA_DIR, 'fase_estimada_datos.txt'), 'w');
+    fid_est = fopen(fullfile(OUT_DIR, 'fase_estimada_datos.txt'), 'w');
     for i=1:length(fase_est_q15)
         fprintf(fid_est, '%08X\n', typecast(fase_est_q15(i), 'uint32'));
     end
@@ -645,27 +656,27 @@ if ENABLE_EXPORT_VIVADO
 
     fases_q15 = int32(round(fase_pilotos_raw * 32768));
     
-    fid_pil = fopen(fullfile(DATA_DIR, 'fase_pilotos_raw.txt'), 'w');
+    fid_pil = fopen(fullfile(OUT_DIR, 'fase_pilotos_raw.txt'), 'w');
     for i=1:length(fases_q15)
         % Guardamos en Hexadecimal de 32 bits (aunque la FPGA usará los 18 bajos)
         fprintf(fid_pil, '%08X\n', typecast(fases_q15(i), 'uint32'));
     end
     fclose(fid_pil);
 
-    fid_ptr = fopen(fullfile(DATA_DIR, 'ptr_ram.txt'), 'w');
+    fid_ptr = fopen(fullfile(OUT_DIR, 'ptr_ram.txt'), 'w');
     for i=1:N_SAMPLES, fprintf(fid_ptr, '%04X\n', punteros(i)); end; fclose(fid_ptr);
 
-    fid_mask = fopen(fullfile(DATA_DIR, 'mask_bit.txt'), 'w');
+    fid_mask = fopen(fullfile(OUT_DIR, 'mask_bit.txt'), 'w');
     for i=1:N_BOB_DATA, fprintf(fid_mask, '%d\n', mascara_sacrificio(i)); end; fclose(fid_mask);
 
-    fid_bob = fopen(fullfile(DATA_DIR, 'bob_ram.txt'), 'w');
+    fid_bob = fopen(fullfile(OUT_DIR, 'bob_ram.txt'), 'w');
     for i=1:N_BOB_DATA, fprintf(fid_bob, '%04X%04X\n', typecast(Q_B_int(i), 'uint16'), typecast(P_B_int(i), 'uint16')); end; fclose(fid_bob);
 
-    fid_alice = fopen(fullfile(DATA_DIR, 'alice_ram.txt'), 'w');
+    fid_alice = fopen(fullfile(OUT_DIR, 'alice_ram.txt'), 'w');
     % CUIDADO: La BRAM de Alice solo almacena las 26112 de sacrificio
     for i=1:N_SAMPLES, fprintf(fid_alice, '%04X%04X\n', typecast(Q_A_sac(i), 'uint16'), typecast(P_A_sac(i), 'uint16')); end; fclose(fid_alice);
 
-    fid_exp = fopen(fullfile(DATA_DIR, 'expected_llr_math.txt'), 'w');
+    fid_exp = fopen(fullfile(OUT_DIR, 'expected_llr_math.txt'), 'w');
     fprintf(fid_exp, '%08X\n', typecast(int32(T_eta_fp),      'uint32'));
     fprintf(fid_exp, '%08X\n', typecast(int32(Sqrt_T_eta_fp), 'uint32'));
     fprintf(fid_exp, '%08X\n', typecast(int32(Sigma_Sq_fp),   'uint32'));
@@ -673,7 +684,7 @@ if ENABLE_EXPORT_VIVADO
     fclose(fid_exp);
 
     % Exportar Acumuladores (para tb_LLR_Math_Unit)
-    fid_acc = fopen(fullfile(DATA_DIR, 'accumulators.txt'), 'w');
+    fid_acc = fopen(fullfile(OUT_DIR, 'accumulators.txt'), 'w');
     fprintf(fid_acc, '%016X\n', typecast(int64(sum_sq_P_B), 'uint64'));
     fprintf(fid_acc, '%016X\n', typecast(int64(sum_P_B),    'uint64'));
     fprintf(fid_acc, '%016X\n', typecast(int64(sum_cov_P),  'uint64'));
@@ -688,7 +699,7 @@ if ENABLE_EXPORT_VIVADO
     % EXPORTAR ENTRADAS MDR BOB (Bloques de 8 dimensiones en 16-bits)
     % =====================================================================
     disp('   -> Exportando bob_mdr_inputs.txt para Vivado (Bloques 8D)...');
-    fid_mdr_in = fopen(fullfile(DATA_DIR, 'bob_mdr_inputs.txt'), 'w');
+    fid_mdr_in = fopen(fullfile(OUT_DIR, 'bob_mdr_inputs.txt'), 'w');
 
     for blk = 1:N_bloques
         % Y(:, blk) tiene las 8 coordenadas en doble precisión en la simulación,
@@ -715,7 +726,7 @@ if ENABLE_EXPORT_VIVADO
     P_ADC = int16(round(P_B_rx));
     Q_ADC = int16(round(Q_B_rx));
 
-    fid_adc = fopen(fullfile(DATA_DIR, 'bob_raw_adc.txt'), 'w');
+    fid_adc = fopen(fullfile(OUT_DIR, 'bob_raw_adc.txt'), 'w');
     % Guardamos los 52.224 + pilotos (N_FIBER)
     for i=1:N_FIBER
         fprintf(fid_adc, '%04X%04X\n', typecast(Q_ADC(i), 'uint16'), typecast(P_ADC(i), 'uint16'));
@@ -723,7 +734,7 @@ if ENABLE_EXPORT_VIVADO
     fclose(fid_adc);
 
     % Alice full 26112 symbols (for MDR RX verification)
-    fid_alice_full = fopen(fullfile(DATA_DIR, 'alice_full_data.txt'), 'w');
+    fid_alice_full = fopen(fullfile(OUT_DIR, 'alice_full_data.txt'), 'w');
     for i=1:N_BOB_DATA
         fprintf(fid_alice_full, '%04X%04X\n', typecast(Q_A_int(i), 'uint16'), typecast(P_A_int(i), 'uint16'));
     end
@@ -731,7 +742,7 @@ if ENABLE_EXPORT_VIVADO
    % =====================================================================
     % Bob random bits (Empaquetado: 8 bits por línea para TB)
     % =====================================================================
-    fid_rand = fopen(fullfile(DATA_DIR, 'bob_random_bits.txt'), 'w');
+    fid_rand = fopen(fullfile(OUT_DIR, 'bob_random_bits.txt'), 'w');
     for blk = 1:N_bloques
         bits_blk = bits_bob_all(:, blk);
         bin_str = '';
@@ -746,7 +757,7 @@ if ENABLE_EXPORT_VIVADO
     % =====================================================================
     % Expected public messages m_i (Empaquetado: 256 bits = 8 x 32b por línea)
     % =====================================================================
-    fid_m = fopen(fullfile(DATA_DIR, 'expected_m_messages.txt'), 'w');
+    fid_m = fopen(fullfile(OUT_DIR, 'expected_m_messages.txt'), 'w');
     for blk = 1:N_bloques
         Y_i = Y(:, blk);
         Y_norm = Y_i / norm(Y_i);
@@ -763,7 +774,7 @@ if ENABLE_EXPORT_VIVADO
     end
     fclose(fid_m);
     % Expected LLR results (for MDR RX verification)
-    fid_llr = fopen(fullfile(DATA_DIR, 'expected_llr_results.txt'), 'w');
+    fid_llr = fopen(fullfile(OUT_DIR, 'expected_llr_results.txt'), 'w');
     for blk = 1:N_bloques
         for dim = 1:N_dimensiones
             llr_fp = int32(round(LLR_all(dim, blk) * 2^31));
@@ -776,7 +787,7 @@ if ENABLE_EXPORT_VIVADO
     % =====================================================================
     S_matrix = reshape(syndrome_1, Z, mb).';
     
-    fid_syn = fopen(fullfile(DATA_DIR, 'expected_syndrome.txt'), 'w');
+    fid_syn = fopen(fullfile(OUT_DIR, 'expected_syndrome.txt'), 'w');
     for i = 1:mb
         % ¡AQUÍ ESTÁ LA MAGIA! Iteramos al revés para que SystemVerilog
         % asigne el CNU 0 al bit 0 correctamente.
@@ -787,7 +798,7 @@ if ENABLE_EXPORT_VIVADO
     disp('   -> expected_syndrome.txt generado con éxito (Endianness corregido).');
 
     % Mismo síndrome en palabras de 32 bits (memoria syn_bram del wrapper de Alice)
-    fid_synw = fopen(fullfile(DATA_DIR, 'expected_syndrome_words.hex'), 'w');
+    fid_synw = fopen(fullfile(OUT_DIR, 'expected_syndrome_words.hex'), 'w');
     for i = 1:mb
         for w = 0:11
             fprintf(fid_synw, '%08x\n', bin2dec(char('0' + S_matrix(i, 32*w+32:-1:32*w+1))));
@@ -801,7 +812,7 @@ if ENABLE_EXPORT_VIVADO
     % llr_ch tiene tamaño (68 * 384) x 1. Lo pasamos a matriz 68 x 384.
     llr_ch_matrix = reshape(llr_ch, Z, nb).'; 
     
-    fid_ubits = fopen(fullfile(DATA_DIR, 'u_bits.txt'), 'w');
+    fid_ubits = fopen(fullfile(OUT_DIR, 'u_bits.txt'), 'w');
     
     for c = 1:nb
         line_str = '';
@@ -837,43 +848,6 @@ if ENABLE_EXPORT_VIVADO
     end
     fclose(fid_ubits);
     disp('   -> u_bits.txt generado con éxito (68 líneas x 3072 bits).');
-    % =====================================================================
-    % EXPORTAR VERDAD ABSOLUTA PARA EL AUTO-CHECKER (Todas las 46 filas)
-    % Usa L_write_history capturado durante la decodificación layered,
-    % que refleja exactamente lo que el hardware escribe en cada edge.
-    % =====================================================================
-    disp('   -> Exportando expected_L_write_all.txt para Vivado (316 edges)...');
-
-    fid_l_write = fopen(fullfile(DATA_DIR, 'expected_L_write_all.txt'), 'w');
-
-    for edge_idx = 1:length(L_write_history)
-        L_write_block = L_write_history{edge_idx};
-
-        % Formateo a 8 bits Signo-Magnitud y ordenamiento Endianness (Z bajando a 1)
-        bin_str = '';
-        for z = Z:-1:1
-            val = L_write_block(z);
-
-            % Saturación hardware
-            if val > 127, val = 127; end
-            if val < -127, val = -127; end
-
-            % Conversión a Signo-Magnitud
-            if val < 0
-                sm_val = 128 + abs(val);
-            else
-                sm_val = val;
-            end
-
-            % Concatenar en binario
-            bin_str = [bin_str, dec2bin(sm_val, 8)];
-        end
-
-        fprintf(fid_l_write, '%s\n', bin_str);
-    end
-
-    fclose(fid_l_write);
-    fprintf('   -> expected_L_write_all.txt generado (%d edges).\n', length(L_write_history));
 end
 
 disp('======================================================');
