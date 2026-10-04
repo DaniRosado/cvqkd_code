@@ -3,9 +3,10 @@
  *
  *  Fase 1: reconciliación de la trama de MATLAB (MDR 8D + LDPC) y volcado de la
  *          clave por UART para compararla con la de Bob (tools/run_board.py alice).
- *  Fase 2: barrido del factor K (SNR) en 10 escalones de 100 tramas: tasa de
- *          éxito, iteraciones del LDPC y latencia medida por el contador de ciclos
- *          del acelerador (registro 0x18).
+ *  Fase 2: la misma trama 1000 veces (las BRAM solo guardan la trama de MATLAB):
+ *          todas deben dar la clave de la fase 1. Mide la latencia con el contador
+ *          de ciclos del acelerador (registro 0x18). La tasa de éxito frente a la
+ *          SNR se obtiene en simulación con tramas nuevas (tools/waterfall_ldpc.sh).
  ******************************************************************************/
 
 #include "xil_io.h"
@@ -15,7 +16,6 @@
 #define ALICE_BASE         0x00004000
 #define REG_CTRL           (ALICE_BASE + 0x00)
 #define REG_STATUS         (ALICE_BASE + 0x04)
-#define REG_K_FACTOR       (ALICE_BASE + 0x08)
 #define REG_K_MODE         (ALICE_BASE + 0x0C)
 #define REG_CYCLES         (ALICE_BASE + 0x18) // Ciclos de reloj de la última ejecución
 #define KEY_BRAM_BASE      (ALICE_BASE + 0x0A00) // 816 palabras
@@ -33,49 +33,17 @@
 #define N_KEY_WORDS        816                   // 26.112 bits
 #define FRAME_BITS         26112
 
-#define NUM_K_STEPS        10
-#define FRAMES_PER_STEP    100
-#define TOTAL_STREAM_FRAMES (NUM_K_STEPS * FRAMES_PER_STEP)
+#define STREAM_FRAMES      1000
 
-typedef struct {
-    u32 k_mode;
-    u32 k_factor;
-    const char *name;
-    const char *fiber_desc;
-} k_config_t;
+static u32 key_ref[N_KEY_WORDS];                 // Clave de la fase 1
 
-static const k_config_t K_CONFIGS[NUM_K_STEPS] = {
-    { 1, 38, "Dinamico (ram_k)", "Canal Nominal  " },
-    { 0, 16, "Escalar  K = 16  ", "SNR Estable     " },
-    { 0, 15, "Escalar  K = 15  ", "Fibra ~30 km    " },
-    { 0, 14, "Escalar  K = 14  ", "Fibra ~35 km    " },
-    { 0, 13, "Escalar  K = 13  ", "Fibra ~40 km    " },
-    { 0, 12, "Escalar  K = 12  ", "Fibra ~45 km    " },
-    { 0, 11, "Escalar  K = 11  ", "Alta Exigencia  " },
-    { 0, 10, "Escalar  K = 10  ", "Cerca del Umbral" },
-    { 0,  9, "Escalar  K =  9  ", "Regimen Limite  " },
-    { 0,  8, "Escalar  K =  8  ", "Borde Waterfall " }
-};
-
-typedef struct {
-    u32 success;
-    u32 fail;
-    u32 timeout;
-    u32 avg_iters;
-    u32 lat_us;
-    u32 thr_kbps;
-} step_stats_t;
-
-static step_stats_t step_results[NUM_K_STEPS];
-
-// Lanza una trama (MDR + LDPC) y espera a que el acelerador termine.
+// Lanza una trama (MDR + LDPC con K dinámico) y espera a que el acelerador termine.
 // Devuelve el registro de estado final, o 0 si se agota el tiempo.
-static u32 run_frame(u32 k_mode, u32 k_factor)
+static u32 run_frame(void)
 {
     Xil_Out32(REG_CTRL, CTRL_SOFT_RESET);
     Xil_Out32(REG_CTRL, 0);
-    Xil_Out32(REG_K_MODE, k_mode);
-    if (k_mode == 0) Xil_Out32(REG_K_FACTOR, k_factor);
+    Xil_Out32(REG_K_MODE, 1);                    // K dinámico (ram_k)
     Xil_Out32(REG_CTRL, CTRL_START_AUTO);
 
     for (u32 polls = 0; polls < 1000000; polls++) {
@@ -96,7 +64,7 @@ int main()
     // FASE 1: VERIFICACION DE LA CLAVE DORADA (TRAMA 1)
     // =========================================================================
     xil_printf("[ALICE] Lanzando reconciliacion hardware (MDR + LDPC)...\r\n");
-    u32 status = run_frame(1, 0);   // K dinámico (ram_k)
+    u32 status = run_frame();
     if (!(status & ST_KEY_READY)) {
         xil_printf("[ERROR] La trama 1 no se reconcilio. Status = 0x%08X\r\n", status);
         return -1;
@@ -108,90 +76,50 @@ int main()
     // Volcar las 816 palabras de la clave b_hat (26.112 bits) por UART
     xil_printf("\r\n--- KEY_START ---\r\n");
     for (int w = 0; w < N_KEY_WORDS; w++) {
-        xil_printf("%08X\r\n", Xil_In32(KEY_BRAM_BASE + (w * 4)));
+        key_ref[w] = Xil_In32(KEY_BRAM_BASE + (w * 4));
+        xil_printf("%08X\r\n", key_ref[w]);
     }
     xil_printf("--- KEY_END ---\r\n");
 
     // =========================================================================
-    // FASE 2: BARRIDO DE SNR / RUIDO DE CANAL (FACTOR K) EN SILICIO
+    // FASE 2: ROBUSTEZ Y LATENCIA (1000 TRAMAS)
     // =========================================================================
-    xil_printf("\r\n========================================================================\r\n");
-    xil_printf("   INICIANDO BARRIDO DE SNR Y FACTOR K EN SILICIO (%d TRAMAS)          \r\n", TOTAL_STREAM_FRAMES);
-    xil_printf("   - 10 escalones de SNR x 100 tramas/escalon                          \r\n");
-    xil_printf("   - Latencia medida con el contador de ciclos del acelerador          \r\n");
-    xil_printf("========================================================================\r\n\r\n");
+    xil_printf("\r\n[ALICE] Fase 2: %d reconciliaciones de la misma trama...\r\n", STREAM_FRAMES);
 
-    u32 global_success = 0, global_timeout = 0, global_frame_idx = 0;
+    u32 ok = 0, wrong_key = 0, failed = 0, timeouts = 0;
+    u32 cyc_min = 0xFFFFFFFF, cyc_max = 0;
+    u64 cyc_sum = 0;
 
-    for (int s = 0; s < NUM_K_STEPS; s++) {
-        u32 step_success = 0, step_fail = 0, step_timeout = 0;
-        u64 step_iters = 0, step_cycles = 0;
+    for (int f = 0; f < STREAM_FRAMES; f++) {
+        status = run_frame();
+        if (status == 0) { timeouts++; continue; }
+        if (!(status & ST_KEY_READY)) { failed++; continue; }
 
-        xil_printf("[ESCALON %2d/10] Probando 100 tramas con %s (%s)...\r\n",
-                   s + 1, K_CONFIGS[s].name, K_CONFIGS[s].fiber_desc);
+        int same = 1;
+        for (int w = 0; w < N_KEY_WORDS; w++)
+            if (Xil_In32(KEY_BRAM_BASE + (w * 4)) != key_ref[w]) same = 0;
+        if (!same) { wrong_key++; continue; }
 
-        for (int f = 1; f <= FRAMES_PER_STEP; f++) {
-            global_frame_idx++;
-            status = run_frame(K_CONFIGS[s].k_mode, K_CONFIGS[s].k_factor);
-            cycles = Xil_In32(REG_CYCLES);
-
-            if (status == 0) {
-                step_timeout++;
-            } else if (status & ST_KEY_READY) {
-                step_success++;
-                step_iters  += ST_ITERS(status);
-                step_cycles += cycles;
-            } else {
-                step_fail++;
-            }
-
-            // Diagnóstico de la primera trama del escalón
-            if (f == 1) {
-                xil_printf("  -> [DIAG Trama %4d] Status = 0x%08X (KeyReady=%d, Succ=%d, Iters=%2d) | Word0 = 0x%08X | Ciclos = %d\r\n",
-                           global_frame_idx, status, (status >> 3) & 1, (status >> 2) & 1,
-                           ST_ITERS(status), Xil_In32(KEY_BRAM_BASE), cycles);
-            }
-        }
-        global_success += step_success;
-        global_timeout += step_timeout;
-
-        // Métricas del escalón (sobre las tramas reconciliadas)
-        step_stats_t *r = &step_results[s];
-        r->success   = step_success;
-        r->fail      = step_fail;
-        r->timeout   = step_timeout;
-        r->avg_iters = step_success ? (u32)(step_iters / step_success) : 0;
-        r->lat_us    = step_success ? (u32)(step_cycles / step_success / CLK_MHZ) : 0;
-        r->thr_kbps  = r->lat_us ? (FRAME_BITS * 1000u / r->lat_us) : 0;
-
-        xil_printf("  [RESULTADO] %s | Exito: %3d%% | Iters Medias: %2d | Latencia: %d.%02d ms | Throughput: %d.%02d Mbps\r\n\r\n",
-                   K_CONFIGS[s].name, (step_success * 100) / FRAMES_PER_STEP, r->avg_iters,
-                   r->lat_us / 1000, (r->lat_us % 1000) / 10,
-                   r->thr_kbps / 1000, (r->thr_kbps % 1000) / 10);
+        ok++;
+        cycles = Xil_In32(REG_CYCLES);
+        cyc_sum += cycles;
+        if (cycles < cyc_min) cyc_min = cycles;
+        if (cycles > cyc_max) cyc_max = cycles;
     }
 
-    xil_printf("====================================================================================================\r\n");
-    xil_printf("       TABLA FINAL: IMPACTO DE LA SNR / FACTOR K EN LA CONVERGENCIA LDPC EN SILICIO                 \r\n");
-    xil_printf("====================================================================================================\r\n");
-    xil_printf(" Paso | Configuracion        | Condicion        | Exito    | Iters Medias | Latencia  | Throughput  \r\n");
-    xil_printf("----------------------------------------------------------------------------------------------------\r\n");
-    for (int s = 0; s < NUM_K_STEPS; s++) {
-        step_stats_t *r = &step_results[s];
-        xil_printf("  %2d  | %s | %s |  %3d%%   |      %2d      |  %d.%02d ms  | %d.%02d Mbps\r\n",
-                   s + 1, K_CONFIGS[s].name, K_CONFIGS[s].fiber_desc,
-                   (r->success * 100) / FRAMES_PER_STEP, r->avg_iters,
-                   r->lat_us / 1000, (r->lat_us % 1000) / 10,
-                   r->thr_kbps / 1000, (r->thr_kbps % 1000) / 10);
-    }
-    xil_printf("====================================================================================================\r\n");
-    xil_printf(" Total tramas analizadas : %d\r\n", TOTAL_STREAM_FRAMES);
-    xil_printf(" Tramas corregidas       : %d / %d (%d.%02d%%)\r\n",
-               global_success, TOTAL_STREAM_FRAMES,
-               (global_success * 100) / TOTAL_STREAM_FRAMES,
-               ((global_success * 10000) / TOTAL_STREAM_FRAMES) % 100);
-    xil_printf(" Timeouts                : %d\r\n", global_timeout);
-    xil_printf(" Total bits procesados   : %d bits\r\n", TOTAL_STREAM_FRAMES * FRAME_BITS);
-    xil_printf("====================================================================================================\r\n");
+    u32 cyc_avg  = ok ? (u32)(cyc_sum / ok) : 0;
+    u32 lat_us   = cyc_avg / CLK_MHZ;
+    u32 thr_kbps = lat_us ? (FRAME_BITS * 1000u / lat_us) : 0;
+
+    xil_printf("================================================================\r\n");
+    xil_printf(" Tramas con la clave de la fase 1 : %d / %d\r\n", ok, STREAM_FRAMES);
+    xil_printf(" Clave distinta / sin converger   : %d / %d\r\n", wrong_key, failed);
+    xil_printf(" Timeouts                         : %d\r\n", timeouts);
+    xil_printf(" Ciclos por trama (min/media/max) : %d / %d / %d\r\n", ok ? cyc_min : 0, cyc_avg, cyc_max);
+    xil_printf(" Latencia media                   : %d.%02d ms a %d MHz\r\n",
+               lat_us / 1000, (lat_us % 1000) / 10, CLK_MHZ);
+    xil_printf(" Throughput de reconciliacion     : %d.%02d Mbps\r\n", thr_kbps / 1000, (thr_kbps % 1000) / 10);
+    xil_printf("================================================================\r\n");
     xil_printf("[STREAM_DONE]\r\n");
 
     return 0;
