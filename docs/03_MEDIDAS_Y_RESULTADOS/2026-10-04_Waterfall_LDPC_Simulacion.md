@@ -137,6 +137,12 @@ El bitstream se obtuvo con una implementación incremental sobre el diseño ruta
 | Ciclos según el modelo de la sección 3 | 90/90 |
 | Tramas reconciliadas por distancia (8 a 14 km) | 10, 10, 10, 10, 8, 4, 1, 0 y 0 de 10 |
 
+Después se probaron en placa 100 tramas de 11 km (semillas 1 a 100): las 100 se reconcilian
+con la clave de Bob, con 17,4 iteraciones de media (de 12 a 49) y una latencia de 1,87 ms de
+media y 3,25 ms como máximo. Con 100 tramas sin fallos, la tasa de fallo a 11 km es inferior
+a un 3 % (95 % de confianza). La media queda por debajo de los 1,91 ms por trama de Bob,
+aunque 23 de las 100 tramas tardan más.
+
 La placa reproduce la simulación trama a trama, incluidas las que no convergen. La carga y
 ejecución de las 90 tramas tarda unos 3 minutos (1,7 s por trama).
 

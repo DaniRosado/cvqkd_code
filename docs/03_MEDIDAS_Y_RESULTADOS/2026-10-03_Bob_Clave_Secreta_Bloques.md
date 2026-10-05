@@ -135,3 +135,31 @@ El resto del ensayo no cambia.
 
 Con este ruido en exceso, la clave por trama sería mayor a más distancia (hasta el
 umbral del LDPC): ver la sección 4 de `2026-10-04_Waterfall_LDPC_Simulacion.md`.
+
+---
+
+## 8. Canal sintético a 11 km (05/10/2026, commit `ab4bd45`)
+
+Mismo ensayo que en la sección 7 (con ruido de fase) con el canal de la fase II a 11 km
+($T = 0{,}603$) en lugar de 10 km. Con la tasa del código fija, a más distancia el código
+aprovecha mejor el canal ($\beta = 0{,}75$ frente a $0{,}725$) y la información de Eva baja.
+La trama de MATLAB de la fase I sigue siendo la de 10 km.
+
+| Bloque | Tramas | $T$ | $\xi$ (SNU) | $\xi$ peor caso | $K_{\text{finite}}$ (bits/dim) | Bits seguros | Veredicto |
+|---|---|---|---|---|---|---|---|
+| 1 | 1–1000 | 0,6013 | 0,0193 | 0,0310 | 0,0090 | 235 100 | PASS |
+| 2 | 1001–2000 (10 atacadas) | 0,6008 | 0,0423 | 0,0541 | −0,0084 | 0 | ABORT |
+| 3 | 2001–3000 | 0,6008 | 0,0235 | 0,0353 | 0,0056 | 146 131 | PASS |
+
+| Magnitud | 10 km (sección 7) | 11 km |
+|---|---|---|
+| $K_{\text{finite}}$ de los bloques sin ataque | 0,0050 y 0,0012 | 0,0090 y 0,0056 |
+| Clave secreta neta | 163 283 bits | 381 231 bits |
+| Tasa de clave secreta en vivo | 28,4 kbps | 66,3 kbps |
+| Latencia media por trama | 1,91 ms | 1,91 ms |
+
+La clave es 2,3 veces la de 10 km (el cálculo con estimaciones ideales daba 2,6) y los
+bloques sin ataque pasan con más margen. El bloque atacado se sigue abortando. Alice
+reconcilia en placa 100 de 100 tramas nuevas de 11 km con 1,87 ms de media
+(`2026-10-04_Waterfall_LDPC_Simulacion.md`, sección 5).
+
