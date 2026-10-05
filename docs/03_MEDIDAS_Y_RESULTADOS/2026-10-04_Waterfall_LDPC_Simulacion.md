@@ -38,11 +38,11 @@ por punto, tampoco convergió ninguna a 16, 18 y 20 km.
 | 10 km | 0,859 | 0,723 | 10/10 | 12,3 (10–15) | 1,64 ms |
 | 11 km | 0,820 | 0,749 | 10/10 | 17,4 (13–28) | 1,86 ms |
 | 11,5 km | 0,802 | 0,762 | 10/10 | 23,1 (15–45) | 2,11 ms |
-| 12 km | 0,783 | 0,775 | 8/10 | 42,6 (19–104) | 4,35 ms |
-| 12,5 km | 0,766 | 0,789 | 4/10 | 90,0 (34–193) | 7,93 ms |
-| 13 km | 0,748 | 0,803 | 1/10 | 62 (una trama) | 9,25 ms |
-| 13,5 km | 0,731 | 0,817 | 0/10 | — | 9,85 ms |
-| 14 km | 0,715 | 0,832 | 0/10 | — | 9,85 ms |
+| 12 km | 0,783 | 0,775 | 8/10 | 42,6 (19–104) | 4,34 ms |
+| 12,5 km | 0,766 | 0,789 | 4/10 | 90,0 (34–193) | 7,91 ms |
+| 13 km | 0,748 | 0,803 | 1/10 | 62 (una trama) | 9,22 ms |
+| 13,5 km | 0,731 | 0,817 | 0/10 | — | 9,82 ms |
+| 14 km | 0,715 | 0,832 | 0/10 | — | 9,82 ms |
 
 Las columnas de tramas e iteraciones son resultados de la simulación; la latencia media
 aplica el modelo de la sección 3 a todas las tramas del punto (las que no convergen
@@ -79,9 +79,9 @@ ha medido en simulación (`tb_cvqkd_alice_axi_wrapper`) con cuatro tramas:
 
 La latencia es exactamente de $27\,561$ ciclos más $1\,094$ por iteración: 1,10 ms fijos
 (carga del síndrome, MDR de los 3.264 bloques y extracción de la clave) más 43,8 µs por
-iteración a 25 MHz. Una trama que agota las 200 iteraciones ocupa al decodificador 9,85 ms. La
-columna de latencia media de la tabla aplica este modelo a todas las tramas simuladas,
-incluidas las que no convergen.
+iteración a 25 MHz. Una trama que agota las 200 iteraciones sin converger no extrae la
+clave y tarda 884 ciclos menos: 245.477 ciclos, 9,82 ms (medido en placa). La columna de
+latencia media de la tabla aplica este modelo a todas las tramas simuladas.
 
 ---
 
@@ -123,7 +123,26 @@ $(1 - \text{FER}) \cdot K_{\text{finite}}$, con la FER de la simulación (10 tra
 
 ---
 
-## 5. Comparación con el barrido de $K$ en placa
+## 5. Las mismas 90 tramas en la placa (05/10/2026)
+
+`tools/alice_frames.py` carga cada una de las 90 tramas en la Nexys Video por JTAG (ventanas
+de carga del wrapper, commit `d99fcb2`), lanza la reconciliación y lee estado, ciclos y clave.
+El bitstream se obtuvo con una implementación incremental sobre el diseño rutado del 03/10
+(97 % de celdas y redes reutilizadas, WNS = +0,72 ns).
+
+| Comprobación | Resultado |
+|---|---|
+| Convergencia e iteraciones iguales a la simulación | 90/90 |
+| Clave idéntica a la de Bob en las tramas que convergen | 53/53 |
+| Ciclos según el modelo de la sección 3 | 90/90 |
+| Tramas reconciliadas por distancia (8 a 14 km) | 10, 10, 10, 10, 8, 4, 1, 0 y 0 de 10 |
+
+La placa reproduce la simulación trama a trama, incluidas las que no convergen. La carga y
+ejecución de las 90 tramas tarda unos 3 minutos (1,7 s por trama).
+
+---
+
+## 6. Comparación con el barrido de $K$ en placa
 
 El ensayo del 29/09 (`2026-09-29_Curva_Waterfall_Factor_K.md`) variaba un $K$ constante
 sobre la misma trama, lo que solo reescala los LLR: no cambia la SNR. Esta curva sí
@@ -134,7 +153,7 @@ en todas (ver `2026-09-29_Streaming_Continuo_1000.md`).
 
 ---
 
-## 6. Reproducción
+## 7. Reproducción
 
 ```bash
 XILINX_VIVADO=~/AMD/Xilin/2025.2/Vivado CVQKD_JOBS=5 tools/waterfall_ldpc.sh

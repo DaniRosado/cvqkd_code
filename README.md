@@ -103,7 +103,7 @@ pueden cambiar con `VITIS_WS` o con las opciones `--bit` y `--elf`.
 | Bob, recursos de la Zynq-7020 | 51 % LUT, 28 % FF, 53 % BRAM, 24 % DSP |
 | Bob, ataque de interceptación y reenvío | Bloque abortado con solo un 1 % de tramas atacadas |
 | Alice, latencia por trama en placa | 41.783 ciclos: 1,67 ms a 25 MHz (13 iteraciones LDPC), igual que en simulación; 1000/1000 tramas con la misma clave y la misma latencia |
-| Alice, umbral del LDPC (RTL en simulación) | 100 % de tramas reconciliadas hasta 11,5 km (SNR 0,80, β = 0,76); ninguna desde 13,5 km |
+| Alice, umbral del LDPC (90 tramas nuevas, simulación y placa) | 100 % de tramas reconciliadas hasta 11,5 km (SNR 0,80, β = 0,76); ninguna desde 13,5 km. La placa da lo mismo que la simulación en las 90 |
 | Verificación | Estimación y síndrome de Bob idénticos a MATLAB; clave de Alice idéntica a la de Bob |
 
 El detalle está en [docs/03_MEDIDAS_Y_RESULTADOS](docs/03_MEDIDAS_Y_RESULTADOS).

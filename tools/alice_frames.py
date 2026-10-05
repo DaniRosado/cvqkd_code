@@ -16,7 +16,7 @@ wrapper, X, m y K; lanza MDR + LDPC y lee el estado, los ciclos y la clave. Por 
 comprueba que:
   - los tres contadores de bloques llegan a 3.264 (la carga ha llegado a las BRAM);
   - si el LDPC converge, la clave coincide con la de Bob;
-  - ciclos = 27.561 + 1.094 x iteraciones (modelo de latencia medido en simulación);
+  - ciclos = 27.561 + 1.094 x iteraciones (884 menos si no converge: no se extrae la clave);
   - la convergencia y las iteraciones son las de la simulación (build/waterfall), si existe.
 Resultados en build/alice_frames/placa.csv. MATLAB no se ejecuta como root: si el JTAG
 necesita sudo, genera antes las tramas con --generar.
@@ -151,7 +151,7 @@ def main():
         conv, iters = bool(st & 0x4), (st >> 8) & 0xFF
         key_ok = key == golden_key_words(os.path.join(frame_dir(km, seed), KEY))
         load_ok = n_x == n_m == n_k == BLOCKS
-        cyc_ok = cyc == 27561 + 1094 * iters
+        cyc_ok = cyc == 27561 + 1094 * iters - (0 if conv else 884)   # Sin convergencia no se extrae la clave
         sim = simulation(km, seed)
         sim_ok = sim is None or sim == (conv, iters)
         ok = load_ok and cyc_ok and sim_ok and (key_ok or not conv)
