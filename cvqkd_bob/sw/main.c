@@ -48,7 +48,8 @@
 #define NUM_STREAM_FRAMES   (FRAMES_PER_BLOCK * NUM_BLOCKS)
 #define ATTACK_START_FRAME  1101  // Ataque de Eva dentro del bloque 2 (tramas 1101-1110)
 #define ATTACK_END_FRAME    1110
-#define CH_LENGTH_KM        10.0  // Canal sintético de la fase II (premisas de MATLAB)
+#define CH_LENGTH_KM        11    // Canal sintético de la fase II. A 11 km el código LDPC aprovecha
+                                  // mejor el canal (beta = 0,75) que a los 10 km de la trama de MATLAB
 #define CH_XI               0.01  // Ruido de exceso del canal (SNU)
 #define ATTACK_XI           2.0   // Interceptar y reenviar con heterodino: xi = 2 SNU
 
@@ -465,7 +466,7 @@ int main(void) {
     xil_printf("\r\n========================================================================\r\n");
     xil_printf("   FASE II: STREAMING CONTINUO (%d TRAMAS EN %d BLOQUES DE %d)\r\n",
                NUM_STREAM_FRAMES, NUM_BLOCKS, FRAMES_PER_BLOCK);
-    xil_printf("   - Canal sintetico, trama nueva cada vez: L = 10 km, xi = 0.010 SNU, ruido de fase\r\n");
+    xil_printf("   - Canal sintetico, trama nueva cada vez: L = %d km, xi = 0.010 SNU, ruido de fase\r\n", CH_LENGTH_KM);
     xil_printf("   - Tramas %d a %d: Eva intercepta y reenvia (xi = 2 SNU, bloque 2)\r\n",
                ATTACK_START_FRAME, ATTACK_END_FRAME);
     xil_printf("   - Se muestra una fila cada 100 tramas y las tramas atacadas (tarda unos minutos)\r\n");
