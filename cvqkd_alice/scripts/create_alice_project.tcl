@@ -147,4 +147,18 @@ add_files -norecurse [make_wrapper -files [get_files design_1.bd] -top]
 set_property top design_1_wrapper [current_fileset]
 update_compile_order -fileset sources_1
 
+# 4. Implementación incremental ---------------------------------------------------
+# El rutado completo de este diseño tarda entre 2 y más de 5 horas y no siempre
+# cierra el timing: el desplazador de barril de 3.072 bits llena las pistas largas
+# de la FPGA. Con el diseño ya rutado como referencia, Vivado reutiliza la colocación
+# y el rutado de todo lo que no cambia (unos 12 minutos si la RTL es la misma).
+# Tras un cambio grande en el decodificador, la referencia deja de servir: Vivado
+# vuelve solo al flujo completo y conviene guardar el nuevo diseño rutado
+# (impl_1/design_1_wrapper_routed.dcp) como referencia.
+set ref_dcp $repo_dir/cvqkd_alice/impl/alice_routed_ref.dcp
+if { [file exists $ref_dcp] } {
+    set_property AUTO_INCREMENTAL_CHECKPOINT 0 [get_runs impl_1]
+    set_property INCREMENTAL_CHECKPOINT $ref_dcp [get_runs impl_1]
+}
+
 puts "Proyecto de Alice creado en $proj_dir"
