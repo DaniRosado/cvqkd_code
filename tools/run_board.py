@@ -33,19 +33,22 @@ HOME = os.path.expanduser("~" + os.environ.get("SUDO_USER", ""))  # con sudo, el
 VITIS_WS = os.environ.get("VITIS_WS", os.path.join(HOME, "VitisProyects"))
 
 
-def platform_hw(system):
-    return os.path.join(VITIS_WS, system, f"{system}_platform", "export", f"{system}_platform", "hw")
+def platform_file(system, name):
+    """Fichero del hardware exportado de la plataforma de Vitis (en hw/ o en hw/sdt/)."""
+    hw = os.path.join(VITIS_WS, system, f"{system}_platform", "export", f"{system}_platform", "hw")
+    path = os.path.join(hw, name)
+    return path if os.path.exists(path) else os.path.join(hw, "sdt", name)
 
 
 # Configuración de cada ejecución: placa, ficheros, baudios y línea que marca el final
 RUNS = {
     "alice": dict(
         board="nexys", baud=9600, timeout=180, end="[STREAM_DONE]",
-        bit=os.path.join(platform_hw("cvqkd_alice"), "design_1_wrapper.bit"),
+        bit=platform_file("cvqkd_alice", "design_1_wrapper.bit"),
         elf=os.path.join(VITIS_WS, "cvqkd_alice", "cvqkd_alice_application", "build", "cvqkd_alice_application.elf")),
     "bob": dict(
         board="pynq", baud=115200, timeout=600, end="Tasa Clave Secreta en Vivo",
-        bit=os.path.join(platform_hw("cvqkd_bob"), "design_1_wrapper.bit"),
+        bit=platform_file("cvqkd_bob", "design_1_wrapper.bit"),
         elf=os.path.join(VITIS_WS, "cvqkd_bob", "cvqkd_bob_app", "build", "cvqkd_bob_app.elf")),
     "bench-alice": dict(
         board="pynq", baud=115200, timeout=60, end="Factor de Aceleracion", bit=None,
@@ -88,7 +91,7 @@ def xsdb_script(board, bit, elf):
     else:
         if bit:
             lines += ['targets -set -nocase -filter {name =~ "*xc7z020*"}', f'fpga -f "{bit}"', "after 500"]
-        ps7_init = os.path.join(platform_hw("cvqkd_bob"), "ps7_init.tcl")
+        ps7_init = platform_file("cvqkd_bob", "ps7_init.tcl")
         lines += ['targets -set -nocase -filter {name =~ "*Cortex-A9*#0"}', "catch {stop}",
                   "catch {rst -processor}", "after 200", f'source "{ps7_init}"', "ps7_init", "ps7_post_config"]
     lines += [f'dow "{elf}"', "con", "exit"]

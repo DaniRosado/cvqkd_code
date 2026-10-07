@@ -32,7 +32,7 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from run_board import REPO, find_xsdb, golden_key_words, platform_hw
+from run_board import REPO, find_xsdb, golden_key_words, platform_file
 
 OUT = os.path.join(REPO, "build", "alice_frames")
 X, M, K, SYN, KEY = ("alice_mdr_inputs.txt", "expected_m_messages.txt", "alice_k_dynamic.txt",
@@ -113,7 +113,7 @@ def main():
     parser.add_argument("-s", type=int, default=10, help="tramas (semillas) por distancia")
     parser.add_argument("km", nargs="*", default=["8", "10", "11", "11.5", "12", "12.5", "13", "13.5", "14"])
     parser.add_argument("--generar", action="store_true", help="solo genera las tramas")
-    parser.add_argument("--bit", default=os.path.join(platform_hw("cvqkd_alice"), "design_1_wrapper.bit"))
+    parser.add_argument("--bit", default=platform_file("cvqkd_alice", "design_1_wrapper.bit"))
     args = parser.parse_args()
 
     frames = [(km, seed) for km in args.km for seed in range(1, args.s + 1)]
