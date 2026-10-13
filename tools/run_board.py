@@ -158,8 +158,9 @@ def main():
     with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False) as tcl:
         tcl.write(xsdb_script(cfg["board"], bit, elf))
     print(f"[XSDB] {'Programando ' + os.path.basename(bit) + ' y ' if bit else ''}cargando {os.path.basename(elf)}")
-    launcher = threading.Thread(target=subprocess.run, args=([xsdb, tcl.name],),
-                                kwargs=dict(capture_output=True), daemon=True)
+    xsdb_out = []   # Salida de xsdb, para mostrarla si la placa no contesta
+    launcher = threading.Thread(daemon=True, target=lambda: xsdb_out.append(
+        subprocess.run([xsdb, tcl.name], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout))
     launcher.start()
 
     key, in_key, ok = [], False, True
@@ -184,6 +185,10 @@ def main():
                 break
         else:
             print(f"\n[AVISO] Tiempo de escucha agotado sin ver '{cfg['end']}'")
+            placa = "Nexys Video" if cfg["board"] == "nexys" else "PYNQ-Z2"
+            print(f"        ¿Está conectada y encendida la {placa}, y sin otra sesión de Vitis/xsdb sobre ella?")
+            if xsdb_out and xsdb_out[0].strip():
+                print("[XSDB] " + "\n       ".join(xsdb_out[0].strip().splitlines()[-8:]))
             ok = False
     finally:
         uart.close()
