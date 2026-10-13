@@ -219,11 +219,14 @@ typedef struct {
     int32_t  T_final;
     int32_t  sigma_sq;
     uint32_t status;
+    uint64_t prep_ticks;   // Reset, carga de la clave y vaciado de caché
+    uint64_t accel_ticks;  // De armar los DMA a tener los resultados: transporte + cálculo
 } bob_frame_hw_t;
 
 // Procesa una trama completa (tx_adc_buf, tx_mask_buf, tx_alice_buf, tx_key_buf):
 // soft reset -> clave nueva -> armar RX -> ADC -> máscara + Alice -> esperar resultados.
 static int bob_process_frame(bob_frame_hw_t *hw) {
+    uint64_t t_start = read_global_timer();
     Xil_Out32(BOB_BASEADDR + BOB_REG_CTRL, 0x00000001); // Soft reset (descarta también la clave)
     Xil_Out32(BOB_BASEADDR + BOB_REG_CTRL, 0x00000002);
     Xil_Out32(BOB_BASEADDR + BOB_REG_CALIB_VARA, 50000); // V_A = 5 SNU x N0 = 10000 cuentas
@@ -234,6 +237,8 @@ static int bob_process_frame(bob_frame_hw_t *hw) {
     Xil_DCacheFlushRange((UINTPTR)tx_mask_buf,  MASK_BYTE_SIZE);
     Xil_DCacheInvalidateRange((UINTPTR)rx_mdr_buf, MDR_BYTE_SIZE);
     Xil_DCacheInvalidateRange((UINTPTR)rx_syn_buf, SYN_BYTE_SIZE);
+    uint64_t t_accel = read_global_timer();
+    hw->prep_ticks = t_accel - t_start;
 
     // Receptores primero. Los 3.264 mensajes MDR llegan en un único paquete (TLAST al final).
     if (XAxiDma_SimpleTransfer(&DmaPqMdr, (UINTPTR)rx_mdr_buf, MDR_BYTE_SIZE, XAXIDMA_DEVICE_TO_DMA) != XST_SUCCESS) {
@@ -260,6 +265,7 @@ static int bob_process_frame(bob_frame_hw_t *hw) {
     do {
         hw->status = Xil_In32(BOB_BASEADDR + BOB_REG_STATUS);
     } while ((hw->status & BOB_STATUS_DONE_EST) == 0 && --timeout > 0);
+    hw->accel_ticks = read_global_timer() - t_accel;
 
     if ((hw->status & BOB_STATUS_DONE_EST) == 0) {
         xil_printf("[TIMEOUT] La estimacion de parametros no termino (STATUS = 0x%08X).\r\n", hw->status);
@@ -476,6 +482,7 @@ int main(void) {
     uint32_t attack_blocks = 0, attack_blocks_aborted = 0;
     uint64_t total_secure_bits = 0;
     uint64_t total_stream_cycles = 0;   // Solo el acelerador: excluye la síntesis y la UART
+    uint64_t total_prep_cycles = 0, total_accel_cycles = 0;   // Desglose de lo anterior
     const double T_channel = pow(10.0, -sec_params.fiber_alpha * CH_LENGTH_KM / 10.0);
 
     for (int block = 1; block <= NUM_BLOCKS; block++) {
@@ -499,6 +506,8 @@ int main(void) {
             if (bob_process_frame(&f_hw) != XST_SUCCESS) return XST_FAILURE;
             uint64_t frame_cycles = read_global_timer() - t_frame_start;
             total_stream_cycles += frame_cycles;
+            total_prep_cycles   += f_hw.prep_ticks;
+            total_accel_cycles  += f_hw.accel_ticks;
             double frame_lat_ms = ((double)frame_cycles / GTIMER_FREQ_HZ) * 1000.0;
 
             // 3. Acumular la estimación del bloque
@@ -541,6 +550,8 @@ int main(void) {
     // =========================================================================
     double total_stream_time_ms = ((double)total_stream_cycles / GTIMER_FREQ_HZ) * 1000.0;
     double avg_lat_ms = total_stream_time_ms / (double)NUM_STREAM_FRAMES;
+    int avg_prep_us  = (int)((double)total_prep_cycles  / GTIMER_FREQ_HZ * 1.0e6 / NUM_STREAM_FRAMES);
+    int avg_accel_us = (int)((double)total_accel_cycles / GTIMER_FREQ_HZ * 1.0e6 / NUM_STREAM_FRAMES);
     double fps = (double)NUM_STREAM_FRAMES / (total_stream_time_ms / 1000.0);
     double optical_mbps = fps * (27857.0 * 32.0) / 1.0e6;
     double net_skr_kbps = ((double)total_secure_bits / (total_stream_time_ms / 1000.0)) / 1.0e3;
@@ -557,6 +568,8 @@ int main(void) {
                (int)total_stream_time_ms, (int)((total_stream_time_ms - (int)total_stream_time_ms) * 100));
     xil_printf("  * Latencia Media por Trama:    %d.%02d ms\r\n",
                (int)avg_lat_ms, (int)((avg_lat_ms - (int)avg_lat_ms) * 100));
+    xil_printf("      - Preparacion (reset, clave, cache):   %d us\r\n", avg_prep_us);
+    xil_printf("      - Acelerador (DMA + calculo):          %d us\r\n", avg_accel_us);
     xil_printf("  * Tasa de Tramas (Throughput): %d.%01d tramas/seg\r\n",
                (int)fps, (int)((fps - (int)fps) * 10));
     xil_printf("  * Ingesta Optica Bruta:        %d.%02d Mbps\r\n",

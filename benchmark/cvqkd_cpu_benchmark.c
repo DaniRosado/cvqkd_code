@@ -3,9 +3,14 @@
  *  Archivo: cvqkd_cpu_benchmark.c
  *
  *  Descripción:
- *  Implementación optimizada en C del decodificador 5G-NR QC-LDPC Layered Scaled
- *  Min-Sum (Base Graph 1, Z=384, N=26.112 bits, 46 filas) para medir y comparar
- *  el rendimiento contra el acelerador hardware FPGA (Artix-7 XC7A200T @ 25 MHz).
+ *  La reconciliación de Alice en C, con el mismo trabajo que el acelerador de la FPGA
+ *  (Artix-7 XC7A200T a 25 MHz) y sobre la misma trama (export_benchmark_data.py):
+ *    1. MDR 8D: LLR a partir de X, los mensajes m de Bob y el factor K (mdr_alice_datapath).
+ *    2. LDPC 5G-NR BG1 (Z=384, N=26.112) Min-Sum por capas con alpha = 0,75, con la
+ *       aritmética y el criterio de parada de la RTL (vnu_node, cnu_serial_node,
+ *       ldpc_layer_datapath, syndrome_checker): debe dar las mismas iteraciones.
+ *    3. Extracción de la clave.
+ *  La clave se compara con la de Bob fuera del tiempo medido.
  *
  *  Compatibilidad:
  *    - Host PC (Linux x86-64 / GCC -O3): Usa clock_gettime(CLOCK_MONOTONIC)
@@ -65,11 +70,15 @@
 
 #include "cvqkd_benchmark_data.h"
 
-/* Estructura para almacenar mensajes extrínsecos C2V */
-static int8_t row_c2v[BG_ROWS][MAX_ROW_DEG][Z_LIFTING];
-static int16_t llr_post[N_CODE_BITS];
-static uint8_t target_syn[BG_ROWS][Z_LIFTING];
-static uint8_t golden_bits[N_CODE_BITS];
+#define MAX_ITERS 200   /* Como la RTL (ldpc_controller_fsm) */
+#define Q_MAX     127   /* Mensajes y LLR hacia la CNU: 8 bits en signo-magnitud */
+#define L_MAX     511   /* LLR a posteriori: 10 bits en signo-magnitud */
+
+static int8_t   llr_in[N_CODE_BITS];                       /* Salida del MDR */
+static int16_t  llr_post[N_CODE_BITS];                     /* LLR a posteriori (L_BRAM); bit duro = signo */
+static int8_t   r_msg[BG_ROWS][MAX_ROW_DEG][Z_LIFTING];    /* Mensajes de las CNU (R_BRAM) */
+static uint8_t  target_syn[BG_ROWS][Z_LIFTING];            /* Síndrome de Bob */
+static uint32_t key_out[N_KEY_WORDS];                      /* Clave reconciliada */
 
 /* Función para obtener tiempo en microsegundos */
 static double get_time_us(void) {
@@ -116,76 +125,70 @@ static void print_metric(const char *prefix, double val, const char *suffix, int
 #endif
 }
 
-/* Desempaquetar síndrome y clave dorada */
-static void init_benchmark_vectors(void) {
-#if defined(PLATFORM_ARM_BAREMETAL) || (defined(__arm__) && !defined(__linux__))
-    init_global_timer();
-#endif
+/* Rotación 8D del MDR (tablas de mdr_alice_datapath.sv) */
+static const uint8_t M_IDX[8][8] = {
+    {0, 1, 2, 3, 4, 5, 6, 7}, {1, 0, 3, 2, 5, 4, 7, 6}, {2, 3, 0, 1, 6, 7, 4, 5}, {3, 2, 1, 0, 7, 6, 5, 4},
+    {4, 5, 6, 7, 0, 1, 2, 3}, {5, 4, 7, 6, 1, 0, 3, 2}, {6, 7, 4, 5, 2, 3, 0, 1}, {7, 6, 5, 4, 3, 2, 1, 0}
+};
+static const uint8_t M_NEG[8][8] = {
+    {0, 0, 0, 0, 0, 0, 0, 0}, {1, 0, 1, 0, 1, 0, 0, 1}, {1, 0, 0, 1, 1, 1, 0, 0}, {1, 1, 0, 0, 1, 0, 1, 0},
+    {1, 0, 0, 0, 0, 1, 1, 1}, {1, 1, 0, 1, 0, 0, 0, 1}, {1, 1, 1, 0, 0, 1, 0, 0}, {1, 0, 1, 1, 0, 0, 1, 0}
+};
 
-    /* Desempaquetar síndrome: 552 palabras de 32 bits -> 46 filas x 384 bits */
-    for (int r = 0; r < BG_ROWS; r++) {
-        for (int w = 0; w < 12; w++) {
-            uint32_t sword = GOLDEN_SYN_WORDS[r * 12 + w];
-            for (int b = 0; b < 32; b++) {
-                target_syn[r][w * 32 + b] = (uint8_t)((sword >> b) & 1);
+static inline int clamp(int v, int max) {
+    return (v > max) ? max : (v < -max) ? -max : v;
+}
+
+/* 1. MDR 8D: LLR = (U' x K) >> 31, con U' = rotación de X por el mensaje m (Q24 -> Q21) */
+static void mdr_alice(void) {
+    for (int blk = 0; blk < N_CODE_BITS / 8; blk++) {
+        const int16_t *x = &MDR_X[8 * blk];
+        int32_t m[8];
+        for (int c = 0; c < 8; c++) m[c] = (int32_t)((uint32_t)MDR_M[8 * blk + c] << 5) >> 8;   /* bits 26:3 */
+
+        for (int row = 0; row < 8; row++) {
+            int64_t u = 0;
+            for (int c = 0; c < 8; c++) {
+                int xv = x[M_IDX[row][c]];
+                u += (int64_t)(M_NEG[row][c] ? -xv : xv) * m[c];
             }
-        }
-    }
-
-    /* Desempaquetar clave dorada: 816 palabras de 32 bits -> 26.112 bits */
-    for (int w = 0; w < N_KEY_WORDS; w++) {
-        uint32_t kword = GOLDEN_KEY_WORDS[w];
-        for (int b = 0; b < 32; b++) {
-            golden_bits[w * 32 + b] = (uint8_t)((kword >> b) & 1);
+            llr_in[8 * blk + row] = (int8_t)clamp((int32_t)((u * MDR_K[blk]) >> 31), Q_MAX);
         }
     }
 }
 
-/* Decodificador 5G-NR QC-LDPC Layered Scaled Min-Sum */
-static int decode_ldpc_layered(int max_iters, int verbose, int *out_iters, double *out_time_us) {
-    /* 1. Inicializar LLRs posteriores con LLRs intrínsecos de entrada */
-    for (int i = 0; i < N_CODE_BITS; i++) {
-        llr_post[i] = (int16_t)GOLDEN_LLRS[i];
-    }
+/* 2. LDPC Min-Sum por capas. Devuelve las iteraciones, o 0 si no converge en MAX_ITERS. */
+static int ldpc_decode(void) {
+    /* Carga del síndrome (552 palabras -> 46 filas de 384 bits) y de los LLR del MDR */
+    for (int r = 0; r < BG_ROWS; r++)
+        for (int i = 0; i < Z_LIFTING; i++)
+            target_syn[r][i] = (GOLDEN_SYN_WORDS[r * 12 + i / 32] >> (i % 32)) & 1;
+    for (int v = 0; v < N_CODE_BITS; v++) llr_post[v] = llr_in[v];
+    memset(r_msg, 0, sizeof(r_msg));   /* En la primera iteración la RTL toma R_old = 0 */
 
-    /* 2. Limpiar memoria de mensajes extrínsecos */
-    memset(row_c2v, 0, sizeof(row_c2v));
+    for (int it = 1; it <= MAX_ITERS; it++) {
+        int converged = 1;   /* Todas las filas cumplen su síndrome y ningún bit duro cambia */
 
-    double t_start = get_time_us();
-    int converged_iter = 0;
-    int final_errors = 0;
-
-    for (int it = 1; it <= max_iters; it++) {
-        /* Recorrido capa por capa (Layered Decoding: 46 filas) */
         for (int r = 0; r < BG_ROWS; r++) {
             int deg = BG_ROW_DEG[r];
             const bg_edge_t *edges = BG_EDGES[r];
 
-            /* Procesar en paralelo conceptual las Z=384 rebanadas cíclicas */
             for (int i = 0; i < Z_LIFTING; i++) {
-                int min1 = 32767;
-                int min2 = 32767;
-                int min1_idx = -1;
-                int total_sign = 1 - 2 * (int)target_syn[r][i];
+                int v_idx[MAX_ROW_DEG], lq_full[MAX_ROW_DEG], lq_sign[MAX_ROW_DEG];
+                int min1 = Q_MAX, min2 = Q_MAX, min1_idx = 0, total_sign = 0;
 
-                int v2c[MAX_ROW_DEG];
-
-                /* Paso 1: Leer V2C y calcular mínimos y paridad de signo */
+                /* Pasada 0 (VNU -> CNU): L_q = L - R_old, saturado a 8 bits; mínimos y signo */
                 for (int d = 0; d < deg; d++) {
-                    int c = edges[d].col;
-                    int shift = edges[d].shift;
-                    int v_idx = c * Z_LIFTING + ((i + shift) % Z_LIFTING);
-
-                    /* v2c = LLR_post - old_c2v */
-                    int val = (int)llr_post[v_idx] - (int)row_c2v[r][d][i];
-                    v2c[d] = val;
-
-                    int mag = abs(val);
-                    int s = (val < 0) ? -1 : 1;
-                    total_sign *= s;
-
-                    if (mag < min1) {
-                        min2 = min1;
+                    int rot = i + edges[d].shift;
+                    int v = edges[d].col * Z_LIFTING + (rot >= Z_LIFTING ? rot - Z_LIFTING : rot);
+                    int full = llr_post[v] - r_msg[r][d][i];
+                    int mag = abs(clamp(full, Q_MAX));
+                    v_idx[d] = v;
+                    lq_full[d] = full;
+                    lq_sign[d] = full < 0;
+                    total_sign ^= lq_sign[d];
+                    if (d == 0 || mag < min1) {
+                        min2 = (d == 0) ? Q_MAX : min1;
                         min1 = mag;
                         min1_idx = d;
                     } else if (mag < min2) {
@@ -193,143 +196,96 @@ static int decode_ldpc_layered(int max_iters, int verbose, int *out_iters, doubl
                     }
                 }
 
-                /* Paso 2: Calcular nuevo C2V (alpha = 0.75 -> (mag * 3 + 2) >> 2) */
+                /* Pasada 1 (CNU -> VNU): R_new = 0,75 x mínimo; L = L_q + R_new, saturado a 10 bits */
+                int parity = 0;
                 for (int d = 0; d < deg; d++) {
-                    int c = edges[d].col;
-                    int shift = edges[d].shift;
-                    int v_idx = c * Z_LIFTING + ((i + shift) % Z_LIFTING);
+                    int raw = (d == min1_idx) ? min2 : min1;
+                    int mag = raw - (raw >> 2);
+                    int r_new = (total_sign ^ lq_sign[d] ^ target_syn[r][i]) ? -mag : mag;
+                    int l_new = clamp(lq_full[d] + r_new, L_MAX);
+                    int bit = l_new < 0;
 
-                    int val = v2c[d];
-                    int s = (val < 0) ? -1 : 1;
-                    int sign_excl = total_sign * s;
-                    int use_mag = (d == min1_idx) ? min2 : min1;
-
-                    /* Scaled Min-Sum con factor de atenuación alpha = 0.75 */
-                    int new_c2v_mag = (use_mag * 3 + 2) >> 2;
-                    if (new_c2v_mag > 127) new_c2v_mag = 127;
-                    int new_c2v = sign_excl * new_c2v_mag;
-
-                    /* Actualizar LLR posterior de forma inmediata (Layered update) */
-                    int diff = new_c2v - (int)row_c2v[r][d][i];
-                    row_c2v[r][d][i] = (int8_t)new_c2v;
-                    llr_post[v_idx] += (int16_t)diff;
+                    if (bit != (llr_post[v_idx[d]] < 0)) converged = 0;
+                    r_msg[r][d][i] = (int8_t)r_new;
+                    llr_post[v_idx[d]] = (int16_t)l_new;
+                    parity ^= bit;
                 }
+                if (parity != target_syn[r][i]) converged = 0;
             }
         }
-
-        /* Verificación de paridad / errores (Decisión dura) */
-        final_errors = 0;
-        for (int v = 0; v < N_CODE_BITS; v++) {
-            uint8_t bit_dec = (llr_post[v] < 0) ? 1 : 0;
-            if (bit_dec != golden_bits[v]) {
-                final_errors++;
-            }
-        }
-
-        if (verbose) {
-            double ber = (double)final_errors * 100.0 / (double)N_CODE_BITS;
-            PRINTF("  [Iter %2d] Errores residuales de bit: %5d / 26112 (BER = ", it, final_errors);
-            print_metric("", ber, "%)\r\n", 3);
-        }
-
-        /* Early stopping si el síndrome y la clave son correctos */
-        if (final_errors == 0) {
-            converged_iter = it;
-            break;
-        }
+        if (converged) return it;
     }
+    return 0;
+}
 
-    double t_end = get_time_us();
-    *out_time_us = t_end - t_start;
-    *out_iters = converged_iter ? converged_iter : max_iters;
-
-    return (final_errors == 0) ? 1 : 0;
+/* 3. Clave: los 26.112 bits duros (signo del LLR a posteriori), en 816 palabras */
+static void extract_key(void) {
+    for (int w = 0; w < N_KEY_WORDS; w++) {
+        uint32_t word = 0;
+        for (int b = 0; b < 32; b++) word |= (uint32_t)(llr_post[32 * w + b] < 0) << b;
+        key_out[w] = word;
+    }
 }
 
 int main(void) {
     PRINTF("\r\n========================================================================\r\n");
-    PRINTF("   CV-QKD ERROR CORRECTION BENCHMARK: CPU SOFTWARE VS FPGA HARDWARE     \r\n");
-    PRINTF("   Algoritmo: 5G-NR QC-LDPC Layered Scaled Min-Sum (N=26112, Z=384)     \r\n");
-#if defined(PLATFORM_ARM_BAREMETAL)
-    PRINTF("   Plataforma CPU: ARM Cortex-A9 (Zynq-7020 @ 650 MHz, PYNQ-Z2 Baremetal)\r\n");
-#elif defined(PLATFORM_MB_BAREMETAL)
-    PRINTF("   Plataforma CPU: MicroBlaze Softcore (Artix-7 @ 25 MHz, Nexys Video)\r\n");
-#elif defined(PLATFORM_POSIX)
-    PRINTF("   Plataforma CPU: Host PC Linux (x86-64 Native GCC -O3)\r\n");
+    PRINTF("   CV-QKD: RECONCILIACION DE ALICE EN CPU FRENTE AL ACELERADOR FPGA     \r\n");
+    PRINTF("   MDR 8D + LDPC 5G-NR BG1 Min-Sum por capas (N=26112, Z=384) + clave   \r\n");
+#if defined(PLATFORM_ARM_BAREMETAL) || (defined(__arm__) && !defined(__linux__))
+    PRINTF("   CPU: ARM Cortex-A9 (Zynq-7020 a 650 MHz, PYNQ-Z2, sin sistema operativo)\r\n");
+    init_global_timer();
+#else
+    PRINTF("   CPU: PC con Linux (GCC -O3)\r\n");
 #endif
     PRINTF("========================================================================\r\n\r\n");
 
-    init_benchmark_vectors();
+    const int NUM_FRAMES = 50;
+    double us_mdr = 0.0, us_ldpc = 0.0, us_key = 0.0;
+    int iters = 0, key_ok = 0;
 
-#if defined(PLATFORM_ARM_BAREMETAL) || (defined(__arm__) && !defined(__linux__))
-    uint64_t t0 = read_global_timer();
-    for (volatile int k = 0; k < 100000; k++);
-    uint64_t t1 = read_global_timer();
-    PRINTF("[TIMER TEST] Delta ticks = %u (Freq = 325 MHz)\r\n\r\n", (uint32_t)(t1 - t0));
-#endif
+    for (int f = 0; f < NUM_FRAMES; f++) {
+        double t0 = get_time_us();
+        mdr_alice();
+        double t1 = get_time_us();
+        iters = ldpc_decode();
+        double t2 = get_time_us();
+        extract_key();
+        double t3 = get_time_us();
 
-    /* FASE 1: Verificación funcional detallada paso a paso */
-    PRINTF("[FASE 1] Ejecutando decodificacion detallada de 1 trama dorada...\r\n");
-    int iters = 0;
-    double time_us = 0.0;
-    int success = decode_ldpc_layered(15, 1, &iters, &time_us);
-
-    double time_ms = time_us / 1000.0;
-    double throughput_mbps = (time_ms > 0.0001) ? ((double)N_CODE_BITS / (time_ms * 1000.0)) : 0.0;
-
-    /* FPGA de Alice (Nexys Video, 25 MHz), medida con su contador de ciclos: 27.561 ciclos
-     * fijos (síndrome, MDR y clave) + 1.094 por iteración del LDPC. Este benchmark solo
-     * decodifica, así que se compara el tiempo por iteración (no depende de la trama). */
-    const double FPGA_ITER_US = 1094.0 / 25.0;   /* 43,76 us */
-    double speedup = (time_us / iters) / FPGA_ITER_US;
-
-    PRINTF("\r\n------------------------------------------------------------------------\r\n");
-    if (success) {
-        PRINTF(">>> [RESULTADO] CONVERGENCIA EXITOSA en %d iteraciones!\r\n", iters);
-        PRINTF(">>> Coincidencia bit a bit con Bob: 100.00%% (0 errores residuales)\r\n");
-    } else {
-        PRINTF(">>> [RESULTADO] FALLO DE CONVERGENCIA tras %d iteraciones\r\n", iters);
+        us_mdr  += t1 - t0;
+        us_ldpc += t2 - t1;
+        us_key  += t3 - t2;
+        key_ok  += iters && memcmp(key_out, GOLDEN_KEY_WORDS, sizeof(key_out)) == 0;
     }
-    print_metric(">>> Latencia CPU (1 trama):    ", time_ms, " ms\r\n", 2);
-    print_metric(">>> Throughput Reconciliacion: ", throughput_mbps, " Mbps\r\n", 3);
-    PRINTF("------------------------------------------------------------------------\r\n");
-    print_metric(">>> CPU por iteracion:         ", time_us / iters, " us\r\n", 1);
-    print_metric(">>> FPGA por iteracion:        ", FPGA_ITER_US, " us (1094 ciclos a 25 MHz)\r\n", 2);
-    print_metric(">>> SPEEDUP POR ITERACION:     ", speedup, "x\r\n", 1);
-    PRINTF("------------------------------------------------------------------------\r\n\r\n");
+    us_mdr  /= NUM_FRAMES;
+    us_ldpc /= NUM_FRAMES;
+    us_key  /= NUM_FRAMES;
+    double us_total = us_mdr + us_ldpc + us_key;
 
-    /* FASE 2: Benchmark estadístico sostenido sobre 50 tramas */
-    const int NUM_BENCH_FRAMES = 50;
-    PRINTF("[FASE 2] Ejecutando benchmark estadistico sostenido (%d tramas)...\r\n", NUM_BENCH_FRAMES);
-
-    double total_time_us = 0.0;
-    int total_success = 0;
-    for (int f = 0; f < NUM_BENCH_FRAMES; f++) {
-        int it_count = 0;
-        double frame_us = 0.0;
-        int s = decode_ldpc_layered(15, 0, &it_count, &frame_us);
-        total_time_us += frame_us;
-        total_success += s;
-        if ((f + 1) % 10 == 0 || f == NUM_BENCH_FRAMES - 1) {
-            PRINTF("  -> Completadas %2d / %2d tramas...\r\n", f + 1, NUM_BENCH_FRAMES);
-        }
+    if (key_ok != NUM_FRAMES || iters == 0) {
+        PRINTF("[ERROR] Clave identica a la de Bob en %d / %d tramas (%d iteraciones)\r\n", key_ok, NUM_FRAMES, iters);
+        return -1;
     }
 
-    double avg_time_ms = (total_time_us / (double)NUM_BENCH_FRAMES) / 1000.0;
-    double avg_throughput_mbps = (avg_time_ms > 0.0001) ? ((double)N_CODE_BITS / (avg_time_ms * 1000.0)) : 0.0;
-    double avg_iter_us = avg_time_ms * 1000.0 / iters;   /* Todas las tramas son la misma */
-    double avg_speedup = avg_iter_us / FPGA_ITER_US;
+    /* FPGA de Alice (Nexys Video, 25 MHz), con su contador de ciclos: 27.561 ciclos fijos
+     * (carga del síndrome, MDR y clave) + 1.094 por iteración del LDPC. */
+    const double FPGA_ITER_US  = 1094.0 / 25.0;
+    const double FPGA_FIXED_US = 27561.0 / 25.0;
+    double fpga_total = FPGA_FIXED_US + FPGA_ITER_US * iters;
 
-    PRINTF("\r\n========================================================================\r\n");
-    PRINTF("   RESUMEN FINAL BENCHMARK ESTADISTICO (%d TRAMAS SOSTENIDAS)          \r\n", NUM_BENCH_FRAMES);
-    PRINTF("========================================================================\r\n");
-    PRINTF("  * Tasa de Exito:               %d / %d (100.00%%)\r\n", total_success, NUM_BENCH_FRAMES);
-    print_metric("  * Latencia Media por Trama:    ", avg_time_ms, " ms\r\n", 2);
-    print_metric("  * Throughput Medio CPU:        ", avg_throughput_mbps, " Mbps\r\n", 3);
-    PRINTF("  * Iteraciones por trama:       %d\r\n", iters);
-    print_metric("  * CPU por iteracion:           ", avg_iter_us, " us\r\n", 1);
-    print_metric("  * FPGA por iteracion:          ", FPGA_ITER_US, " us\r\n", 2);
-    print_metric("  * Factor de Aceleracion (S):   ", avg_speedup, "x por iteracion\r\n", 1);
+    PRINTF("  * Tramas con la clave de Bob:   %d / %d\r\n", key_ok, NUM_FRAMES);
+    PRINTF("  * Iteraciones del LDPC:         %d (la FPGA: 13 con esta trama)\r\n", iters);
+    PRINTF("  ----------------------------------------------------------------------\r\n");
+    print_metric("  * CPU, MDR 8D:                  ", us_mdr / 1000.0, " ms\r\n", 3);
+    print_metric("  * CPU, LDPC:                    ", us_ldpc / 1000.0, " ms\r\n", 3);
+    print_metric("  * CPU, clave:                   ", us_key / 1000.0, " ms\r\n", 3);
+    print_metric("  * CPU, trama completa:          ", us_total / 1000.0, " ms\r\n", 3);
+    print_metric("  * FPGA, trama completa:         ", fpga_total / 1000.0, " ms\r\n", 3);
+    PRINTF("  ----------------------------------------------------------------------\r\n");
+    print_metric("  * CPU por iteracion del LDPC:   ", us_ldpc / iters, " us\r\n", 1);
+    print_metric("  * FPGA por iteracion del LDPC:  ", FPGA_ITER_US, " us\r\n", 2);
+    print_metric("  * Aceleracion por iteracion:    ", (us_ldpc / iters) / FPGA_ITER_US, "x\r\n", 1);
+    print_metric("  * Factor de Aceleracion (trama completa): ", us_total / fpga_total, "x\r\n", 1);
     PRINTF("========================================================================\r\n\r\n");
 
     return 0;
