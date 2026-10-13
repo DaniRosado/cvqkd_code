@@ -38,6 +38,8 @@ El programa ejecuta la compensación de fase, la criba y estimación, el MDR 8D,
 
 Medias de 50 tramas. En el ARM, la compensación de fase y el MDR suman el 95 % del tiempo: son las etapas que hace la PL. Frente al ARM, la FPGA es 11,5× más rápida (unas 104 veces más trabajo por ciclo, con la PL a 71,4 MHz frente a 650 MHz). El i7 es más rápido que la PL (1,34 ms frente a 1,91 ms): la PL procesa una muestra por ciclo a 71,4 MHz y el tiempo medido incluye el vaciado de caché y los DMA. El acelerador libera al ARM, que solo evalúa la seguridad (8 µs por bloque).
 
+Desglose de los 1,91 ms de la FPGA (medido en placa el 13/10, media de 3000 tramas): 0,975 ms de preparación en el ARM (reset, carga de la clave por AXI-Lite y vaciado de caché), 0,774 ms de acelerador (DMA y cálculo en la PL) y 0,17 ms de lectura de resultados. Contando solo la parte de acelerador, que es lo que cronometra el software (datos en memoria → resultados en memoria), la FPGA es 28× más rápida que el ARM y 1,7× más rápida que el i7. Método en `2026-10-13_Medida_de_Tiempos.md`.
+
 La cifra del 29/09 (17,97 ms) se midió con los vectores anteriores al modelo heterodino; la compensación de fase es la etapa que ha crecido (11,27 → 15,19 ms). El benchmark usaba además $V_A = 4$ SNU (40.000 cuentas) en lugar de 5: no cambia los tiempos, pero su comprobación de la estimación no coincidía con el hardware. Corregido el 04/10.
 
 ---

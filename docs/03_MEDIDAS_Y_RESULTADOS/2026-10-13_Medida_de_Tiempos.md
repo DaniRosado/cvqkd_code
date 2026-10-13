@@ -152,7 +152,20 @@ double net_skr_kbps = ((double)total_secure_bits / (total_stream_time_ms / 1000.
 
 Medido en placa: 1,91 ms por trama, 521,9 tramas/s, 465,3 Mbps de entrada. La tasa de clave segura (66,3 kbps a 11 km con ruido de fase) es bits seguros entre ese mismo tiempo acumulado.
 
-### 3.4. Límites de esta medida
+### 3.4. Desglose de los 1,91 ms
+
+`bob_process_frame` toma dos marcas de tiempo intermedias y el resumen imprime las medias. Medido en placa el 13/10/2026 (3000 tramas):
+
+| Parte | Tiempo | Qué es |
+|---|---|---|
+| Preparación | 0,975 ms | Reset, calibración, carga de los 26.112 bits de Bob por AXI-Lite (816 escrituras) y vaciado de caché de los búferes |
+| Acelerador | 0,774 ms | De armar los DMA a tener los resultados: transporte por DMA y cálculo en la PL |
+| Resto | 0,17 ms | Lectura de registros e invalidación de caché de los resultados |
+| **Total** | **1,91 ms** | |
+
+Más de la mitad del tiempo por trama es trabajo del ARM para preparar la transferencia, no del acelerador. Para comparar con el software hay dos cifras válidas: el total (lo que cuesta de verdad usar el acelerador) y la parte de acelerador (datos en memoria → resultados en memoria, que es lo que cronometran los programas de CPU).
+
+### 3.5. Límites de esta medida
 
 - Es tiempo de acelerador más transporte interno, no tiempo de un enlace real: las muestras no vienen de un ADC ni las de Alice de la red.
 - La tasa de clave en kbps usa solo el tiempo de acelerador; no cuenta la generación de tramas ni la reconciliación en Alice.
@@ -225,7 +238,13 @@ uint64_t t5 = read_timer_ticks();
 
 Media de 50 tramas (04/10): 21,87 ms en el ARM (FPGA 11,5× más rápida) y 1,34 ms en el i7 (más rápido que la FPGA, 1,91 ms).
 
-Aviso: el software no mueve datos por DMA ni vacía cachés, y la medida de la FPGA sí lo incluye. La comparación favorece ligeramente a la CPU.
+El software no mueve datos por DMA ni vacía cachés, y el total de la FPGA sí lo incluye. Con el desglose de la sección 3.4:
+
+| | ARM Cortex-A9 | Intel Core i7-8665U |
+|---|---|---|
+| Software | 21,87 ms | 1,34 ms |
+| FPGA, total (1,91 ms) | 11,5× más rápida | 0,70× (más lenta) |
+| FPGA, solo acelerador (0,774 ms) | 28× más rápida | 1,7× más rápida |
 
 ---
 
