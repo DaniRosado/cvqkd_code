@@ -187,36 +187,32 @@ clock_gettime(CLOCK_MONOTONIC, &ts);
 return (double)ts.tv_sec * 1000000.0 + (double)ts.tv_nsec / 1000.0;
 ```
 
-### 4.2. Alice: decodificador LDPC
+### 4.2. Alice: reconciliación completa
 
-El cronómetro arranca después de inicializar los LLR y se para al converger (línea 154):
-
-```c
-double t_start = get_time_us();
-for (int it = 1; it <= max_iters; it++) {
-    /* ... 46 capas x 384 rebanadas ... */
-    if (final_errors == 0) { converged_iter = it; break; }
-}
-double t_end = get_time_us();
-```
-
-Se repite 50 veces y se hace la media. La comparación con la FPGA se hace **por iteración**, porque el trabajo de una iteración no depende de la trama (línea 283):
+El programa hace el mismo trabajo que el acelerador sobre la misma trama, con una marca de tiempo entre etapas (`benchmark/cvqkd_cpu_benchmark.c`):
 
 ```c
-const double FPGA_ITER_US = 1094.0 / 25.0;   /* 43,76 us */
-double speedup = (time_us / iters) / FPGA_ITER_US;
+double t0 = get_time_us();
+mdr_alice();              // LLR a partir de X, m y K
+double t1 = get_time_us();
+iters = ldpc_decode();    // Aritmética y criterio de parada de la RTL
+double t2 = get_time_us();
+extract_key();
+double t3 = get_time_us();
 ```
 
-| Plataforma | Por iteración | FPGA más rápida |
-|---|---|---|
-| FPGA de Alice (25 MHz) | 43,76 µs | — |
-| ARM Cortex-A9 (29/09) | 15,95 ms | 364× |
-| Intel Core i7-8665U (04/10) | 0,72 ms | 16,4× |
+Se repite 50 veces y se hace la media. La clave se compara con la de Bob fuera del tiempo medido. Al reproducir la RTL, el programa converge en las mismas 13 iteraciones que la placa, y la trama completa de la CPU se puede comparar con los 41.783 ciclos de la FPGA.
+
+| Plataforma | Trama completa | Por iteración | FPGA más rápida (trama / iteración) |
+|---|---|---|---|
+| FPGA de Alice (25 MHz) | 1,67 ms | 43,76 µs | — |
+| ARM Cortex-A9 (13/10) | 160,82 ms | 12,06 ms | 96× / 276× |
+| Intel Core i7-8665U (13/10, enchufado) | 11,23 ms | 0,85 ms | 6,7× / 19× |
 
 Avisos:
 
-- El programa para cuando la clave coincide con la de Bob (dato que Alice no tiene); la RTL para con síndrome correcto y decisiones estables. Por eso no se comparan tramas enteras.
-- Las cifras publicadas son con la trama del 29/09 (7 iteraciones). Con la trama actual (`benchmark/export_benchmark_data.py`, sin integrar todavía) el i7 converge en 11 iteraciones a 0,72–0,80 ms por iteración; la FPGA necesita 13 con esa misma trama. Falta repetir la medida en el ARM.
+- La medida del i7 depende del estado del portátil (con batería y en ahorro, casi el doble).
+- El software es C de un solo hilo con `-O3`, sin vectorización escrita a mano.
 
 ### 4.3. Bob: cadena completa
 
@@ -236,15 +232,15 @@ stage5_security_eval(...);
 uint64_t t5 = read_timer_ticks();
 ```
 
-Media de 50 tramas (04/10): 21,87 ms en el ARM (FPGA 11,5× más rápida) y 1,34 ms en el i7 (más rápido que la FPGA, 1,91 ms).
+Media de 50 tramas: 21,87 ms en el ARM (04/10; FPGA 11,5× más rápida) y 1,23 ms en el i7 (13/10; más rápido que la FPGA, 1,91 ms).
 
 El software no mueve datos por DMA ni vacía cachés, y el total de la FPGA sí lo incluye. Con el desglose de la sección 3.4:
 
 | | ARM Cortex-A9 | Intel Core i7-8665U |
 |---|---|---|
-| Software | 21,87 ms | 1,34 ms |
-| FPGA, total (1,91 ms) | 11,5× más rápida | 0,70× (más lenta) |
-| FPGA, solo acelerador (0,774 ms) | 28× más rápida | 1,7× más rápida |
+| Software | 21,87 ms | 1,23 ms |
+| FPGA, total (1,91 ms) | 11,5× más rápida | 0,64× (más lenta) |
+| FPGA, solo acelerador (0,774 ms) | 28× más rápida | 1,6× más rápida |
 
 ---
 
