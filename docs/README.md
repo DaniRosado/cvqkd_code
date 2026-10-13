@@ -22,6 +22,7 @@ octubre de 2026 y llevan una nota con lo que ha cambiado.
 
 | Fecha | Informe |
 | :--- | :--- |
+| 13/10/2026 | [Cómo se miden los tiempos de los aceleradores](03_MEDIDAS_Y_RESULTADOS/2026-10-13_Medida_de_Tiempos.md) |
 | 04/10/2026 | [Alice: curva waterfall con la RTL (simulación)](03_MEDIDAS_Y_RESULTADOS/2026-10-04_Waterfall_LDPC_Simulacion.md) |
 | 03/10/2026 | [Bob: clave secreta con evaluación por bloques](03_MEDIDAS_Y_RESULTADOS/2026-10-03_Bob_Clave_Secreta_Bloques.md) |
 | 29/09/2026 | [Alice: verificación de la clave bit a bit](03_MEDIDAS_Y_RESULTADOS/2026-09-29_Verificacion_Clave_Dorada.md) |
