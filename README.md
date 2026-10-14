@@ -19,7 +19,7 @@ cvqkd_bob/        Bob: RTL (DSP, estimador, síndrome, wrapper AXI), cores de Xi
 cvqkd_mdr/        Reconciliación multidimensional 8D (compartida por Alice y Bob)
 cvqkd_matlab/     Modelo de referencia en MATLAB y vectores de test (data/)
 benchmark/        Las mismas cadenas en software (PC y ARM) para comparar con la FPGA
-tools/            run_board.py (ejecución en placa) y simulador del canal en Python
+tools/            run_board.py y alice_frames.py (ejecución en placa), waterfall_ldpc.sh (barrido LDPC)
 docs/             Documentación técnica (arquitectura, fundamentos y medidas)
 run_tests.sh      Regresión de simulación
 ```

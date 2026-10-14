@@ -26,15 +26,14 @@ graph TD
             REG_K["REG_K_FACTOR / MODE<br>(0x08, 0x0C)"]
             SYN_BRAM["syn_bram<br>(552 words x 32b)"]
             KEY_BRAM["key_bram<br>(816 words x 32b)"]
+            RAM_X["ram_x (3264x128b)"]
+            RAM_M["ram_m (3264x256b)"]
+            RAM_K["ram_k (3264x32b)"]
             
             FSM_TOP["FSM Maestra de Control<br>(ST_IDLE, ST_LOAD_SYN, ST_RUN, ST_EXTRACT)"]
         end
 
         subgraph Core_Alice["alice_post_processing_core"]
-            RAM_X["ram_x (3264x128b)"]
-            RAM_M["ram_m (3264x256b)"]
-            RAM_K["ram_k (3264x32b)"]
-            
             MDR["mdr_alice_top<br>(8 DSP48E1 MAC)"]
             ADAPTER["Adaptador S2P<br>(8b -> 3072b)"]
             
@@ -44,7 +43,7 @@ graph TD
                 CNU["384 CNUs Seriales"]
                 SHIFTER["barrel_shifter (Z=384)"]
                 SYN_CHK["syndrome_checker<br>(Early Stopping)"]
-                L_BRAM["L_BRAM (68x3072b)"]
+                L_BRAM["L_BRAM (68x3840b, LLR de 10 bits)"]
                 R_BRAM["R_BRAM (316x3072b)"]
             end
         end
